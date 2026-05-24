@@ -1,0 +1,21 @@
+{
+  "name": "@skybound/client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pixi/gif": "^3.0.0",
+    "@skybound/shared": "file:../../packages/shared",
+    "pixi.js": "^8.9.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.0.0",
+    "vite": "^6.3.5"
+  }
+}
