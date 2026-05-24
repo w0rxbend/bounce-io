@@ -1,0 +1,386 @@
+{
+  "bg_sky_arches_768x432": {
+    "svg": "/assets/pixel/bg_sky_arches_768x432.svg",
+    "png": "/assets/pixel/bg_sky_arches_768x432.png",
+    "width": 768,
+    "height": 432
+  },
+  "bg_forest_ruins_panorama_1024x576": {
+    "svg": "/assets/pixel/bg_forest_ruins_panorama_1024x576.svg",
+    "png": "/assets/pixel/bg_forest_ruins_panorama_1024x576.png",
+    "width": 1024,
+    "height": 576
+  },
+  "bg_ruin_towers_512x256": {
+    "svg": "/assets/pixel/bg_ruin_towers_512x256.svg",
+    "png": "/assets/pixel/bg_ruin_towers_512x256.png",
+    "width": 512,
+    "height": 256
+  },
+  "bg_cloud_bank_768x128": {
+    "svg": "/assets/pixel/bg_cloud_bank_768x128.svg",
+    "png": "/assets/pixel/bg_cloud_bank_768x128.png",
+    "width": 768,
+    "height": 128
+  },
+  "bg_canopy_frame_768x160": {
+    "svg": "/assets/pixel/bg_canopy_frame_768x160.svg",
+    "png": "/assets/pixel/bg_canopy_frame_768x160.png",
+    "width": 768,
+    "height": 160
+  },
+  "grass_clump_16": {
+    "svg": "/assets/pixel/grass_clump_16.svg",
+    "png": "/assets/pixel/grass_clump_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "signpost_16x24": {
+    "svg": "/assets/pixel/signpost_16x24.svg",
+    "png": "/assets/pixel/signpost_16x24.png",
+    "width": 16,
+    "height": 24
+  },
+  "fence_32x16": {
+    "svg": "/assets/pixel/fence_32x16.svg",
+    "png": "/assets/pixel/fence_32x16.png",
+    "width": 32,
+    "height": 16
+  },
+  "rope_bridge_48x16": {
+    "svg": "/assets/pixel/rope_bridge_48x16.svg",
+    "png": "/assets/pixel/rope_bridge_48x16.png",
+    "width": 48,
+    "height": 16
+  },
+  "stump_24x24": {
+    "svg": "/assets/pixel/stump_24x24.svg",
+    "png": "/assets/pixel/stump_24x24.png",
+    "width": 24,
+    "height": 24
+  },
+  "ruin_column_24x40": {
+    "svg": "/assets/pixel/ruin_column_24x40.svg",
+    "png": "/assets/pixel/ruin_column_24x40.png",
+    "width": 24,
+    "height": 40
+  },
+  "crystal_marker_16x24": {
+    "svg": "/assets/pixel/crystal_marker_16x24.svg",
+    "png": "/assets/pixel/crystal_marker_16x24.png",
+    "width": 16,
+    "height": 24
+  },
+  "bush_32": {
+    "svg": "/assets/pixel/bush_32.svg",
+    "png": "/assets/pixel/bush_32.png",
+    "width": 32,
+    "height": 24
+  },
+  "tree_48": {
+    "svg": "/assets/pixel/tree_48.svg",
+    "png": "/assets/pixel/tree_48.png",
+    "width": 48,
+    "height": 64
+  },
+  "moss_platform_32": {
+    "svg": "/assets/pixel/moss_platform_32.svg",
+    "png": "/assets/pixel/moss_platform_32.png",
+    "width": 32,
+    "height": 16
+  },
+  "moss_platform_cracked_32": {
+    "svg": "/assets/pixel/moss_platform_cracked_32.svg",
+    "png": "/assets/pixel/moss_platform_cracked_32.png",
+    "width": 32,
+    "height": 16
+  },
+  "moss_platform_overhang_32": {
+    "svg": "/assets/pixel/moss_platform_overhang_32.svg",
+    "png": "/assets/pixel/moss_platform_overhang_32.png",
+    "width": 32,
+    "height": 22
+  },
+  "moss_platform_flowers_32": {
+    "svg": "/assets/pixel/moss_platform_flowers_32.svg",
+    "png": "/assets/pixel/moss_platform_flowers_32.png",
+    "width": 32,
+    "height": 18
+  },
+  "stone_ledge_48": {
+    "svg": "/assets/pixel/stone_ledge_48.svg",
+    "png": "/assets/pixel/stone_ledge_48.png",
+    "width": 48,
+    "height": 18
+  },
+  "coin_16": {
+    "svg": "/assets/pixel/coin_16.svg",
+    "png": "/assets/pixel/coin_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "coin_spin_0_16": {
+    "svg": "/assets/pixel/coin_spin_0_16.svg",
+    "png": "/assets/pixel/coin_spin_0_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "coin_spin_1_16": {
+    "svg": "/assets/pixel/coin_spin_1_16.svg",
+    "png": "/assets/pixel/coin_spin_1_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "coin_spin_2_16": {
+    "svg": "/assets/pixel/coin_spin_2_16.svg",
+    "png": "/assets/pixel/coin_spin_2_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "coin_spin_3_16": {
+    "svg": "/assets/pixel/coin_spin_3_16.svg",
+    "png": "/assets/pixel/coin_spin_3_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "gem_cyan_0_16": {
+    "svg": "/assets/pixel/gem_cyan_0_16.svg",
+    "png": "/assets/pixel/gem_cyan_0_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "gem_cyan_1_16": {
+    "svg": "/assets/pixel/gem_cyan_1_16.svg",
+    "png": "/assets/pixel/gem_cyan_1_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "gem_cyan_2_16": {
+    "svg": "/assets/pixel/gem_cyan_2_16.svg",
+    "png": "/assets/pixel/gem_cyan_2_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "gem_cyan_3_16": {
+    "svg": "/assets/pixel/gem_cyan_3_16.svg",
+    "png": "/assets/pixel/gem_cyan_3_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "relic_pink_0_16": {
+    "svg": "/assets/pixel/relic_pink_0_16.svg",
+    "png": "/assets/pixel/relic_pink_0_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "relic_pink_1_16": {
+    "svg": "/assets/pixel/relic_pink_1_16.svg",
+    "png": "/assets/pixel/relic_pink_1_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "relic_pink_2_16": {
+    "svg": "/assets/pixel/relic_pink_2_16.svg",
+    "png": "/assets/pixel/relic_pink_2_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "relic_pink_3_16": {
+    "svg": "/assets/pixel/relic_pink_3_16.svg",
+    "png": "/assets/pixel/relic_pink_3_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "seed_green_0_16": {
+    "svg": "/assets/pixel/seed_green_0_16.svg",
+    "png": "/assets/pixel/seed_green_0_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "seed_green_1_16": {
+    "svg": "/assets/pixel/seed_green_1_16.svg",
+    "png": "/assets/pixel/seed_green_1_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "seed_green_2_16": {
+    "svg": "/assets/pixel/seed_green_2_16.svg",
+    "png": "/assets/pixel/seed_green_2_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "seed_green_3_16": {
+    "svg": "/assets/pixel/seed_green_3_16.svg",
+    "png": "/assets/pixel/seed_green_3_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "star_shard_0_16": {
+    "svg": "/assets/pixel/star_shard_0_16.svg",
+    "png": "/assets/pixel/star_shard_0_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "star_shard_1_16": {
+    "svg": "/assets/pixel/star_shard_1_16.svg",
+    "png": "/assets/pixel/star_shard_1_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "star_shard_2_16": {
+    "svg": "/assets/pixel/star_shard_2_16.svg",
+    "png": "/assets/pixel/star_shard_2_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "star_shard_3_16": {
+    "svg": "/assets/pixel/star_shard_3_16.svg",
+    "png": "/assets/pixel/star_shard_3_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "collectible_sparkle_16": {
+    "svg": "/assets/pixel/collectible_sparkle_16.svg",
+    "png": "/assets/pixel/collectible_sparkle_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "hazard_spikes_16": {
+    "svg": "/assets/pixel/hazard_spikes_16.svg",
+    "png": "/assets/pixel/hazard_spikes_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "vine_hanging_16": {
+    "svg": "/assets/pixel/vine_hanging_16.svg",
+    "png": "/assets/pixel/vine_hanging_16.png",
+    "width": 16,
+    "height": 24
+  },
+  "flower_patch_16": {
+    "svg": "/assets/pixel/flower_patch_16.svg",
+    "png": "/assets/pixel/flower_patch_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "rune_stone_16": {
+    "svg": "/assets/pixel/rune_stone_16.svg",
+    "png": "/assets/pixel/rune_stone_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "portal_arch_64": {
+    "svg": "/assets/pixel/portal_arch_64.svg",
+    "png": "/assets/pixel/portal_arch_64.png",
+    "width": 64,
+    "height": 64
+  },
+  "cloud_96": {
+    "svg": "/assets/pixel/cloud_96.svg",
+    "png": "/assets/pixel/cloud_96.png",
+    "width": 96,
+    "height": 40
+  },
+  "cloud_small_64": {
+    "svg": "/assets/pixel/cloud_small_64.svg",
+    "png": "/assets/pixel/cloud_small_64.png",
+    "width": 64,
+    "height": 28
+  },
+  "cloud_tall_80": {
+    "svg": "/assets/pixel/cloud_tall_80.svg",
+    "png": "/assets/pixel/cloud_tall_80.png",
+    "width": 80,
+    "height": 56
+  },
+  "cloud_long_144": {
+    "svg": "/assets/pixel/cloud_long_144.svg",
+    "png": "/assets/pixel/cloud_long_144.png",
+    "width": 144,
+    "height": 48
+  },
+  "cloud_wispy_128": {
+    "svg": "/assets/pixel/cloud_wispy_128.svg",
+    "png": "/assets/pixel/cloud_wispy_128.png",
+    "width": 128,
+    "height": 32
+  },
+  "cloud_cluster_160": {
+    "svg": "/assets/pixel/cloud_cluster_160.svg",
+    "png": "/assets/pixel/cloud_cluster_160.png",
+    "width": 160,
+    "height": 64
+  },
+  "cloud_flat_192": {
+    "svg": "/assets/pixel/cloud_flat_192.svg",
+    "png": "/assets/pixel/cloud_flat_192.png",
+    "width": 192,
+    "height": 36
+  },
+  "floating_island_96": {
+    "svg": "/assets/pixel/floating_island_96.svg",
+    "png": "/assets/pixel/floating_island_96.png",
+    "width": 96,
+    "height": 48
+  },
+  "crown_16": {
+    "svg": "/assets/pixel/crown_16.svg",
+    "png": "/assets/pixel/crown_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "hud_panel_96": {
+    "svg": "/assets/pixel/hud_panel_96.svg",
+    "png": "/assets/pixel/hud_panel_96.png",
+    "width": 96,
+    "height": 64
+  },
+  "player_explorer_24x32": {
+    "svg": "/assets/pixel/player_explorer_24x32.svg",
+    "png": "/assets/pixel/player_explorer_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_idle_24x32": {
+    "svg": "/assets/pixel/player_idle_24x32.svg",
+    "png": "/assets/pixel/player_idle_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_run_1_24x32": {
+    "svg": "/assets/pixel/player_run_1_24x32.svg",
+    "png": "/assets/pixel/player_run_1_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_run_2_24x32": {
+    "svg": "/assets/pixel/player_run_2_24x32.svg",
+    "png": "/assets/pixel/player_run_2_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_jump_24x32": {
+    "svg": "/assets/pixel/player_jump_24x32.svg",
+    "png": "/assets/pixel/player_jump_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_fall_24x32": {
+    "svg": "/assets/pixel/player_fall_24x32.svg",
+    "png": "/assets/pixel/player_fall_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "player_kick_24x32": {
+    "svg": "/assets/pixel/player_kick_24x32.svg",
+    "png": "/assets/pixel/player_kick_24x32.png",
+    "width": 24,
+    "height": 32
+  },
+  "height_arrow_16": {
+    "svg": "/assets/pixel/height_arrow_16.svg",
+    "png": "/assets/pixel/height_arrow_16.png",
+    "width": 16,
+    "height": 16
+  }
+}

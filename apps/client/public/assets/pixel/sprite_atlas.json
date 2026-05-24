@@ -1,0 +1,1742 @@
+{
+  "meta": {
+    "imageMode": "loose_png",
+    "scaleMode": "nearest",
+    "generatedBy": "tools/generate-assets.mjs"
+  },
+  "frames": {
+    "bg_sky_arches_768x432": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 432
+      },
+      "sourceSize": {
+        "w": 768,
+        "h": 432
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 432
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bg_sky_arches_768x432.png"
+    },
+    "bg_forest_ruins_panorama_1024x576": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 576
+      },
+      "sourceSize": {
+        "w": 1024,
+        "h": 576
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 576
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bg_forest_ruins_panorama_1024x576.png"
+    },
+    "bg_ruin_towers_512x256": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 256
+      },
+      "sourceSize": {
+        "w": 512,
+        "h": 256
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 256
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bg_ruin_towers_512x256.png"
+    },
+    "bg_cloud_bank_768x128": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 128
+      },
+      "sourceSize": {
+        "w": 768,
+        "h": 128
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 128
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bg_cloud_bank_768x128.png"
+    },
+    "bg_canopy_frame_768x160": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 160
+      },
+      "sourceSize": {
+        "w": 768,
+        "h": 160
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 768,
+        "h": 160
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bg_canopy_frame_768x160.png"
+    },
+    "grass_clump_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/grass_clump_16.png"
+    },
+    "signpost_16x24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/signpost_16x24.png"
+    },
+    "fence_32x16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/fence_32x16.png"
+    },
+    "rope_bridge_48x16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 48,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/rope_bridge_48x16.png"
+    },
+    "stump_24x24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/stump_24x24.png"
+    },
+    "ruin_column_24x40": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 40
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 40
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/ruin_column_24x40.png"
+    },
+    "crystal_marker_16x24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/crystal_marker_16x24.png"
+    },
+    "bush_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/bush_32.png"
+    },
+    "tree_48": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 48,
+        "h": 64
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 64
+      },
+      "pivot": {
+        "x": 24,
+        "y": 64
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/tree_48.png"
+    },
+    "moss_platform_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_32.png"
+    },
+    "moss_platform_cracked_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_cracked_32.png"
+    },
+    "moss_platform_overhang_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 22
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 22
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 22
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_overhang_32.png"
+    },
+    "moss_platform_flowers_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 18
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 18
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 18
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_flowers_32.png"
+    },
+    "stone_ledge_48": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 18
+      },
+      "sourceSize": {
+        "w": 48,
+        "h": 18
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 48,
+        "h": 18
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/stone_ledge_48.png"
+    },
+    "coin_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": [
+        "collectible",
+        "coin"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/coin_16.png"
+    },
+    "coin_spin_0_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": [
+        "collectible",
+        "coin"
+      ],
+      "durationMs": 200,
+      "image": "/assets/pixel/coin_spin_0_16.png"
+    },
+    "coin_spin_1_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": [
+        "collectible",
+        "coin"
+      ],
+      "durationMs": 200,
+      "image": "/assets/pixel/coin_spin_1_16.png"
+    },
+    "coin_spin_2_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": [
+        "collectible",
+        "coin"
+      ],
+      "durationMs": 200,
+      "image": "/assets/pixel/coin_spin_2_16.png"
+    },
+    "coin_spin_3_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 8,
+        "y": 8
+      },
+      "tags": [
+        "collectible",
+        "coin"
+      ],
+      "durationMs": 200,
+      "image": "/assets/pixel/coin_spin_3_16.png"
+    },
+    "gem_cyan_0_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/gem_cyan_0_16.png"
+    },
+    "gem_cyan_1_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/gem_cyan_1_16.png"
+    },
+    "gem_cyan_2_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/gem_cyan_2_16.png"
+    },
+    "gem_cyan_3_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/gem_cyan_3_16.png"
+    },
+    "relic_pink_0_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/relic_pink_0_16.png"
+    },
+    "relic_pink_1_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/relic_pink_1_16.png"
+    },
+    "relic_pink_2_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/relic_pink_2_16.png"
+    },
+    "relic_pink_3_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/relic_pink_3_16.png"
+    },
+    "seed_green_0_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/seed_green_0_16.png"
+    },
+    "seed_green_1_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/seed_green_1_16.png"
+    },
+    "seed_green_2_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/seed_green_2_16.png"
+    },
+    "seed_green_3_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/seed_green_3_16.png"
+    },
+    "star_shard_0_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/star_shard_0_16.png"
+    },
+    "star_shard_1_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/star_shard_1_16.png"
+    },
+    "star_shard_2_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/star_shard_2_16.png"
+    },
+    "star_shard_3_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/star_shard_3_16.png"
+    },
+    "collectible_sparkle_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/collectible_sparkle_16.png"
+    },
+    "hazard_spikes_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "hazard"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/hazard_spikes_16.png"
+    },
+    "vine_hanging_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/vine_hanging_16.png"
+    },
+    "flower_patch_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/flower_patch_16.png"
+    },
+    "rune_stone_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/rune_stone_16.png"
+    },
+    "portal_arch_64": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 64
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      },
+      "pivot": {
+        "x": 32,
+        "y": 64
+      },
+      "tags": [
+        "portal"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/portal_arch_64.png"
+    },
+    "cloud_96": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 40
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 40
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 40
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_96.png"
+    },
+    "cloud_small_64": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 64,
+        "h": 28
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 28
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_small_64.png"
+    },
+    "cloud_tall_80": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 56
+      },
+      "sourceSize": {
+        "w": 80,
+        "h": 56
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 80,
+        "h": 56
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_tall_80.png"
+    },
+    "cloud_long_144": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 144,
+        "h": 48
+      },
+      "sourceSize": {
+        "w": 144,
+        "h": 48
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 144,
+        "h": 48
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_long_144.png"
+    },
+    "cloud_wispy_128": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 128,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 128,
+        "h": 32
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_wispy_128.png"
+    },
+    "cloud_cluster_160": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 160,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 160,
+        "h": 64
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 160,
+        "h": 64
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_cluster_160.png"
+    },
+    "cloud_flat_192": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 36
+      },
+      "sourceSize": {
+        "w": 192,
+        "h": 36
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 192,
+        "h": 36
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_flat_192.png"
+    },
+    "floating_island_96": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 48
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 48
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 48
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/floating_island_96.png"
+    },
+    "crown_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "ui"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/crown_16.png"
+    },
+    "hud_panel_96": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 64
+      },
+      "sourceSize": {
+        "w": 96,
+        "h": 64
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 96,
+        "h": 64
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "ui"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/hud_panel_96.png"
+    },
+    "player_explorer_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/player_explorer_24x32.png"
+    },
+    "player_idle_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 180,
+      "image": "/assets/pixel/player_idle_24x32.png"
+    },
+    "player_run_1_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 95,
+      "image": "/assets/pixel/player_run_1_24x32.png"
+    },
+    "player_run_2_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 95,
+      "image": "/assets/pixel/player_run_2_24x32.png"
+    },
+    "player_jump_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/player_jump_24x32.png"
+    },
+    "player_fall_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/player_fall_24x32.png"
+    },
+    "player_kick_24x32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 32
+      },
+      "pivot": {
+        "x": 12,
+        "y": 30
+      },
+      "tags": [
+        "player"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/player_kick_24x32.png"
+    },
+    "height_arrow_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "ui"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/height_arrow_16.png"
+    }
+  }
+}

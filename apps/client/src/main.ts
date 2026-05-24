@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Text, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -102,6 +102,76 @@ const PLAYER_COLORS = [
 const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 384px
 const INTERP_DELAY_MS = 100;
 
+const ASSET_URLS = {
+  aiForestRuinsPanorama: "/assets/generated/forest_ruins_ai_panorama.png",
+  bgCanopyFrame: "/assets/pixel/bg_canopy_frame_768x160.png",
+  bgCloudBank: "/assets/pixel/bg_cloud_bank_768x128.png",
+  bgForestRuinsPanorama: "/assets/pixel/bg_forest_ruins_panorama_1024x576.png",
+  bgRuinTowers: "/assets/pixel/bg_ruin_towers_512x256.png",
+  bgSkyArches: "/assets/pixel/bg_sky_arches_768x432.png",
+  bush: "/assets/pixel/bush_32.png",
+  cloud: "/assets/pixel/cloud_96.png",
+  cloudSmall: "/assets/pixel/cloud_small_64.png",
+  cloudTall: "/assets/pixel/cloud_tall_80.png",
+  cloudLong: "/assets/pixel/cloud_long_144.png",
+  cloudWispy: "/assets/pixel/cloud_wispy_128.png",
+  cloudCluster: "/assets/pixel/cloud_cluster_160.png",
+  cloudFlat: "/assets/pixel/cloud_flat_192.png",
+  coin: "/assets/pixel/coin_16.png",
+  coinSpin0: "/assets/pixel/coin_spin_0_16.png",
+  coinSpin1: "/assets/pixel/coin_spin_1_16.png",
+  coinSpin2: "/assets/pixel/coin_spin_2_16.png",
+  coinSpin3: "/assets/pixel/coin_spin_3_16.png",
+  collectibleSparkle: "/assets/pixel/collectible_sparkle_16.png",
+  crown: "/assets/pixel/crown_16.png",
+  crystalMarker: "/assets/pixel/crystal_marker_16x24.png",
+  fence: "/assets/pixel/fence_32x16.png",
+  flowerPatch: "/assets/pixel/flower_patch_16.png",
+  floatingIsland: "/assets/pixel/floating_island_96.png",
+  grassClump: "/assets/pixel/grass_clump_16.png",
+  hazardSpikes: "/assets/pixel/hazard_spikes_16.png",
+  heightArrow: "/assets/pixel/height_arrow_16.png",
+  hudPanel: "/assets/pixel/hud_panel_96.png",
+  gemCyan0: "/assets/pixel/gem_cyan_0_16.png",
+  gemCyan1: "/assets/pixel/gem_cyan_1_16.png",
+  gemCyan2: "/assets/pixel/gem_cyan_2_16.png",
+  gemCyan3: "/assets/pixel/gem_cyan_3_16.png",
+  mossPlatform: "/assets/pixel/moss_platform_32.png",
+  mossPlatformCracked: "/assets/pixel/moss_platform_cracked_32.png",
+  mossPlatformOverhang: "/assets/pixel/moss_platform_overhang_32.png",
+  mossPlatformFlowers: "/assets/pixel/moss_platform_flowers_32.png",
+  playerExplorer: "/assets/pixel/player_explorer_24x32.png",
+  playerIdle: "/assets/pixel/player_idle_24x32.png",
+  playerRun1: "/assets/pixel/player_run_1_24x32.png",
+  playerRun2: "/assets/pixel/player_run_2_24x32.png",
+  playerJump: "/assets/pixel/player_jump_24x32.png",
+  playerFall: "/assets/pixel/player_fall_24x32.png",
+  playerKick: "/assets/pixel/player_kick_24x32.png",
+  portalArch: "/assets/pixel/portal_arch_64.png",
+  relicPink0: "/assets/pixel/relic_pink_0_16.png",
+  relicPink1: "/assets/pixel/relic_pink_1_16.png",
+  relicPink2: "/assets/pixel/relic_pink_2_16.png",
+  relicPink3: "/assets/pixel/relic_pink_3_16.png",
+  runeStone: "/assets/pixel/rune_stone_16.png",
+  seedGreen0: "/assets/pixel/seed_green_0_16.png",
+  seedGreen1: "/assets/pixel/seed_green_1_16.png",
+  seedGreen2: "/assets/pixel/seed_green_2_16.png",
+  seedGreen3: "/assets/pixel/seed_green_3_16.png",
+  ropeBridge: "/assets/pixel/rope_bridge_48x16.png",
+  signpost: "/assets/pixel/signpost_16x24.png",
+  starShard0: "/assets/pixel/star_shard_0_16.png",
+  starShard1: "/assets/pixel/star_shard_1_16.png",
+  starShard2: "/assets/pixel/star_shard_2_16.png",
+  starShard3: "/assets/pixel/star_shard_3_16.png",
+  stoneLedge: "/assets/pixel/stone_ledge_48.png",
+  stump: "/assets/pixel/stump_24x24.png",
+  tree: "/assets/pixel/tree_48.png",
+  ruinColumn: "/assets/pixel/ruin_column_24x40.png",
+  vineHanging: "/assets/pixel/vine_hanging_16.png",
+} as const;
+
+type AssetKey = keyof typeof ASSET_URLS;
+
 // ── HTML shell ────────────────────────────────────────────────────────────────
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -152,6 +222,91 @@ await pixi.init({
 pixi.canvas.style.imageRendering = "pixelated";
 gameWrap.prepend(pixi.canvas);
 
+async function loadPixelAssets(): Promise<Partial<Record<AssetKey, Texture>>> {
+  const loaded: Partial<Record<AssetKey, Texture>> = {};
+  await Promise.all(Object.entries(ASSET_URLS).map(async ([key, url]) => {
+    try {
+      loaded[key as AssetKey] = await Assets.load<Texture>(url);
+    } catch (err) {
+      console.warn(`Could not load pixel asset ${url}`, err);
+    }
+  }));
+  return loaded;
+}
+
+const pixelAssets = await loadPixelAssets();
+
+function assetTexture(key: AssetKey): Texture {
+  return pixelAssets[key] ?? Texture.EMPTY;
+}
+
+function hasAsset(key: AssetKey): boolean {
+  return !!pixelAssets[key];
+}
+
+function makeSprite(key: AssetKey): Sprite {
+  const s = new Sprite(assetTexture(key));
+  s.roundPixels = true;
+  return s;
+}
+
+function hasPlayerAnimationAssets(): boolean {
+  return hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick");
+}
+
+function playerAnimationAsset(s: PlayerState, elapsed: number): AssetKey {
+  if (s.kickPhase === "active" || s.kickPhase === "windup") return "playerKick";
+  if (!s.grounded) return s.velocity.y < -20 ? "playerJump" : "playerFall";
+  if (Math.abs(s.velocity.x) > 28) return Math.floor(elapsed / 95) % 2 === 0 ? "playerRun1" : "playerRun2";
+  return "playerIdle";
+}
+
+function coinFrameAsset(frame: number): AssetKey {
+  if (hasAsset("coinSpin0") && hasAsset("coinSpin1") && hasAsset("coinSpin2") && hasAsset("coinSpin3")) {
+    return (["coinSpin0", "coinSpin1", "coinSpin2", "coinSpin3"] as const)[frame % 4]!;
+  }
+  return "coin";
+}
+
+function collectibleFrames(id: string, tileX: number, tileY: number): AssetKey[] {
+  const groups: AssetKey[][] = [
+    ["coinSpin0", "coinSpin1", "coinSpin2", "coinSpin3"],
+    ["gemCyan0", "gemCyan1", "gemCyan2", "gemCyan3"],
+    ["relicPink0", "relicPink1", "relicPink2", "relicPink3"],
+    ["seedGreen0", "seedGreen1", "seedGreen2", "seedGreen3"],
+    ["starShard0", "starShard1", "starShard2", "starShard3"],
+  ];
+  const hash = [...id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, tileX * 131 + tileY * 977);
+  for (let tries = 0; tries < groups.length; tries++) {
+    const group = groups[(hash + tries) % groups.length]!;
+    if (group.every(hasAsset)) return group;
+  }
+  const coinFrames: AssetKey[] = ["coinSpin0", "coinSpin1", "coinSpin2", "coinSpin3"];
+  return coinFrames.every(hasAsset) ? coinFrames : ["coin", "coin", "coin", "coin"];
+}
+
+function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
+  const variants: AssetKey[] = layer === "far"
+    ? ["cloudSmall", "cloudWispy", "cloudFlat", "cloud"]
+    : layer === "mid"
+      ? ["cloud", "cloudLong", "cloudTall", "cloudCluster"]
+      : ["cloudLong", "cloudTall", "cloudCluster", "cloudFlat", "cloud"];
+  for (let tries = 0; tries < variants.length; tries++) {
+    const key = variants[(i + tries) % variants.length]!;
+    if (hasAsset(key)) return key;
+  }
+  return "cloud";
+}
+
+function platformCapAsset(seed: number): AssetKey {
+  const variants: AssetKey[] = ["mossPlatform", "mossPlatformCracked", "mossPlatformOverhang", "mossPlatformFlowers"];
+  for (let tries = 0; tries < variants.length; tries++) {
+    const key = variants[(seed + tries) % variants.length]!;
+    if (hasAsset(key)) return key;
+  }
+  return "mossPlatform";
+}
+
 // ── Layer hierarchy ───────────────────────────────────────────────────────────
 // skyLayer    — screen-space parallax bg (not inside worldLayer)
 // worldLayer  — world-space (camera-transformed)
@@ -164,7 +319,9 @@ gameWrap.prepend(pixi.canvas);
 
 const skyLayer    = new Container();
 const worldLayer  = new Container();
+const backDecorationLayer = new Container();
 const chunkLayer  = new Container();
+const decorationLayer = new Container();
 const portalLayer = new Container();
 const relicLayer  = new Container();
 const remoteLayer = new Container();
@@ -172,7 +329,7 @@ const localLayer  = new Container();
 const effectLayer = new Container();
 const hudLayer    = new Container();
 
-worldLayer.addChild(chunkLayer, portalLayer, relicLayer, remoteLayer, localLayer, effectLayer);
+worldLayer.addChild(backDecorationLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, remoteLayer, localLayer, effectLayer);
 pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -185,16 +342,19 @@ let serverSeed = 0x5eed_babe; // updated from welcome message to match server ch
 
 const loadedChunks   = new Map<number, GeneratedChunk>();
 const chunkGraphics  = new Map<number, Graphics>();
+const chunkDecorations = new Map<number, { back: Container; front: Container }>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const collectedRelics = new Set<string>();
 
-interface RelicAnim { container: Container; gfx: Graphics; tileX: number; tileY: number }
+interface RelicAnim { container: Container; gfx: Graphics; sprite: Sprite; sparkle: Sprite | null; frames: AssetKey[]; tileX: number; tileY: number }
 const relicAnims = new Map<string, RelicAnim>();
 
 interface RemoteEntry {
   states: Array<{ state: PlayerState; t: number }>;
   current: PlayerState;
   colorIndex: number;
+  sprite: Sprite;
+  crownSprite: Sprite;
   gfx: Graphics;
   label: Text;
 }
@@ -241,8 +401,15 @@ let cloudDriftMid   = 0;
 let cloudDriftFront = 0;
 
 // Pre-allocated persistent graphics for local player
+const localSprite = makeSprite("playerExplorer");
+const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
-localLayer.addChild(localGfx);
+localSprite.anchor.set(0.5, 1);
+localSprite.alpha = hasPlayerAnimationAssets() ? 0.92 : hasAsset("playerExplorer") ? 0.62 : 0;
+localCrownSprite.anchor.set(0.5, 1);
+localCrownSprite.visible = false;
+localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
+localLayer.addChild(localSprite, localGfx, localCrownSprite);
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -363,10 +530,17 @@ function clearWorldChunks(): void {
   loadedChunks.clear();
   for (const g of chunkGraphics.values()) g.destroy();
   chunkGraphics.clear();
+  for (const c of chunkDecorations.values()) {
+    c.back.destroy({ children: true });
+    c.front.destroy({ children: true });
+  }
+  chunkDecorations.clear();
+  backDecorationLayer.removeChildren();
   chunkLayer.removeChildren();
-  for (const a of relicAnims.values()) a.container.destroy();
+  decorationLayer.removeChildren();
+  for (const a of relicAnims.values()) a.container.destroy({ children: true });
   relicAnims.clear();
-  for (const a of portalAnims.values()) a.container.destroy();
+  for (const a of portalAnims.values()) a.container.destroy({ children: true });
   portalAnims.clear();
 }
 
@@ -377,17 +551,24 @@ function destroyChunkVisuals(chunkY: number): void {
     chunkGraphics.delete(chunkY);
   }
 
+  const decor = chunkDecorations.get(chunkY);
+  if (decor) {
+    decor.back.destroy({ children: true });
+    decor.front.destroy({ children: true });
+    chunkDecorations.delete(chunkY);
+  }
+
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
     if (id.startsWith(relicPrefix)) {
-      anim.container.destroy();
+      anim.container.destroy({ children: true });
       relicAnims.delete(id);
     }
   }
 
   const portal = portalAnims.get(chunkY);
   if (portal) {
-    portal.container.destroy();
+    portal.container.destroy({ children: true });
     portalAnims.delete(chunkY);
   }
 }
@@ -416,12 +597,33 @@ function respawnLocal(): void {
 const skyBgGfx    = new Graphics();
 const sunGlowGfx  = new Graphics();
 const starsGfx    = new Graphics();
+const aiPanoramaBack = new Container();
+const forestPanoramaBack = new Container();
+const skyArchesBack = new Container();
+const ruinTowersBack = new Container();
 const islandsFar  = new Container();
 const towersCont  = new Container();
+const cloudBankBack = new Container();
 const cloudsFar   = new Container();
 const cloudsMid   = new Container();
 const cloudsFront = new Container();
-skyLayer.addChild(skyBgGfx, sunGlowGfx, starsGfx, islandsFar, towersCont, cloudsFar, cloudsMid, cloudsFront);
+const canopyFrameFront = new Container();
+skyLayer.addChild(
+  skyBgGfx,
+  sunGlowGfx,
+  starsGfx,
+  aiPanoramaBack,
+  forestPanoramaBack,
+  skyArchesBack,
+  ruinTowersBack,
+  islandsFar,
+  towersCont,
+  cloudBankBack,
+  cloudsFar,
+  cloudsMid,
+  cloudsFront,
+  canopyFrameFront,
+);
 
 function lerpColor(a: number, b: number, t: number): number {
   const c = Math.max(0, Math.min(1, t));
@@ -459,6 +661,46 @@ function drawBgIsland(g: Graphics, ix: number, iy: number, w: number, h: number,
   g.rect(ix + Math.round(w * 0.7), iy - treeH + 1, 2, treeH - 1).fill(lerpColor(col, 0x204010, 0.3));
 }
 
+function addWideBackdrop(container: Container, key: AssetKey, sw: number, y: number, alpha: number): void {
+  if (!hasAsset(key)) return;
+  const sprite = makeSprite(key);
+  const texW = Math.max(1, sprite.texture.width);
+  const texH = Math.max(1, sprite.texture.height);
+  const scale = Math.max(1, sw / texW);
+  sprite.x = Math.round((sw - texW * scale) / 2);
+  sprite.y = Math.round(y);
+  sprite.scale.set(scale);
+  sprite.alpha = alpha;
+  container.addChild(sprite);
+
+  if (texW * scale < sw + 80) {
+    const extra = makeSprite(key);
+    extra.x = Math.round(sprite.x + texW * scale);
+    extra.y = sprite.y;
+    extra.scale.set(scale);
+    extra.alpha = alpha;
+    container.addChild(extra);
+  }
+
+  // Keep tall foreground canopies from covering too much on short screens.
+  if (key === "bgCanopyFrame") {
+    sprite.height = Math.min(texH * scale, Math.max(92, pixi.screen.height * 0.22));
+  }
+}
+
+function addCoverBackdrop(container: Container, key: AssetKey, sw: number, sh: number, alpha: number): void {
+  if (!hasAsset(key)) return;
+  const sprite = makeSprite(key);
+  const texW = Math.max(1, sprite.texture.width);
+  const texH = Math.max(1, sprite.texture.height);
+  const scale = Math.max(sw / texW, sh / texH);
+  sprite.x = Math.round((sw - texW * scale) / 2);
+  sprite.y = Math.round((sh - texH * scale) / 2);
+  sprite.scale.set(scale);
+  sprite.alpha = alpha;
+  container.addChild(sprite);
+}
+
 function buildSkyStatic(sw: number, sh: number): void {
   // Stars (visible at high altitude)
   starsGfx.clear();
@@ -479,71 +721,140 @@ function buildSkyStatic(sw: number, sh: number): void {
   sunGlowGfx.circle(sunX, sunY, 18).fill({ color: 0xfff8c0, alpha: 0.45 });
   sunGlowGfx.circle(sunX, sunY, 8).fill({ color: 0xfffff0, alpha: 0.8 });
 
+  aiPanoramaBack.removeChildren();
+  addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
+
+  forestPanoramaBack.removeChildren();
+  addWideBackdrop(forestPanoramaBack, "bgForestRuinsPanorama", sw, sh * 0.12, 0.38);
+
+  skyArchesBack.removeChildren();
+  addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.34);
+
+  ruinTowersBack.removeChildren();
+  addWideBackdrop(ruinTowersBack, "bgRuinTowers", sw, sh * 0.54, 0.22);
+
+  cloudBankBack.removeChildren();
+  addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.42);
+
+  canopyFrameFront.removeChildren();
+  addWideBackdrop(canopyFrameFront, "bgCanopyFrame", sw, -8, 0.58);
+
   // Distant floating island silhouettes
   islandsFar.removeChildren();
-  const ig = new Graphics();
-  for (let i = 0; i < 12; i++) {
-    const ix = ((i * 89 + 23) % (sw + 60)) - 30;
-    const iy = sh * 0.45 + (i * 61 % Math.round(sh * 0.35));
-    const iw = 20 + (i * 37 % 55);
-    const ih = 6 + (i * 23 % 12);
-    drawBgIsland(ig, ix, iy, iw, ih, PAL.islandFar);
+  if (hasAsset("floatingIsland")) {
+    for (let i = 0; i < 10; i++) {
+      const island = makeSprite("floatingIsland");
+      island.x = ((i * 89 + 23) % (sw + 110)) - 55;
+      island.y = sh * 0.42 + (i * 61 % Math.round(sh * 0.36));
+      const sc = 0.42 + (i % 4) * 0.12;
+      island.scale.set(sc);
+      island.alpha = 0.34;
+      islandsFar.addChild(island);
+    }
+  } else {
+    const ig = new Graphics();
+    for (let i = 0; i < 12; i++) {
+      const ix = ((i * 89 + 23) % (sw + 60)) - 30;
+      const iy = sh * 0.45 + (i * 61 % Math.round(sh * 0.35));
+      const iw = 20 + (i * 37 % 55);
+      const ih = 6 + (i * 23 % 12);
+      drawBgIsland(ig, ix, iy, iw, ih, PAL.islandFar);
+    }
+    islandsFar.addChild(ig);
   }
-  islandsFar.addChild(ig);
 
   // Ancient tower silhouettes
   towersCont.removeChildren();
   const tg = new Graphics();
+  const towerGroundY = Math.round(sh * 1.06);
+  tg.rect(0, towerGroundY - 22, sw, 22).fill({ color: PAL.ruinsDark, alpha: 0.28 });
+  tg.rect(0, towerGroundY - 10, sw, 10).fill({ color: PAL.uiInk, alpha: 0.24 });
+  tg.rect(0, towerGroundY - 24, sw, 3).fill({ color: PAL.canopyMid, alpha: 0.18 });
   for (let i = 0; i < 7; i++) {
     const tx = ((i * 113 + 41) % (sw + 80)) - 30;
     const th = sh * (0.15 + (i * 43 % 60) / 300);
     const tw = 10 + i * 5;
-    tg.rect(tx,      sh * 0.9 - th, tw,     th    ).fill(PAL.ruinsDark);
+    const towerTopY = towerGroundY - th;
+    tg.rect(tx, towerTopY, tw, th + 18).fill(PAL.ruinsDark);
     // Tower top / spire
-    tg.poly([tx + 1, sh * 0.9 - th, tx + Math.round(tw / 2), sh * 0.9 - th - 10, tx + tw - 1, sh * 0.9 - th]).fill(PAL.ruinsDark);
+    tg.poly([tx + 1, towerTopY, tx + Math.round(tw / 2), towerTopY - 10, tx + tw - 1, towerTopY]).fill(PAL.ruinsDark);
     // Battlements
-    for (let b = 0; b < 3; b++) tg.rect(tx + b * Math.floor(tw / 3), sh * 0.9 - th - 5, Math.floor(tw / 4), 5).fill(PAL.ruinsDark);
+    for (let b = 0; b < 3; b++) tg.rect(tx + b * Math.floor(tw / 3), towerTopY - 5, Math.floor(tw / 4), 5).fill(PAL.ruinsDark);
     // Window glow
-    tg.rect(tx + Math.round(tw * 0.3), sh * 0.9 - th * 0.55, 3, 5).fill({ color: PAL.portalBlue, alpha: 0.14 });
+    tg.rect(tx + Math.round(tw * 0.3), towerTopY + th * 0.45, 3, 5).fill({ color: PAL.portalBlue, alpha: 0.14 });
+    tg.rect(tx - 4, towerGroundY - 4, tw + 8, 5).fill({ color: PAL.uiInk, alpha: 0.22 });
   }
   towersCont.addChild(tg);
 
   // Far clouds (thin, hazy, distant)
   cloudsFar.removeChildren();
-  const cfg = new Graphics();
-  for (let i = 0; i < 10; i++) {
-    const cw = 36 + (i * 53 % 80);
-    const cx = ((i * 97 + 17) % (sw + 80)) - 40;
-    const cy = sh * 0.06 + (i * 79 % Math.round(sh * 0.70));
-    drawPixelCloud(cfg, cx, cy, cw, PAL.cloudMid, PAL.cloudFar, 0.42);
+  if (hasAsset("cloud")) {
+    for (let i = 0; i < 10; i++) {
+      const cloud = makeSprite(cloudAsset(i, "far"));
+      cloud.x = ((i * 97 + 17) % (sw + 120)) - 60;
+      cloud.y = sh * 0.06 + (i * 79 % Math.round(sh * 0.70));
+      cloud.scale.set(0.38 + (i % 3) * 0.08);
+      cloud.alpha = 0.38;
+      cloudsFar.addChild(cloud);
+    }
+  } else {
+    const cfg = new Graphics();
+    for (let i = 0; i < 10; i++) {
+      const cw = 36 + (i * 53 % 80);
+      const cx = ((i * 97 + 17) % (sw + 80)) - 40;
+      const cy = sh * 0.06 + (i * 79 % Math.round(sh * 0.70));
+      drawPixelCloud(cfg, cx, cy, cw, PAL.cloudMid, PAL.cloudFar, 0.42);
+    }
+    cloudsFar.addChild(cfg);
   }
-  cloudsFar.addChild(cfg);
 
   // Mid clouds (medium, puffier, warmer)
   cloudsMid.removeChildren();
-  const cmg = new Graphics();
-  for (let i = 0; i < 7; i++) {
-    const cw = 70 + (i * 61 % 90);
-    const cx = ((i * 137 + 53) % (sw + 120)) - 50;
-    const cy = sh * 0.04 + (i * 103 % Math.round(sh * 0.68));
-    drawPixelCloud(cmg, cx, cy, cw, PAL.cloudMid, PAL.cloudShadow, 0.60);
+  if (hasAsset("cloud")) {
+    for (let i = 0; i < 7; i++) {
+      const cloud = makeSprite(cloudAsset(i, "mid"));
+      cloud.x = ((i * 137 + 53) % (sw + 150)) - 70;
+      cloud.y = sh * 0.04 + (i * 103 % Math.round(sh * 0.68));
+      cloud.scale.set(0.72 + (i % 3) * 0.12);
+      cloud.alpha = 0.56;
+      cloudsMid.addChild(cloud);
+    }
+  } else {
+    const cmg = new Graphics();
+    for (let i = 0; i < 7; i++) {
+      const cw = 70 + (i * 61 % 90);
+      const cx = ((i * 137 + 53) % (sw + 120)) - 50;
+      const cy = sh * 0.04 + (i * 103 % Math.round(sh * 0.68));
+      drawPixelCloud(cmg, cx, cy, cw, PAL.cloudMid, PAL.cloudShadow, 0.60);
+    }
+    cloudsMid.addChild(cmg);
   }
-  cloudsMid.addChild(cmg);
 
   // Front clouds (large, detailed, warm sunlit)
   cloudsFront.removeChildren();
-  const cfg2 = new Graphics();
-  for (let i = 0; i < 5; i++) {
-    const cw = 110 + (i * 71 % 100);
-    const cx = ((i * 173 + 31) % (sw + 160)) - 60;
-    const cy = sh * 0.02 + (i * 127 % Math.round(sh * 0.72));
-    // Warm sunlit top, cool shadow underneath
-    drawPixelCloud(cfg2, cx, cy, cw, PAL.cloudWarm, PAL.cloudShadow, 0.72);
-    // Subtle warm highlight on topmost bump
-    cfg2.rect(cx + Math.round(cw * 0.38), cy, Math.round(cw * 0.24), 2)
-      .fill({ color: 0xfffff0, alpha: 0.3 });
+  if (hasAsset("cloud")) {
+    for (let i = 0; i < 5; i++) {
+      const cloud = makeSprite(cloudAsset(i, "front"));
+      cloud.x = ((i * 173 + 31) % (sw + 200)) - 80;
+      cloud.y = sh * 0.02 + (i * 127 % Math.round(sh * 0.72));
+      cloud.scale.set(1.05 + (i % 2) * 0.25);
+      cloud.alpha = 0.7;
+      cloudsFront.addChild(cloud);
+    }
+  } else {
+    const cfg2 = new Graphics();
+    for (let i = 0; i < 5; i++) {
+      const cw = 110 + (i * 71 % 100);
+      const cx = ((i * 173 + 31) % (sw + 160)) - 60;
+      const cy = sh * 0.02 + (i * 127 % Math.round(sh * 0.72));
+      // Warm sunlit top, cool shadow underneath
+      drawPixelCloud(cfg2, cx, cy, cw, PAL.cloudWarm, PAL.cloudShadow, 0.72);
+      // Subtle warm highlight on topmost bump
+      cfg2.rect(cx + Math.round(cw * 0.38), cy, Math.round(cw * 0.24), 2)
+        .fill({ color: 0xfffff0, alpha: 0.3 });
+    }
+    cloudsFront.addChild(cfg2);
   }
-  cloudsFront.addChild(cfg2);
 }
 
 function updateSkyParallax(camY: number, scale: number): void {
@@ -568,14 +879,24 @@ function updateSkyParallax(camY: number, scale: number): void {
 
   starsGfx.alpha    = Math.min(1, t * 3.0);
   starsGfx.y        = scrollPx * 0.0;
+  aiPanoramaBack.y = Math.round(scrollPx * 0.018);
+  aiPanoramaBack.alpha = Math.max(0.08, 0.42 - t * 0.34);
+  forestPanoramaBack.y = scrollPx * 0.035;
+  forestPanoramaBack.alpha = Math.max(0.08, 0.38 - t * 0.28);
+  skyArchesBack.y   = scrollPx * 0.025;
+  ruinTowersBack.y  = scrollPx * 0.075;
   islandsFar.y      = scrollPx * 0.05;
   towersCont.y      = scrollPx * 0.11;
+  cloudBankBack.x   = cloudDriftFar * 0.45;
+  cloudBankBack.y   = scrollPx * 0.14;
   cloudsFar.x   = cloudDriftFar;
   cloudsFar.y       = scrollPx * 0.20;
   cloudsMid.x   = cloudDriftMid;
   cloudsMid.y       = scrollPx * 0.34;
   cloudsFront.x = cloudDriftFront;
   cloudsFront.y     = scrollPx * 0.50;
+  canopyFrameFront.y = Math.round(scrollPx * 0.02);
+  canopyFrameFront.alpha = Math.max(0.12, 0.58 - t * 0.5);
 }
 
 buildSkyStatic(pixi.screen.width, pixi.screen.height);
@@ -601,6 +922,7 @@ function renderChunk(chunk: GeneratedChunk): void {
 
   chunkLayer.addChild(g);
   chunkGraphics.set(chunk.chunkY, g);
+  decorateChunk(chunk);
 
   for (const rel of chunk.relics) {
     if (!collectedRelics.has(rel.id)) spawnRelicAnim(rel.id, rel.x, baseTileY + rel.y);
@@ -608,6 +930,183 @@ function renderChunk(chunk: GeneratedChunk): void {
 
   // Portal at exit platform (the upward goal for this chunk)
   spawnPortalAt(chunk.chunkY, chunk.exit.x, baseTileY + chunk.exit.y, chunk.exit.width, chunk.chunkY > 0);
+}
+
+function canPlaceDecoration(chunk: GeneratedChunk, lx: number, ly: number): boolean {
+  if (ly <= 0 || lx < 0 || lx >= chunk.width) return false;
+  const idx = ly * chunk.width + lx;
+  const here = chunk.tiles[idx] as TileKind;
+  const above = chunk.tiles[(ly - 1) * chunk.width + lx] as TileKind;
+  return here === "oneWay" && (above === "empty" || above === "relic");
+}
+
+function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, widthTiles: number): boolean {
+  for (let ox = 0; ox < widthTiles; ox++) {
+    if (!canPlaceDecoration(chunk, lx + ox, ly)) return false;
+  }
+  return true;
+}
+
+function decorateChunk(chunk: GeneratedChunk): void {
+  if (!hasAsset("mossPlatform") && !hasAsset("grassClump") && !hasAsset("bush") && !hasAsset("tree") && !hasAsset("hazardSpikes")) return;
+
+  const back = new Container();
+  const front = new Container();
+  back.sortableChildren = true;
+  front.sortableChildren = true;
+  const baseTileY = chunk.worldTileY;
+
+  for (let ly = 0; ly < chunk.height; ly++) {
+    for (let lx = 0; lx < chunk.width; lx++) {
+      const wx = lx * TILE_SIZE;
+      const wy = (baseTileY + ly) * TILE_SIZE;
+      const seed = (chunk.chunkY * 92821 + lx * 3701 + ly * 809) >>> 0;
+      const kind = chunk.tiles[ly * chunk.width + lx] as TileKind;
+
+      if (kind === "hazard" && hasAsset("hazardSpikes")) {
+        const spikes = makeSprite("hazardSpikes");
+        spikes.x = wx;
+        spikes.y = wy;
+        spikes.alpha = 0.96;
+        spikes.zIndex = 3;
+        front.addChild(spikes);
+        continue;
+      }
+
+      if (!canPlaceDecoration(chunk, lx, ly)) continue;
+
+      if (hasAsset("mossPlatform") && lx % 2 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const cap = makeSprite(platformCapAsset(seed));
+        cap.x = wx;
+        cap.y = wy - 1;
+        cap.alpha = 0.92;
+        cap.zIndex = 1;
+        front.addChild(cap);
+      }
+
+      if (hasAsset("stoneLedge") && seed % 73 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const ledge = makeSprite("stoneLedge");
+        ledge.x = wx;
+        ledge.y = wy - 1;
+        ledge.alpha = 0.74;
+        ledge.zIndex = 1;
+        front.addChild(ledge);
+      }
+
+      if (hasAsset("grassClump") && seed % 7 === 0) {
+        const grass = makeSprite("grassClump");
+        grass.x = wx + (seed % 5);
+        grass.y = wy - 12;
+        grass.alpha = 0.9;
+        grass.zIndex = 2;
+        front.addChild(grass);
+      }
+
+      if (hasAsset("flowerPatch") && seed % 19 === 0) {
+        const flower = makeSprite("flowerPatch");
+        flower.x = wx;
+        flower.y = wy - 13;
+        flower.alpha = 0.92;
+        flower.zIndex = 3;
+        front.addChild(flower);
+      }
+
+      if (hasAsset("vineHanging") && seed % 17 === 0) {
+        const vine = makeSprite("vineHanging");
+        vine.x = wx + (seed % 6);
+        vine.y = wy + TILE_SIZE - 2;
+        vine.alpha = 0.78;
+        vine.zIndex = 1;
+        front.addChild(vine);
+      }
+
+      if (hasAsset("runeStone") && chunk.chunkY >= 8 && seed % 53 === 0) {
+        const rune = makeSprite("runeStone");
+        rune.x = wx;
+        rune.y = wy;
+        rune.alpha = 0.86;
+        rune.zIndex = 2;
+        front.addChild(rune);
+      }
+
+      if (hasAsset("signpost") && seed % 83 === 0) {
+        const sign = makeSprite("signpost");
+        sign.x = wx;
+        sign.y = wy - 20;
+        sign.alpha = 0.9;
+        sign.zIndex = 3;
+        front.addChild(sign);
+      }
+
+      if (hasAsset("fence") && seed % 97 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const fence = makeSprite("fence");
+        fence.x = wx;
+        fence.y = wy - 12;
+        fence.alpha = 0.86;
+        fence.zIndex = 2;
+        front.addChild(fence);
+      }
+
+      if (hasAsset("ropeBridge") && seed % 181 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const bridge = makeSprite("ropeBridge");
+        bridge.x = wx;
+        bridge.y = wy - 8;
+        bridge.alpha = 0.72;
+        bridge.zIndex = 1;
+        front.addChild(bridge);
+      }
+
+      if (hasAsset("stump") && seed % 109 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const stump = makeSprite("stump");
+        stump.x = wx - 4;
+        stump.y = wy - 20;
+        stump.alpha = 0.86;
+        stump.zIndex = 2;
+        front.addChild(stump);
+      }
+
+      if (hasAsset("ruinColumn") && seed % 157 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const column = makeSprite("ruinColumn");
+        column.x = wx - 4;
+        column.y = wy - 36;
+        column.alpha = 0.78;
+        column.zIndex = 1;
+        front.addChild(column);
+      }
+
+      if (hasAsset("crystalMarker") && chunk.chunkY >= 4 && seed % 131 === 0) {
+        const crystal = makeSprite("crystalMarker");
+        crystal.x = wx;
+        crystal.y = wy - 20;
+        crystal.alpha = 0.86;
+        crystal.zIndex = 3;
+        front.addChild(crystal);
+      }
+
+      if (hasAsset("bush") && seed % 47 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const bush = makeSprite("bush");
+        bush.x = wx - 6;
+        bush.y = wy - 22;
+        bush.alpha = 0.86;
+        bush.zIndex = 2;
+        front.addChild(bush);
+      }
+
+      if (hasAsset("tree") && seed % 139 === 0 && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, 4)) {
+        const tree = makeSprite("tree");
+        tree.anchor.set(0.5, 1);
+        tree.x = wx + TILE_SIZE / 2;
+        tree.y = wy + 6;
+        tree.alpha = 0.72;
+        tree.zIndex = 0;
+        back.addChild(tree);
+      }
+    }
+  }
+
+  backDecorationLayer.addChild(back);
+  decorationLayer.addChild(front);
+  chunkDecorations.set(chunk.chunkY, { back, front });
 }
 
 function drawTile(
@@ -732,17 +1231,27 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
   if (relicAnims.has(id)) return;
   const container = new Container();
   const gfx = new Graphics();
-  container.addChild(gfx);
+  const sprite = makeSprite("coin");
+  const sparkle = hasAsset("collectibleSparkle") ? makeSprite("collectibleSparkle") : null;
+  sprite.anchor.set(0.5);
+  sprite.visible = hasAsset("coin");
+  if (sparkle) {
+    sparkle.anchor.set(0.5);
+    sparkle.alpha = 0.55;
+    sparkle.blendMode = "add";
+    container.addChild(sparkle);
+  }
+  container.addChild(sprite, gfx);
   container.x = tileX * TILE_SIZE + TILE_SIZE / 2;
   container.y = tileY * TILE_SIZE + TILE_SIZE / 2;
   relicLayer.addChild(container);
-  relicAnims.set(id, { container, gfx, tileX, tileY });
+  relicAnims.set(id, { container, gfx, sprite, sparkle, frames: collectibleFrames(id, tileX, tileY), tileX, tileY });
 }
 
 function updateRelicAnims(tSec: number): void {
   for (const [id, a] of relicAnims) {
     if (collectedRelics.has(id)) {
-      a.container.destroy();
+      a.container.destroy({ children: true });
       relicAnims.delete(id);
       continue;
     }
@@ -753,12 +1262,23 @@ function updateRelicAnims(tSec: number): void {
     const coinW  = frame === 0 ? 8 : frame === 1 ? 5 : frame === 2 ? 2 : 5;
     const cx     = -coinW / 2;
 
-    a.gfx.clear();
-    a.gfx.rect(cx - 1, -7, coinW + 2, 14).fill({ color: PAL.coinGlow, alpha: 0.28 });
-    a.gfx.rect(cx, -6, coinW, 12).fill(PAL.coinGold);
-    if (coinW >= 4) {
-      a.gfx.rect(cx, -6, coinW, 2).fill(PAL.coinGlow);
-      a.gfx.rect(cx + coinW - 2, -6, 2, 12).fill(PAL.coinShade);
+    if (hasAsset("coin")) {
+      a.gfx.clear();
+      a.sprite.texture = assetTexture(a.frames[frame % a.frames.length] ?? coinFrameAsset(frame));
+      a.sprite.scale.set(1 + Math.sin(tSec * 4.2 + a.tileX) * 0.05);
+      if (a.sparkle) {
+        a.sparkle.rotation = tSec * 0.8;
+        a.sparkle.scale.set(0.72 + Math.sin(tSec * 5 + a.tileY) * 0.08);
+        a.sparkle.alpha = 0.28 + Math.sin(tSec * 4.4 + a.tileX) * 0.16;
+      }
+    } else {
+      a.gfx.clear();
+      a.gfx.rect(cx - 1, -7, coinW + 2, 14).fill({ color: PAL.coinGlow, alpha: 0.28 });
+      a.gfx.rect(cx, -6, coinW, 12).fill(PAL.coinGold);
+      if (coinW >= 4) {
+        a.gfx.rect(cx, -6, coinW, 2).fill(PAL.coinGlow);
+        a.gfx.rect(cx + coinW - 2, -6, 2, 12).fill(PAL.coinShade);
+      }
     }
   }
 }
@@ -769,6 +1289,7 @@ interface PortalAnim {
   container: Container;
   bodyGfx:   Graphics;
   glowGfx:   Graphics;
+  archSprite: Sprite | null;
   worldX:    number;
   worldY:    number;
   tileW:     number;
@@ -782,7 +1303,14 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
   const container = new Container();
   const bodyGfx   = new Graphics();
   const glowGfx   = new Graphics();
-  container.addChild(bodyGfx, glowGfx);
+  const archSprite = hasAsset("portalArch") ? makeSprite("portalArch") : null;
+  if (archSprite) {
+    archSprite.anchor.set(0.5, 1);
+    archSprite.y = 2;
+    container.addChild(glowGfx, archSprite);
+  } else {
+    container.addChild(bodyGfx, glowGfx);
+  }
 
   const wx = tileX * TILE_SIZE + (tileW * TILE_SIZE) / 2;
   const wy = tileY * TILE_SIZE;
@@ -793,40 +1321,46 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
   const hw = Math.round((tileW * TILE_SIZE) * 0.40);  // portal half-width
   const ph = isExit ? 32 : 22;  // portal arch height
 
-  // Static body — ancient stone arch
-  // Left pillar
-  bodyGfx.rect(-hw - 5, -ph, 5, ph).fill(PAL.stoneDark);
-  bodyGfx.rect(-hw - 4, -ph - 1, 4, 3).fill(PAL.stoneWorn); // cap stone
-  bodyGfx.rect(-hw - 5, -ph, 1, ph).fill({ color: PAL.stoneLight, alpha: 0.12 }); // pillar highlight
-  // Moss on left pillar
-  bodyGfx.rect(-hw - 5, -ph + 6, 3, 2).fill(PAL.mossGreen);
-  bodyGfx.rect(-hw - 4, -ph + 14, 4, 2).fill(PAL.mossBright);
+  if (archSprite) {
+    const desiredH = ph + 12;
+    const scale = desiredH / 64;
+    archSprite.scale.set(scale);
+  } else {
+    // Static body — ancient stone arch
+    // Left pillar
+    bodyGfx.rect(-hw - 5, -ph, 5, ph).fill(PAL.stoneDark);
+    bodyGfx.rect(-hw - 4, -ph - 1, 4, 3).fill(PAL.stoneWorn); // cap stone
+    bodyGfx.rect(-hw - 5, -ph, 1, ph).fill({ color: PAL.stoneLight, alpha: 0.12 }); // pillar highlight
+    // Moss on left pillar
+    bodyGfx.rect(-hw - 5, -ph + 6, 3, 2).fill(PAL.mossGreen);
+    bodyGfx.rect(-hw - 4, -ph + 14, 4, 2).fill(PAL.mossBright);
 
-  // Right pillar
-  bodyGfx.rect(hw, -ph, 5, ph).fill(PAL.stoneDark);
-  bodyGfx.rect(hw, -ph - 1, 4, 3).fill(PAL.stoneWorn);
-  bodyGfx.rect(hw + 4, -ph, 1, ph).fill({ color: PAL.stoneShadow, alpha: 0.18 });
-  bodyGfx.rect(hw + 1, -ph + 8, 3, 2).fill(PAL.mossGreen);
+    // Right pillar
+    bodyGfx.rect(hw, -ph, 5, ph).fill(PAL.stoneDark);
+    bodyGfx.rect(hw, -ph - 1, 4, 3).fill(PAL.stoneWorn);
+    bodyGfx.rect(hw + 4, -ph, 1, ph).fill({ color: PAL.stoneShadow, alpha: 0.18 });
+    bodyGfx.rect(hw + 1, -ph + 8, 3, 2).fill(PAL.mossGreen);
 
-  // Lintel (top crossbar)
-  bodyGfx.rect(-hw - 5, -ph - 4, hw * 2 + 10, 5).fill(PAL.stoneDark);
-  bodyGfx.rect(-hw - 4, -ph - 5, hw * 2 + 8, 2).fill(PAL.stoneWorn);
-  // Rune glow on lintel
-  bodyGfx.rect(-3, -ph - 4, 6, 3).fill({ color: PAL.runeGlow, alpha: 0.5 });
-  if (isExit) {
-    bodyGfx.rect(-8, -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
-    bodyGfx.rect(4,  -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
+    // Lintel (top crossbar)
+    bodyGfx.rect(-hw - 5, -ph - 4, hw * 2 + 10, 5).fill(PAL.stoneDark);
+    bodyGfx.rect(-hw - 4, -ph - 5, hw * 2 + 8, 2).fill(PAL.stoneWorn);
+    // Rune glow on lintel
+    bodyGfx.rect(-3, -ph - 4, 6, 3).fill({ color: PAL.runeGlow, alpha: 0.5 });
+    if (isExit) {
+      bodyGfx.rect(-8, -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
+      bodyGfx.rect(4,  -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
+    }
+
+    // Hanging vines from lintel
+    for (let v = 0; v < 3; v++) {
+      const vx = -hw + 4 + v * Math.round(hw * 0.7);
+      const vlen = 5 + v * 3;
+      bodyGfx.rect(vx, -ph + 1, 1, vlen).fill(PAL.mossGreen);
+      bodyGfx.rect(vx - 1, -ph + vlen - 2, 3, 1).fill(PAL.canopyMid);
+    }
   }
 
-  // Hanging vines from lintel
-  for (let v = 0; v < 3; v++) {
-    const vx = -hw + 4 + v * Math.round(hw * 0.7);
-    const vlen = 5 + v * 3;
-    bodyGfx.rect(vx, -ph + 1, 1, vlen).fill(PAL.mossGreen);
-    bodyGfx.rect(vx - 1, -ph + vlen - 2, 3, 1).fill(PAL.canopyMid);
-  }
-
-  portalAnims.set(chunkY, { container, bodyGfx, glowGfx, worldX: wx, worldY: wy, tileW, isExit });
+  portalAnims.set(chunkY, { container, bodyGfx, glowGfx, archSprite, worldX: wx, worldY: wy, tileW, isExit });
 }
 
 function updatePortals(tSec: number): void {
@@ -966,6 +1500,22 @@ function makeLabel(name: string): Text {
       stroke: { color: PAL.uiInk, width: 2 },
     },
   });
+}
+
+function createRemoteEntry(player: PlayerState, name: string, serverTime: number): RemoteEntry {
+  const ci = playerColorIdx++ % PLAYER_COLORS.length;
+  const sprite = makeSprite("playerExplorer");
+  const crownSprite = makeSprite("crown");
+  sprite.anchor.set(0.5, 1);
+  sprite.alpha = hasPlayerAnimationAssets() ? 0.82 : hasAsset("playerExplorer") ? 0.54 : 0;
+  sprite.tint = 0xffffff;
+  crownSprite.anchor.set(0.5, 1);
+  crownSprite.visible = false;
+  const gfx = new Graphics();
+  gfx.alpha = hasPlayerAnimationAssets() ? 0.16 : 1;
+  const label = makeLabel(name);
+  remoteLayer.addChild(sprite, gfx, crownSprite, label);
+  return { states: [{ state: player, t: serverTime }], current: player, colorIndex: ci, sprite, crownSprite, gfx, label };
 }
 
 // ── Particle system ───────────────────────────────────────────────────────────
@@ -1140,6 +1690,9 @@ function drawHudCoinIcon(g: Graphics, x: number, y: number, frame: number): void
 let hudBuilt   = false;
 let hudPanelGfx: Graphics;
 let hudIconGfx:  Graphics;   // animated icons — cleared each frame
+let hudPanelSprite: Sprite | null = null;
+let hudCoinSprite: Sprite | null = null;
+let hudHeightSprite: Sprite | null = null;
 let hudCoinTxt:  Text;
 let hudHeightTxt:Text;
 let hudPhaseTxt: Text;
@@ -1148,10 +1701,21 @@ let hudRankTxt:  Text;
 
 function buildHudPanels(): void {
   if (hudPanelGfx) hudPanelGfx.destroy();
+  if (hudPanelSprite) hudPanelSprite.destroy();
   hudPanelGfx = new Graphics();
-  // Left stat panel — tall enough to include rank and ping rows
-  drawHudPanel(hudPanelGfx, 6, 6, 82, 56);
-  hudLayer.addChildAt(hudPanelGfx, 0);
+  hudPanelSprite = null;
+  if (hasAsset("hudPanel")) {
+    hudPanelSprite = makeSprite("hudPanel");
+    hudPanelSprite.x = 2;
+    hudPanelSprite.y = 2;
+    hudPanelSprite.width = 90;
+    hudPanelSprite.height = 60;
+    hudLayer.addChildAt(hudPanelSprite, 0);
+  } else {
+    // Left stat panel — tall enough to include rank and ping rows
+    drawHudPanel(hudPanelGfx, 6, 6, 82, 56);
+    hudLayer.addChildAt(hudPanelGfx, 0);
+  }
 }
 
 function ensureHud(): void {
@@ -1164,6 +1728,18 @@ function ensureHud(): void {
   hudPingTxt   = new Text({ text: "",     style: { ...base, fill: 0x486878,         fontSize: 8 } });
   hudRankTxt   = new Text({ text: "",     style: { ...base, fill: PAL.uiParchment,  fontSize: 8 } });
   hudIconGfx   = new Graphics();
+  hudCoinSprite = hasAsset("coin") ? makeSprite("coin") : null;
+  hudHeightSprite = hasAsset("heightArrow") ? makeSprite("heightArrow") : null;
+  if (hudCoinSprite) {
+    hudCoinSprite.anchor.set(0.5);
+    hudCoinSprite.x = 14;
+    hudCoinSprite.y = 16;
+  }
+  if (hudHeightSprite) {
+    hudHeightSprite.x = 7;
+    hudHeightSprite.y = 24;
+    hudHeightSprite.scale.set(0.72);
+  }
 
   hudCoinTxt.x   = 28; hudCoinTxt.y   = 10;
   hudHeightTxt.x = 28; hudHeightTxt.y = 26;
@@ -1171,6 +1747,8 @@ function ensureHud(): void {
   hudRankTxt.x   = 10; hudRankTxt.y   = 52;
 
   buildHudPanels();
+  if (hudCoinSprite) hudLayer.addChild(hudCoinSprite);
+  if (hudHeightSprite) hudLayer.addChild(hudHeightSprite);
   hudLayer.addChild(hudIconGfx, hudCoinTxt, hudHeightTxt, hudPhaseTxt, hudPingTxt, hudRankTxt);
 
   window.addEventListener("resize", () => setTimeout(buildHudPanels, 80));
@@ -1185,11 +1763,21 @@ function updateHud(tSec: number): void {
 
   // Animated coin icon
   hudIconGfx.clear();
-  drawHudCoinIcon(hudIconGfx, 10, 10, Math.floor(tSec * 4) % 4);
-  // Height icon: upward arrow
-  hudIconGfx.rect(10, 28, 2, 8).fill(PAL.uiHighlight);
-  hudIconGfx.rect(8,  28, 6, 2).fill(PAL.uiHighlight);
-  hudIconGfx.rect(9,  26, 4, 2).fill(PAL.uiHighlight);
+  const coinFrame = Math.floor(tSec * 4) % 4;
+  if (hudCoinSprite) {
+    hudCoinSprite.scale.x = coinFrame === 0 ? 0.72 : coinFrame === 1 ? 0.48 : coinFrame === 2 ? 0.22 : 0.48;
+    hudCoinSprite.scale.y = 0.72;
+    hudCoinSprite.texture = assetTexture(coinFrameAsset(coinFrame));
+    hudCoinSprite.scale.set(0.72);
+  } else {
+    drawHudCoinIcon(hudIconGfx, 10, 10, coinFrame);
+  }
+  if (!hudHeightSprite) {
+    // Height icon: upward arrow
+    hudIconGfx.rect(10, 28, 2, 8).fill(PAL.uiHighlight);
+    hudIconGfx.rect(8,  28, 6, 2).fill(PAL.uiHighlight);
+    hudIconGfx.rect(9,  26, 4, 2).fill(PAL.uiHighlight);
+  }
 
   hudCoinTxt.text   = String(coins);
   hudHeightTxt.text = `${hm}m`;
@@ -1384,7 +1972,7 @@ function connectRoom(name: string): void {
         }
         { const ids = new Set(parsed.players.map((p) => p.id));
           for (const pid of remotePlayers.keys()) {
-            if (!ids.has(pid)) { const e = remotePlayers.get(pid); if (e) { e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(pid); }
+            if (!ids.has(pid)) { const e = remotePlayers.get(pid); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(pid); }
           }
         }
         break;
@@ -1403,16 +1991,13 @@ function connectRoom(name: string): void {
             // Snapshot arrived before playerJoined — reuse existing entry, update label
             existing.label.text = parsed.name.slice(0, 12);
           } else {
-            const ci = playerColorIdx++ % PLAYER_COLORS.length;
-            const gfx = new Graphics(); const label = makeLabel(parsed.name);
-            remoteLayer.addChild(gfx, label);
-            remotePlayers.set(parsed.player.id, { states: [{ state: parsed.player, t: estimatedServerTime() }], current: parsed.player, colorIndex: ci, gfx, label });
+            remotePlayers.set(parsed.player.id, createRemoteEntry(parsed.player, parsed.name, estimatedServerTime()));
           }
           pushNotification(`${parsed.name} joined`, PAL.uiCyan);
         }
         break;
       case "playerLeft":
-        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
+        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
       case "pong":
         updateServerClock(parsed.serverTime);
@@ -1500,10 +2085,8 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
 function updateRemotePlayer(s: PlayerState, serverTime: number): void {
   let e = remotePlayers.get(s.id);
   if (!e) {
-    const ci = playerColorIdx++ % PLAYER_COLORS.length;
-    const gfx = new Graphics(); const label = makeLabel(playerNames.get(s.id) ?? "?");
-    remoteLayer.addChild(gfx, label);
-    e = { states: [], current: s, colorIndex: ci, gfx, label };
+    e = createRemoteEntry(s, playerNames.get(s.id) ?? "?", serverTime);
+    e.states.length = 0;
     remotePlayers.set(s.id, e);
   }
   e.states.push({ state: s, t: serverTime });
@@ -1578,17 +2161,37 @@ function drawActors(): void {
 
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
+    e.sprite.visible = hasAsset("playerExplorer") && !(e.current.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
+    if (hasPlayerAnimationAssets()) e.sprite.texture = assetTexture(playerAnimationAsset(e.current, elapsedMs));
+    e.sprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
+    e.sprite.y = Math.round(e.current.position.y + PLAYER_HEIGHT + 2);
+    e.sprite.scale.x = e.current.facing < 0 ? -1 : 1;
+    e.sprite.scale.y = 1;
+    e.sprite.tint = 0xffffff;
     drawPlayerInto(e.gfx, e.current, col, elapsedMs);
     e.label.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2 - e.label.width / 2);
     e.label.y = Math.round(e.current.position.y - 16);
-    if (pid === leaderId) drawCrown(e.gfx, Math.round(e.current.position.x + PLAYER_WIDTH / 2), Math.round(e.current.position.y) - 12, col);
+    e.crownSprite.visible = hasAsset("crown") && pid === leaderId;
+    e.crownSprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
+    e.crownSprite.y = Math.round(e.current.position.y - 10);
+    if (pid === leaderId && !hasAsset("crown")) drawCrown(e.gfx, Math.round(e.current.position.x + PLAYER_WIDTH / 2), Math.round(e.current.position.y) - 12, col);
   }
 
   if (localPlayer) {
     const renderPos = getLocalRenderPosition();
     const renderState = renderPos ? { ...localPlayer, position: renderPos } : localPlayer;
+    localSprite.visible = hasAsset("playerExplorer") && !(renderState.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
+    if (hasPlayerAnimationAssets()) localSprite.texture = assetTexture(playerAnimationAsset(renderState, elapsedMs));
+    localSprite.x = Math.round(renderState.position.x + PLAYER_WIDTH / 2);
+    localSprite.y = Math.round(renderState.position.y + PLAYER_HEIGHT + 2);
+    localSprite.scale.x = renderState.facing < 0 ? -1 : 1;
+    localSprite.scale.y = 1;
+    localSprite.tint = 0xffffff;
     drawPlayerInto(localGfx, renderState, PLAYER_COLORS[0]!, elapsedMs);
-    if (localPlayerId === leaderId)
+    localCrownSprite.visible = hasAsset("crown") && localPlayerId === leaderId;
+    localCrownSprite.x = Math.round((renderPos?.x ?? localPlayer.position.x) + PLAYER_WIDTH / 2);
+    localCrownSprite.y = Math.round((renderPos?.y ?? localPlayer.position.y) - 10);
+    if (localPlayerId === leaderId && !hasAsset("crown"))
       drawCrown(localGfx, Math.round((renderPos?.x ?? localPlayer.position.x) + PLAYER_WIDTH / 2), Math.round(renderPos?.y ?? localPlayer.position.y) - 12, PLAYER_COLORS[0]!);
   }
 }

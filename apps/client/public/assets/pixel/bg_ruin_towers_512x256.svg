@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="256" viewBox="0 0 512 256" shape-rendering="crispEdges">
+      <path d="M0 0h512v256H0z" fill="#000000" opacity="0"/>
+      <path d="M34 86h38v158H34zM91 122h30v122H91zM170 54h52v190h-52zM250 108h42v136h-42zM354 72h58v172h-58zM436 132h32v112h-32z" fill="#222e48" opacity=".42"/>
+      <path d="M28 80h50v10H28zM166 46h60v12h-60zM348 64h70v12h-70z" fill="#222e48" opacity=".5"/>
+      <path d="M44 64h18l9 16H35zM188 30h16l20 18h-58zM374 48h14l27 18h-66z" fill="#222e48" opacity=".45"/>
+      <path d="M47 116h8v18h-8zM100 154h6v14h-6zM188 92h8v22h-8zM207 128h7v18h-7zM266 146h7v16h-7zM376 111h8v22h-8zM397 154h7v18h-7zM447 164h6v14h-6z" fill="#40d8f8" opacity=".18"/>
+      <path d="M0 226h512v30H0z" fill="#1a3818" opacity=".22"/>
+      <path d="M0 236h512v20H0z" fill="#080e1e" opacity=".34"/>
+      <path d="M20 222h474v6H20z" fill="#2e6840" opacity=".22"/>
+      <path d="M28 242h50v14H28zM166 238h60v18h-60zM348 236h70v20h-70z" fill="#080e1e" opacity=".28"/>
+    </svg>
