@@ -33,6 +33,9 @@ Five parallel domain audits completed (Physics, Multiplayer, ProcGen, Rendering,
 | DEATH-1 | `apps/server/src/index.ts` | Death threshold is computed relative to the player's current chunk floor, not always chunk 0 — fall deaths from high altitude now trigger correctly |
 | RECON-1 | `apps/client/src/main.ts` | Prediction buffer is cleared on every `lastSeq < 0` reconciliation path, not just the large-deviation branch |
 | RECON-2 | `apps/client/src/main.ts` | Local prediction now runs through a fixed 60 Hz accumulator using `PHYSICS_STEP_SECONDS`, matching server simulation timing more closely |
+| RECON-3 | `apps/client/src/main.ts` | Local rendering now uses a separate smoothed visual position, so small server corrections no longer hard-snap the visible player backward |
+| NET-1 | `apps/client/src/main.ts` | Remote interpolation now uses estimated server time from `serverTime`/`pong`, not packet arrival time, with short capped extrapolation for tiny gaps |
+| NET-2 | `apps/server/src/index.ts` | Server input handling now uses a bounded input queue and merges same-tick edge presses instead of a single overwritable pending input |
 | SEED-2 | `packages/shared/src/protocol.ts` | Added `seed: number` field to `welcome` message type |
 | SEED-3 | `apps/server/src/index.ts` | Server sends `seed: room.seed` in welcome message |
 | PVP-1 | `packages/shared/src/physics.ts`, `apps/server/src/index.ts`, `apps/client/src/main.ts` | Kick hit results are now emitted as authoritative server events and surfaced in client notifications |

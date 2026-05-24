@@ -178,6 +178,7 @@ pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let localPlayer: PlayerState | null = null;
+let localVisualPosition: { x: number; y: number } | null = null;
 let localPlayerId: string | null = null;
 let sessionToken: string | null = null;
 let serverSeed = 0x5eed_babe; // updated from welcome message to match server chunks
@@ -211,10 +212,16 @@ let   queuedKickPressed = false;
 const MAX_PREDICTION_STEPS_PER_FRAME = 3;
 const MAX_PREDICTION_ACCUMULATOR_SECONDS = PHYSICS_STEP_SECONDS * MAX_PREDICTION_STEPS_PER_FRAME;
 const PREDICTION_STEP_EPSILON = 0.000_001;
+const LOCAL_VISUAL_CORRECTION_RATE = 18;
+const LOCAL_VISUAL_SNAP_THRESHOLD_PX = 72;
+const REMOTE_MAX_EXTRAPOLATION_MS = 80;
+const SERVER_CLOCK_SMOOTHING = 0.12;
 
 let ws: WebSocket | null = null;
 let pingMs        = 0;
 let lastPingTime  = 0;
+let serverTimeOffsetMs = 0;
+let hasServerClock = false;
 let serverTick    = 0;
 let matchPhase    = "waiting";
 let reconnDelay   = 1000;
@@ -286,6 +293,41 @@ function clonePlayerState(state: PlayerState): PlayerState {
     position: { ...state.position },
     velocity: { ...state.velocity },
   };
+}
+
+function snapLocalVisualToSimulation(): void {
+  localVisualPosition = localPlayer
+    ? { x: localPlayer.position.x, y: localPlayer.position.y }
+    : null;
+}
+
+function updateLocalVisualPosition(dt: number): void {
+  if (!localPlayer) {
+    localVisualPosition = null;
+    return;
+  }
+
+  if (!localVisualPosition || cameraSnap) {
+    snapLocalVisualToSimulation();
+    return;
+  }
+
+  const dx = localPlayer.position.x - localVisualPosition.x;
+  const dy = localPlayer.position.y - localVisualPosition.y;
+  const correction = Math.hypot(dx, dy);
+  if (correction > LOCAL_VISUAL_SNAP_THRESHOLD_PX) {
+    snapLocalVisualToSimulation();
+    return;
+  }
+
+  const alpha = 1 - Math.exp(-LOCAL_VISUAL_CORRECTION_RATE * dt);
+  localVisualPosition.x += dx * alpha;
+  localVisualPosition.y += dy * alpha;
+}
+
+function getLocalRenderPosition(): { x: number; y: number } | null {
+  if (!localPlayer) return null;
+  return localVisualPosition ?? localPlayer.position;
 }
 
 function resetLocalPrediction(): void {
@@ -363,6 +405,7 @@ function respawnLocal(): void {
   if (!localPlayerId) { localPlayerId = "local"; playerNames.set("local", nameInput.value || "Explorer"); }
   const { x, y } = getSpawnPos();
   localPlayer = createPlayerState(localPlayerId, x, y);
+  snapLocalVisualToSimulation();
   resetLocalPrediction();
   cameraSnap = true;
   spawnRing(x + PLAYER_WIDTH / 2, y + PLAYER_HEIGHT / 2, PAL.portalBlue);
@@ -1033,9 +1076,10 @@ function getScale(): number {
 }
 
 function updateCamera(dt: number, scale: number): void {
-  if (localPlayer) {
+  const renderPos = getLocalRenderPosition();
+  if (localPlayer && renderPos) {
     const vh     = Math.max(300, pixi.screen.height) / scale;
-    const target = localPlayer.position.y + PLAYER_HEIGHT / 2 - vh * 0.30;
+    const target = renderPos.y + PLAYER_HEIGHT / 2 - vh * 0.30;
     if (cameraSnap) { cameraY = target; cameraSnap = false; }
     else            { cameraY += (target - cameraY) * Math.min(1, dt * 7); }
   }
@@ -1299,6 +1343,7 @@ function connectRoom(name: string): void {
 
     switch (parsed.type) {
       case "welcome":
+        updateServerClock(parsed.serverTime);
         localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
@@ -1307,14 +1352,17 @@ function connectRoom(name: string): void {
         }
         netStatus.textContent = `Room: demo | ${localPlayerId.slice(0, 6)}`;
         { const { x, y } = getSpawnPos(); localPlayer = createPlayerState(localPlayerId, x, y); }
+        snapLocalVisualToSimulation();
         resetLocalPrediction(); cameraSnap = true;
         break;
       case "resumed":
+        updateServerClock(parsed.serverTime);
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
         netStatus.textContent = "Reconnected.";
-        localPlayer = clonePlayerState(parsed.playerState); resetLocalPrediction(); cameraSnap = true;
+        localPlayer = clonePlayerState(parsed.playerState); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         break;
       case "snapshot":
+        updateServerClock(parsed.serverTime);
         serverTick = parsed.tick; matchPhase = parsed.matchPhase;
         // Reconcile full collected set so late-joiners see correct coin state
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
@@ -1332,7 +1380,7 @@ function connectRoom(name: string): void {
         }
         for (const sp of parsed.players) {
           if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.lastProcessedSeq[sp.id] ?? -1);
-          else updateRemotePlayer(sp);
+          else updateRemotePlayer(sp, parsed.serverTime);
         }
         { const ids = new Set(parsed.players.map((p) => p.id));
           for (const pid of remotePlayers.keys()) {
@@ -1358,7 +1406,7 @@ function connectRoom(name: string): void {
             const ci = playerColorIdx++ % PLAYER_COLORS.length;
             const gfx = new Graphics(); const label = makeLabel(parsed.name);
             remoteLayer.addChild(gfx, label);
-            remotePlayers.set(parsed.player.id, { states: [{ state: parsed.player, t: Date.now() }], current: parsed.player, colorIndex: ci, gfx, label });
+            remotePlayers.set(parsed.player.id, { states: [{ state: parsed.player, t: estimatedServerTime() }], current: parsed.player, colorIndex: ci, gfx, label });
           }
           pushNotification(`${parsed.name} joined`, PAL.uiCyan);
         }
@@ -1367,6 +1415,7 @@ function connectRoom(name: string): void {
         { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
       case "pong":
+        updateServerClock(parsed.serverTime);
         pingMs = Date.now() - parsed.clientTime;
         break;
       case "matchPhase":
@@ -1392,9 +1441,27 @@ function sendInput(inp: PlayerInput): void {
   ws.send(JSON.stringify({ type: "input", playerId: localPlayerId, input: inp }));
 }
 
+function shouldPredictLocalMovement(): boolean {
+  return !ws || ws.readyState !== WebSocket.OPEN || matchPhase === "playing";
+}
+
 function maybePing(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   if (Date.now() - lastPingTime > 2000) { lastPingTime = Date.now(); ws.send(JSON.stringify({ type: "ping", clientTime: lastPingTime })); }
+}
+
+function updateServerClock(serverTime: number): void {
+  const sampleOffset = serverTime - Date.now();
+  if (!hasServerClock) {
+    serverTimeOffsetMs = sampleOffset;
+    hasServerClock = true;
+  } else {
+    serverTimeOffsetMs += (sampleOffset - serverTimeOffsetMs) * SERVER_CLOCK_SMOOTHING;
+  }
+}
+
+function estimatedServerTime(): number {
+  return Date.now() + serverTimeOffsetMs;
 }
 
 function reqChunks(): void {
@@ -1406,29 +1473,31 @@ function reqChunks(): void {
 // ── Reconciliation & remote interpolation ────────────────────────────────────
 
 function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
-  if (!localPlayer) { localPlayer = clonePlayerState(ss); cameraSnap = true; return; }
+  if (!localPlayer) { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; return; }
   if (lastSeq < 0) {
     if (Math.hypot(ss.position.x - localPlayer.position.x, ss.position.y - localPlayer.position.y) > RECONCILIATION_TOLERANCE_PX * 4)
-      { localPlayer = clonePlayerState(ss); cameraSnap = true; }
+      { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; }
     resetLocalPrediction();
     return;
   }
   const idx = predBuf.findIndex((e) => e.seq === lastSeq);
-  if (idx < 0) { localPlayer = clonePlayerState(ss); resetLocalPrediction(); cameraSnap = true; return; }
+  if (idx < 0) { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true; return; }
   const pred = predBuf[idx]; if (!pred) return;
-  if (Math.hypot(ss.position.x - pred.state.position.x, ss.position.y - pred.state.position.y) > RECONCILIATION_TOLERANCE_PX) {
+  const correction = Math.hypot(ss.position.x - pred.state.position.x, ss.position.y - pred.state.position.y);
+  if (correction > RECONCILIATION_TOLERANCE_PX) {
+    const snapVisual = correction > LOCAL_VISUAL_SNAP_THRESHOLD_PX || ss.invulnerable > 0;
     localPlayer = clonePlayerState(ss);
     for (let i = idx + 1; i < predBuf.length; i++) {
       const e = predBuf[i]; if (!e) continue;
       const { player: next } = stepPlayer(localPlayer, e.input, tileMap, PHYSICS_STEP_SECONDS);
       localPlayer = next;
     }
+    if (snapVisual) snapLocalVisualToSimulation();
   }
   predBuf.splice(0, idx + 1);
 }
 
-function updateRemotePlayer(s: PlayerState): void {
-  const now = Date.now();
+function updateRemotePlayer(s: PlayerState, serverTime: number): void {
   let e = remotePlayers.get(s.id);
   if (!e) {
     const ci = playerColorIdx++ % PLAYER_COLORS.length;
@@ -1437,17 +1506,36 @@ function updateRemotePlayer(s: PlayerState): void {
     e = { states: [], current: s, colorIndex: ci, gfx, label };
     remotePlayers.set(s.id, e);
   }
-  e.states.push({ state: s, t: now });
+  e.states.push({ state: s, t: serverTime });
   if (e.states.length > 20) e.states.shift();
 }
 
 function interpRemotes(): void {
-  const rt = Date.now() - INTERP_DELAY_MS;
+  const rt = estimatedServerTime() - INTERP_DELAY_MS;
   for (const e of remotePlayers.values()) {
     const { states } = e;
     if (states.length === 0) continue;
     if (states.length === 1) { e.current = states[0]!.state; continue; }
-    let bf = states[0]!, af = states[states.length - 1]!;
+    const first = states[0]!;
+    const last = states[states.length - 1]!;
+    if (rt <= first.t) {
+      e.current = first.state;
+      continue;
+    }
+    if (rt >= last.t) {
+      const extrapolateMs = Math.min(rt - last.t, REMOTE_MAX_EXTRAPOLATION_MS);
+      const extrapolateSec = extrapolateMs / 1000;
+      e.current = {
+        ...last.state,
+        position: {
+          x: last.state.position.x + last.state.velocity.x * extrapolateSec,
+          y: last.state.position.y + last.state.velocity.y * extrapolateSec
+        }
+      };
+      continue;
+    }
+
+    let bf = first, af = last;
     for (let i = 0; i < states.length - 1; i++) {
       if (states[i]!.t <= rt && states[i + 1]!.t >= rt) { bf = states[i]!; af = states[i + 1]!; break; }
     }
@@ -1497,9 +1585,11 @@ function drawActors(): void {
   }
 
   if (localPlayer) {
-    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs);
+    const renderPos = getLocalRenderPosition();
+    const renderState = renderPos ? { ...localPlayer, position: renderPos } : localPlayer;
+    drawPlayerInto(localGfx, renderState, PLAYER_COLORS[0]!, elapsedMs);
     if (localPlayerId === leaderId)
-      drawCrown(localGfx, Math.round(localPlayer.position.x + PLAYER_WIDTH / 2), Math.round(localPlayer.position.y) - 12, PLAYER_COLORS[0]!);
+      drawCrown(localGfx, Math.round((renderPos?.x ?? localPlayer.position.x) + PLAYER_WIDTH / 2), Math.round(renderPos?.y ?? localPlayer.position.y) - 12, PLAYER_COLORS[0]!);
   }
 }
 
@@ -1536,7 +1626,7 @@ pixi.ticker.add((ticker) => {
     buildSkyStatic(pixi.screen.width, pixi.screen.height);
   }
 
-  if (localPlayer) {
+  if (localPlayer && shouldPredictLocalMovement()) {
     const frameInput = captureInput();
     queuedJumpPressed = queuedJumpPressed || frameInput.jumpPressed;
     queuedKickPressed = queuedKickPressed || frameInput.kick;
@@ -1589,8 +1679,15 @@ pixi.ticker.add((ticker) => {
       predBuf.push({ seq: inp.sequence, input: inp, state: clonePlayerState(next) });
       sendInput(inp);
     }
+  } else {
+    jumpEdge = false;
+    kickEdge = false;
+    queuedJumpPressed = false;
+    queuedKickPressed = false;
+    predictionAccumulatorSeconds = 0;
   }
 
+  updateLocalVisualPosition(dt);
   updateCamera(dt, scale);
   drawActors();
   updateHud(tSec);

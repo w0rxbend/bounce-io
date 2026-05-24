@@ -39,6 +39,7 @@ import type {
 
 const SNAPSHOT_EVERY_N_TICKS = Math.round(SERVER_TICK_RATE / SNAPSHOT_RATE);
 const MAX_INPUTS_PER_TICK = 3;
+const MAX_QUEUED_INPUTS = 24;
 const MAX_MESSAGE_BYTES = 1024;
 const SPAWN_X_BASE = Math.floor(CHUNK_WIDTH_TILES / 2) * TILE_SIZE;
 
@@ -53,7 +54,8 @@ interface Session {
   inputsThisTick: number;
   lastReceivedSeq: number;
   lastProcessedSeq: number;
-  pendingInput: PlayerInput | null;
+  lastInput: PlayerInput;
+  inputQueue: PlayerInput[];
 }
 
 // ── Room ──────────────────────────────────────────────────────────────────────
@@ -214,7 +216,8 @@ app.get(
             inputsThisTick: 0,
             lastReceivedSeq: -1,
             lastProcessedSeq: -1,
-            pendingInput: null
+            lastInput: idleInput(-1),
+            inputQueue: []
           };
 
           room.sessions.set(playerId, session);
@@ -312,9 +315,10 @@ app.get(
           session.inputsThisTick++;
           session.lastReceivedSeq = inp.sequence;
 
-          // Preserve held state from the latest input and one-frame edge actions
-          // from any accepted input received before the next simulation tick.
-          session.pendingInput = mergePendingInput(session.pendingInput, inp);
+          session.inputQueue.push(inp);
+          if (session.inputQueue.length > MAX_QUEUED_INPUTS) {
+            session.inputQueue.splice(0, session.inputQueue.length - MAX_QUEUED_INPUTS);
+          }
           return;
         }
       },
@@ -461,17 +465,7 @@ function tickRoom(room: ServerRoom): void {
       const player = room.players.get(pid);
       if (!player) continue;
 
-      const input: PlayerInput = session.pendingInput ?? {
-        left: false, right: false,
-        jumpPressed: false, jumpHeld: false,
-        drop: false, kick: false,
-        sequence: session.lastProcessedSeq
-      };
-
-      if (session.pendingInput) {
-        session.lastProcessedSeq = session.pendingInput.sequence;
-        session.pendingInput = null;
-      }
+      const input = consumeQueuedInput(session);
 
       const previousKickPhase = player.kickPhase;
       const { player: next } = stepPlayer(player, input, tileMap, PHYSICS_STEP_SECONDS);
@@ -662,12 +656,32 @@ function sanitizeName(value: string): string {
   return value.replace(/[^\w \-]/g, "").slice(0, 16).trim() || "Explorer";
 }
 
-function mergePendingInput(previous: PlayerInput | null, next: PlayerInput): PlayerInput {
-  if (!previous) return next;
+function consumeQueuedInput(session: Session): PlayerInput {
+  while (session.inputQueue.length > 0) {
+    const next = session.inputQueue.shift();
+    if (!next || next.sequence <= session.lastProcessedSeq) continue;
+    session.lastProcessedSeq = next.sequence;
+    session.lastInput = next;
+    return next;
+  }
+
   return {
-    ...next,
-    jumpPressed: previous.jumpPressed || next.jumpPressed,
-    kick: previous.kick || next.kick
+    ...session.lastInput,
+    jumpPressed: false,
+    kick: false,
+    sequence: session.lastProcessedSeq
+  };
+}
+
+function idleInput(sequence: number): PlayerInput {
+  return {
+    left: false,
+    right: false,
+    jumpPressed: false,
+    jumpHeld: false,
+    drop: false,
+    kick: false,
+    sequence
   };
 }
 
