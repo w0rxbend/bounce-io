@@ -974,7 +974,16 @@ function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, w
 }
 
 function decorateChunk(chunk: GeneratedChunk): void {
-  if (!hasAsset("mossPlatform") && !hasAsset("grassClump") && !hasAsset("bush") && !hasAsset("tree") && !hasAsset("hazardSpikes")) return;
+  if (
+    !hasAsset("mossPlatform")
+    && !hasAsset("grassClump")
+    && !hasAsset("bush")
+    && !hasAsset("tree")
+    && !hasAsset("hazardSpikes")
+    && !hasAsset("leafCluster")
+    && !hasAsset("mushroomCluster")
+    && !hasAsset("ruinArchFragment")
+  ) return;
 
   const back = new Container();
   const front = new Container();
@@ -1037,6 +1046,15 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(flower);
       }
 
+      if (hasAsset("leafCluster") && seed % 11 === 0) {
+        const leaves = makeSprite("leafCluster");
+        leaves.x = wx + (seed % 4);
+        leaves.y = wy - 14;
+        leaves.alpha = 0.84;
+        leaves.zIndex = 2;
+        front.addChild(leaves);
+      }
+
       if (hasAsset("vineHanging") && seed % 17 === 0) {
         const vine = makeSprite("vineHanging");
         vine.x = wx + (seed % 6);
@@ -1044,6 +1062,15 @@ function decorateChunk(chunk: GeneratedChunk): void {
         vine.alpha = 0.78;
         vine.zIndex = 1;
         front.addChild(vine);
+      }
+
+      if (hasAsset("pebbleCluster") && seed % 29 === 0) {
+        const pebbles = makeSprite("pebbleCluster");
+        pebbles.x = wx + (seed % 6);
+        pebbles.y = wy + 3;
+        pebbles.alpha = 0.72;
+        pebbles.zIndex = 2;
+        front.addChild(pebbles);
       }
 
       if (hasAsset("runeStone") && chunk.chunkY >= 8 && seed % 53 === 0) {
@@ -1082,6 +1109,15 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(bridge);
       }
 
+      if (hasAsset("lanternCyan") && chunk.chunkY >= 3 && seed % 67 === 0) {
+        const lantern = makeSprite("lanternCyan");
+        lantern.x = wx;
+        lantern.y = wy - 22;
+        lantern.alpha = 0.9;
+        lantern.zIndex = 4;
+        front.addChild(lantern);
+      }
+
       if (hasAsset("stump") && seed % 109 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
         const stump = makeSprite("stump");
         stump.x = wx - 4;
@@ -1089,6 +1125,24 @@ function decorateChunk(chunk: GeneratedChunk): void {
         stump.alpha = 0.86;
         stump.zIndex = 2;
         front.addChild(stump);
+      }
+
+      if (hasAsset("mushroomCluster") && seed % 43 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const mushrooms = makeSprite("mushroomCluster");
+        mushrooms.x = wx - 3;
+        mushrooms.y = wy - 17;
+        mushrooms.alpha = 0.88;
+        mushrooms.zIndex = 3;
+        front.addChild(mushrooms);
+      }
+
+      if (hasAsset("ruinArchFragment") && seed % 113 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const arch = makeSprite("ruinArchFragment");
+        arch.x = wx - 6;
+        arch.y = wy - 28;
+        arch.alpha = 0.58;
+        arch.zIndex = 0;
+        back.addChild(arch);
       }
 
       if (hasAsset("ruinColumn") && seed % 157 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -1259,8 +1313,15 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
   const gfx = new Graphics();
   const sprite = makeSprite("coin");
   const sparkle = hasAsset("collectibleSparkle") ? makeSprite("collectibleSparkle") : null;
+  const ring = hasAsset("collectibleRing") ? makeSprite("collectibleRing") : null;
   sprite.anchor.set(0.5);
   sprite.visible = hasAsset("coin");
+  if (ring) {
+    ring.anchor.set(0.5);
+    ring.alpha = 0.42;
+    ring.blendMode = "add";
+    container.addChild(ring);
+  }
   if (sparkle) {
     sparkle.anchor.set(0.5);
     sparkle.alpha = 0.55;
@@ -1271,7 +1332,7 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
   container.x = tileX * TILE_SIZE + TILE_SIZE / 2;
   container.y = tileY * TILE_SIZE + TILE_SIZE / 2;
   relicLayer.addChild(container);
-  relicAnims.set(id, { container, gfx, sprite, sparkle, frames: collectibleFrames(id, tileX, tileY), tileX, tileY });
+  relicAnims.set(id, { container, gfx, sprite, sparkle, ring, frames: collectibleFrames(id, tileX, tileY), tileX, tileY });
 }
 
 function updateRelicAnims(tSec: number): void {
@@ -1296,6 +1357,11 @@ function updateRelicAnims(tSec: number): void {
         a.sparkle.rotation = tSec * 0.8;
         a.sparkle.scale.set(0.72 + Math.sin(tSec * 5 + a.tileY) * 0.08);
         a.sparkle.alpha = 0.28 + Math.sin(tSec * 4.4 + a.tileX) * 0.16;
+      }
+      if (a.ring) {
+        a.ring.rotation = tSec * 0.45 + a.tileX * 0.1;
+        a.ring.scale.set(0.72 + Math.sin(tSec * 3.2 + a.tileY) * 0.06);
+        a.ring.alpha = 0.24 + Math.sin(tSec * 2.8 + a.tileX) * 0.12;
       }
     } else {
       a.gfx.clear();
