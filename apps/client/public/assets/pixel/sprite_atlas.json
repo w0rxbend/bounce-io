@@ -518,6 +518,60 @@
       "durationMs": 120,
       "image": "/assets/pixel/stone_ledge_48.png"
     },
+    "moss_platform_roots_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 22
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 22
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 22
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_roots_32.png"
+    },
+    "moss_platform_runes_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 18
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 18
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 18
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/moss_platform_runes_32.png"
+    },
     "coin_16": {
       "frame": {
         "x": 0,
@@ -1117,6 +1171,33 @@
       "durationMs": 120,
       "image": "/assets/pixel/collectible_sparkle_16.png"
     },
+    "collectible_ring_24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/collectible_ring_24.png"
+    },
     "hazard_spikes_16": {
       "frame": {
         "x": 0,
@@ -1197,6 +1278,141 @@
       ],
       "durationMs": 120,
       "image": "/assets/pixel/flower_patch_16.png"
+    },
+    "leaf_cluster_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 16
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 16
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/leaf_cluster_16.png"
+    },
+    "mushroom_cluster_24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 20
+      },
+      "sourceSize": {
+        "w": 24,
+        "h": 20
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 20
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/mushroom_cluster_24.png"
+    },
+    "pebble_cluster_16": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 12
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 12
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 12
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/pebble_cluster_16.png"
+    },
+    "lantern_cyan_16x24": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 24
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 24
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/lantern_cyan_16x24.png"
+    },
+    "ruin_arch_fragment_32": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "environment"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/ruin_arch_fragment_32.png"
     },
     "rune_stone_16": {
       "frame": {
@@ -1440,6 +1656,60 @@
       ],
       "durationMs": 120,
       "image": "/assets/pixel/cloud_flat_192.png"
+    },
+    "cloud_streak_224": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 224,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 224,
+        "h": 32
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 224,
+        "h": 32
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_streak_224.png"
+    },
+    "cloud_puff_112": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 56
+      },
+      "sourceSize": {
+        "w": 112,
+        "h": 56
+      },
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 112,
+        "h": 56
+      },
+      "pivot": {
+        "x": 0,
+        "y": 0
+      },
+      "tags": [
+        "background"
+      ],
+      "durationMs": 120,
+      "image": "/assets/pixel/cloud_puff_112.png"
     },
     "floating_island_96": {
       "frame": {

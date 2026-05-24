@@ -113,6 +113,18 @@
     "width": 48,
     "height": 18
   },
+  "moss_platform_roots_32": {
+    "svg": "/assets/pixel/moss_platform_roots_32.svg",
+    "png": "/assets/pixel/moss_platform_roots_32.png",
+    "width": 32,
+    "height": 22
+  },
+  "moss_platform_runes_32": {
+    "svg": "/assets/pixel/moss_platform_runes_32.svg",
+    "png": "/assets/pixel/moss_platform_runes_32.png",
+    "width": 32,
+    "height": 18
+  },
   "coin_16": {
     "svg": "/assets/pixel/coin_16.svg",
     "png": "/assets/pixel/coin_16.png",
@@ -245,6 +257,12 @@
     "width": 16,
     "height": 16
   },
+  "collectible_ring_24": {
+    "svg": "/assets/pixel/collectible_ring_24.svg",
+    "png": "/assets/pixel/collectible_ring_24.png",
+    "width": 24,
+    "height": 24
+  },
   "hazard_spikes_16": {
     "svg": "/assets/pixel/hazard_spikes_16.svg",
     "png": "/assets/pixel/hazard_spikes_16.png",
@@ -262,6 +280,36 @@
     "png": "/assets/pixel/flower_patch_16.png",
     "width": 16,
     "height": 16
+  },
+  "leaf_cluster_16": {
+    "svg": "/assets/pixel/leaf_cluster_16.svg",
+    "png": "/assets/pixel/leaf_cluster_16.png",
+    "width": 16,
+    "height": 16
+  },
+  "mushroom_cluster_24": {
+    "svg": "/assets/pixel/mushroom_cluster_24.svg",
+    "png": "/assets/pixel/mushroom_cluster_24.png",
+    "width": 24,
+    "height": 20
+  },
+  "pebble_cluster_16": {
+    "svg": "/assets/pixel/pebble_cluster_16.svg",
+    "png": "/assets/pixel/pebble_cluster_16.png",
+    "width": 16,
+    "height": 12
+  },
+  "lantern_cyan_16x24": {
+    "svg": "/assets/pixel/lantern_cyan_16x24.svg",
+    "png": "/assets/pixel/lantern_cyan_16x24.png",
+    "width": 16,
+    "height": 24
+  },
+  "ruin_arch_fragment_32": {
+    "svg": "/assets/pixel/ruin_arch_fragment_32.svg",
+    "png": "/assets/pixel/ruin_arch_fragment_32.png",
+    "width": 32,
+    "height": 32
   },
   "rune_stone_16": {
     "svg": "/assets/pixel/rune_stone_16.svg",
@@ -316,6 +364,18 @@
     "png": "/assets/pixel/cloud_flat_192.png",
     "width": 192,
     "height": 36
+  },
+  "cloud_streak_224": {
+    "svg": "/assets/pixel/cloud_streak_224.svg",
+    "png": "/assets/pixel/cloud_streak_224.png",
+    "width": 224,
+    "height": 32
+  },
+  "cloud_puff_112": {
+    "svg": "/assets/pixel/cloud_puff_112.svg",
+    "png": "/assets/pixel/cloud_puff_112.png",
+    "width": 112,
+    "height": 56
   },
   "floating_island_96": {
     "svg": "/assets/pixel/floating_island_96.svg",

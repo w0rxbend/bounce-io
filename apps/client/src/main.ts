@@ -117,11 +117,14 @@ const ASSET_URLS = {
   cloudWispy: "/assets/pixel/cloud_wispy_128.png",
   cloudCluster: "/assets/pixel/cloud_cluster_160.png",
   cloudFlat: "/assets/pixel/cloud_flat_192.png",
+  cloudStreak: "/assets/pixel/cloud_streak_224.png",
+  cloudPuff: "/assets/pixel/cloud_puff_112.png",
   coin: "/assets/pixel/coin_16.png",
   coinSpin0: "/assets/pixel/coin_spin_0_16.png",
   coinSpin1: "/assets/pixel/coin_spin_1_16.png",
   coinSpin2: "/assets/pixel/coin_spin_2_16.png",
   coinSpin3: "/assets/pixel/coin_spin_3_16.png",
+  collectibleRing: "/assets/pixel/collectible_ring_24.png",
   collectibleSparkle: "/assets/pixel/collectible_sparkle_16.png",
   crown: "/assets/pixel/crown_16.png",
   crystalMarker: "/assets/pixel/crystal_marker_16x24.png",
@@ -132,14 +135,20 @@ const ASSET_URLS = {
   hazardSpikes: "/assets/pixel/hazard_spikes_16.png",
   heightArrow: "/assets/pixel/height_arrow_16.png",
   hudPanel: "/assets/pixel/hud_panel_96.png",
+  lanternCyan: "/assets/pixel/lantern_cyan_16x24.png",
+  leafCluster: "/assets/pixel/leaf_cluster_16.png",
   gemCyan0: "/assets/pixel/gem_cyan_0_16.png",
   gemCyan1: "/assets/pixel/gem_cyan_1_16.png",
   gemCyan2: "/assets/pixel/gem_cyan_2_16.png",
   gemCyan3: "/assets/pixel/gem_cyan_3_16.png",
+  mossPlatformRoots: "/assets/pixel/moss_platform_roots_32.png",
+  mossPlatformRunes: "/assets/pixel/moss_platform_runes_32.png",
   mossPlatform: "/assets/pixel/moss_platform_32.png",
   mossPlatformCracked: "/assets/pixel/moss_platform_cracked_32.png",
   mossPlatformOverhang: "/assets/pixel/moss_platform_overhang_32.png",
   mossPlatformFlowers: "/assets/pixel/moss_platform_flowers_32.png",
+  mushroomCluster: "/assets/pixel/mushroom_cluster_24.png",
+  pebbleCluster: "/assets/pixel/pebble_cluster_16.png",
   playerExplorer: "/assets/pixel/player_explorer_24x32.png",
   playerIdle: "/assets/pixel/player_idle_24x32.png",
   playerRun1: "/assets/pixel/player_run_1_24x32.png",
@@ -158,6 +167,7 @@ const ASSET_URLS = {
   seedGreen2: "/assets/pixel/seed_green_2_16.png",
   seedGreen3: "/assets/pixel/seed_green_3_16.png",
   ropeBridge: "/assets/pixel/rope_bridge_48x16.png",
+  ruinArchFragment: "/assets/pixel/ruin_arch_fragment_32.png",
   signpost: "/assets/pixel/signpost_16x24.png",
   starShard0: "/assets/pixel/star_shard_0_16.png",
   starShard1: "/assets/pixel/star_shard_1_16.png",
@@ -287,10 +297,10 @@ function collectibleFrames(id: string, tileX: number, tileY: number): AssetKey[]
 
 function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
   const variants: AssetKey[] = layer === "far"
-    ? ["cloudSmall", "cloudWispy", "cloudFlat", "cloud"]
+    ? ["cloudSmall", "cloudWispy", "cloudFlat", "cloudStreak", "cloud"]
     : layer === "mid"
-      ? ["cloud", "cloudLong", "cloudTall", "cloudCluster"]
-      : ["cloudLong", "cloudTall", "cloudCluster", "cloudFlat", "cloud"];
+      ? ["cloud", "cloudLong", "cloudPuff", "cloudTall", "cloudCluster"]
+      : ["cloudLong", "cloudStreak", "cloudTall", "cloudPuff", "cloudCluster", "cloudFlat", "cloud"];
   for (let tries = 0; tries < variants.length; tries++) {
     const key = variants[(i + tries) % variants.length]!;
     if (hasAsset(key)) return key;
@@ -299,7 +309,14 @@ function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
 }
 
 function platformCapAsset(seed: number): AssetKey {
-  const variants: AssetKey[] = ["mossPlatform", "mossPlatformCracked", "mossPlatformOverhang", "mossPlatformFlowers"];
+  const variants: AssetKey[] = [
+    "mossPlatform",
+    "mossPlatformCracked",
+    "mossPlatformOverhang",
+    "mossPlatformFlowers",
+    "mossPlatformRoots",
+    "mossPlatformRunes",
+  ];
   for (let tries = 0; tries < variants.length; tries++) {
     const key = variants[(seed + tries) % variants.length]!;
     if (hasAsset(key)) return key;
@@ -346,7 +363,16 @@ const chunkDecorations = new Map<number, { back: Container; front: Container }>(
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const collectedRelics = new Set<string>();
 
-interface RelicAnim { container: Container; gfx: Graphics; sprite: Sprite; sparkle: Sprite | null; frames: AssetKey[]; tileX: number; tileY: number }
+interface RelicAnim {
+  container: Container;
+  gfx: Graphics;
+  sprite: Sprite;
+  sparkle: Sprite | null;
+  ring: Sprite | null;
+  frames: AssetKey[];
+  tileX: number;
+  tileY: number;
+}
 const relicAnims = new Map<string, RelicAnim>();
 
 interface RemoteEntry {

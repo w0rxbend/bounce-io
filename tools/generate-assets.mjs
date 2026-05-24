@@ -60,9 +60,11 @@ function platformSvg({ variant = "normal", w = 32 } = {}) {
   const cracked = variant === "cracked";
   const overhang = variant === "overhang";
   const flowers = variant === "flowers";
+  const roots = variant === "roots";
+  const runes = variant === "runes";
   return `
       <path d="M0 3h${w}v13H0z" fill="#28221a"/>
-      <path d="M1 4h${w - 2}v11H1z" fill="${cracked ? "#7f6a50" : "#907858"}"/>
+      <path d="M1 4h${w - 2}v11H1z" fill="${runes ? "#786858" : cracked ? "#7f6a50" : "#907858"}"/>
       <path d="M1 4h${w - 2}v2H1z" fill="#7a5030"/>
       <path d="M1 2h${w - 2}v3H1z" fill="#3a7818"/>
       <path d="M1 1h${w - 2}v2H1z" fill="#90d838"/>
@@ -72,6 +74,8 @@ function platformSvg({ variant = "normal", w = 32 } = {}) {
       ${cracked ? `<path d="M13 6h1v4h1v3h-1v2h-1v-4h-1V8h1zM${w - 9} 7h1v5h-1z" fill="#28221a" opacity=".65"/>` : ""}
       ${overhang ? `<path d="M2 14h4v3H2zM10 14h3v4h-3zM${w - 8} 14h5v3h-5z" fill="#402818"/><path d="M4 16h1v5H4zM${w - 6} 16h1v4h-1z" fill="#583a20"/>` : ""}
       ${flowers ? `<path d="M6 -2h1v2H6zM7 -3h2v2H7zM${w - 9} -2h1v2h-1zM${w - 8} -3h2v2h-2z" fill="#ffaabb"/><path d="M15 -2h1v2h-1zM16 -3h2v2h-2z" fill="#ffe870"/>` : ""}
+      ${roots ? `<path d="M4 15h2v5H4zM7 15h1v3H7zM17 15h2v6h-2zM24 15h1v4h-1zM27 15h2v5h-2z" fill="#402818"/><path d="M5 19h4v1H5zM18 20h5v1h-5zM27 19h3v1h-3z" fill="#583a20"/>` : ""}
+      ${runes ? `<path d="M7 8h3v1H7zM8 6h1v5H8zM18 7h5v1h-5zM20 7h1v5h-1zM24 10h2v1h-2z" fill="#30c8c0" opacity=".8"/><path d="M8 7h1v1H8zM20 8h1v1h-1z" fill="#a0f0ff"/>` : ""}
       <path d="M6 14h1v2H6zM15 14h1v2h-1zM${w - 7} 14h1v2h-1z" fill="#583a20"/>
     `;
 }
@@ -335,6 +339,18 @@ const assets = [
     svg: platformSvg({ variant: "cracked", w: 48 }),
   },
   {
+    name: "moss_platform_roots_32",
+    w: 32,
+    h: 22,
+    svg: platformSvg({ variant: "roots" }),
+  },
+  {
+    name: "moss_platform_runes_32",
+    w: 32,
+    h: 18,
+    svg: platformSvg({ variant: "runes" }),
+  },
+  {
     name: "coin_16",
     w: 16,
     h: 16,
@@ -370,6 +386,15 @@ const assets = [
     `,
   },
   {
+    name: "collectible_ring_24",
+    w: 24,
+    h: 24,
+    svg: `
+      <path d="M10 1h4v2h-4zM5 4h3v2H5zM16 4h3v2h-3zM3 9h2v6H3zM19 9h2v6h-2zM5 18h3v2H5zM16 18h3v2h-3zM10 21h4v2h-4z" fill="#a0f0ff" opacity=".72"/>
+      <path d="M8 3h2v1H8zM14 3h2v1h-2zM4 7h1v2H4zM19 7h1v2h-1zM4 15h1v2H4zM19 15h1v2h-1zM8 20h2v1H8zM14 20h2v1h-2z" fill="#ffffff" opacity=".9"/>
+    `,
+  },
+  {
     name: "hazard_spikes_16",
     w: 16,
     h: 16,
@@ -401,6 +426,64 @@ const assets = [
       <path d="M3 8h3v2H3z" fill="#ffaabb"/>
       <path d="M7 7h3v2H7z" fill="#ffe870"/>
       <path d="M11 9h3v2h-3z" fill="#ffffff"/>
+    `,
+  },
+  {
+    name: "leaf_cluster_16",
+    w: 16,
+    h: 16,
+    svg: `
+      <path d="M2 11h12v3H2z" fill="#1a3818"/>
+      <path d="M3 8h4v3H3zM7 5h5v4H7zM10 9h4v3h-4z" fill="#489030"/>
+      <path d="M4 7h3v2H4zM8 4h4v3H8zM11 8h3v2h-3z" fill="#78d050"/>
+      <path d="M6 10h5v1H6z" fill="#2e6840"/>
+    `,
+  },
+  {
+    name: "mushroom_cluster_24",
+    w: 24,
+    h: 20,
+    svg: `
+      <path d="M5 10h4v8H5zM14 8h4v10h-4z" fill="#f0d0a8"/>
+      <path d="M2 7h10v5H2zM11 4h10v6H11z" fill="#b840a0"/>
+      <path d="M4 6h6v2H4zM13 3h6v2h-6z" fill="#e878c8"/>
+      <path d="M5 8h2v1H5zM15 5h2v1h-2zM19 7h1v1h-1z" fill="#ffd0f0"/>
+      <path d="M2 18h20v2H2z" fill="#1a3818"/>
+    `,
+  },
+  {
+    name: "pebble_cluster_16",
+    w: 16,
+    h: 12,
+    svg: `
+      <path d="M1 8h5v3H1zM6 5h6v5H6zM11 7h4v4h-4z" fill="#28221a"/>
+      <path d="M2 7h4v3H2zM7 4h5v5H7zM12 6h3v4h-3z" fill="#907858"/>
+      <path d="M3 7h2v1H3zM8 4h3v1H8zM12 6h2v1h-2z" fill="#c8a878"/>
+    `,
+  },
+  {
+    name: "lantern_cyan_16x24",
+    w: 16,
+    h: 24,
+    svg: `
+      <path d="M7 0h2v5H7zM5 4h6v2H5z" fill="#402818"/>
+      <path d="M4 6h9v12H4z" fill="#28221a"/>
+      <path d="M5 7h7v10H5z" fill="#0b3048"/>
+      <path d="M6 8h5v8H6z" fill="#40d8f8" opacity=".82"/>
+      <path d="M7 8h2v8H7z" fill="#a0f0ff" opacity=".9"/>
+      <path d="M3 18h11v2H3zM6 20h5v2H6z" fill="#402818"/>
+    `,
+  },
+  {
+    name: "ruin_arch_fragment_32",
+    w: 32,
+    h: 32,
+    svg: `
+      <path d="M3 10h6v20H3zM23 8h6v22h-6zM7 4h18v6H7z" fill="#28221a"/>
+      <path d="M5 11h4v17H5zM23 9h4v19h-4zM8 5h16v4H8z" fill="#6a5840"/>
+      <path d="M8 13h16v17H8z" fill="#000000" opacity=".24"/>
+      <path d="M10 6h4v2h-4zM18 6h4v2h-4zM5 12h4v2H5zM24 12h3v2h-3z" fill="#c8a878" opacity=".65"/>
+      <path d="M4 19h4v2H4zM22 21h5v2h-5zM11 8h3v2h-3z" fill="#489030"/>
     `,
   },
   {
@@ -473,6 +556,18 @@ const assets = [
     w: 192,
     h: 36,
     svg: cloudSvg({ w: 192, h: 36, mood: "far" }),
+  },
+  {
+    name: "cloud_streak_224",
+    w: 224,
+    h: 32,
+    svg: cloudSvg({ w: 224, h: 32, mood: "far" }),
+  },
+  {
+    name: "cloud_puff_112",
+    w: 112,
+    h: 56,
+    svg: cloudSvg({ w: 112, h: 56 }),
   },
   {
     name: "floating_island_96",
