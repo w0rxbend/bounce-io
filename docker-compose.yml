@@ -1,0 +1,25 @@
+services:
+  backend:
+    image: bounce-io-backend:latest
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+    expose:
+      - "8787"
+    restart: unless-stopped
+
+  frontend:
+    image: bounce-io-frontend:latest
+    build:
+      context: .
+      dockerfile: apps/client/Dockerfile
+      args:
+        VITE_WS_URL: ${VITE_WS_URL:-}
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped

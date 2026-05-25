@@ -342,9 +342,22 @@ app.get(
 // ── Server ────────────────────────────────────────────────────────────────────
 
 const port = Number(process.env["PORT"] ?? 8787);
-const server = serve({ fetch: app.fetch, port });
+const hostname = process.env["HOST"] ?? "0.0.0.0";
+const server = serve({ fetch: app.fetch, port, hostname });
 injectWebSocket(server);
-console.log(`Skybound Relics server listening on http://localhost:${port}`);
+console.log(`Skybound Relics server listening on http://${hostname}:${port}`);
+
+function shutdown(signal: NodeJS.Signals): void {
+  console.log(`Received ${signal}; shutting down Skybound Relics server`);
+  for (const room of [...rooms.values()]) {
+    closeRoom(room);
+  }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5_000).unref();
+}
+
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
 
 // ── Room management ───────────────────────────────────────────────────────────
 

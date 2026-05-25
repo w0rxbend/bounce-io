@@ -222,9 +222,12 @@ TextureStyle.defaultOptions.scaleMode = "nearest";
 
 const pixi = new Application();
 await pixi.init({
+  manageImports: false,
   resizeTo: gameWrap,
+  preference: ["webgl", "canvas"],
   backgroundAlpha: 0,
   antialias: false,
+  powerPreference: "high-performance",
   resolution: Math.min(window.devicePixelRatio || 1, 2),
   autoDensity: true,
   roundPixels: true,
@@ -2005,7 +2008,10 @@ function connectRoom(name: string): void {
   if (ws && ws.readyState === WebSocket.CONNECTING) return;
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.hostname}:8787/ws?room=demo`);
+  const configuredUrl = import.meta.env.VITE_WS_URL?.trim();
+  const wsUrl = new URL(configuredUrl || `${proto}://${location.host}/ws`);
+  wsUrl.searchParams.set("room", "demo");
+  ws = new WebSocket(wsUrl.toString());
 
   ws.addEventListener("open", () => {
     reconnDelay = 1000;
