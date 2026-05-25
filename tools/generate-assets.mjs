@@ -10,7 +10,7 @@ for (const file of readdirSync(outDir)) {
   }
 }
 
-function playerSvg({ pose = "idle", scarf = "back", legA = 0, legB = 0, arm = 0, jacket = "#f3c64b" } = {}) {
+function playerSvg({ pose = "idle", scarf = "back", legA = 0, legB = 0, arm = 0, jacket = "#f3c64b", hair = "#281a10", skin = "#ffd090", accent = "#b83020" } = {}) {
   const kick = pose === "kick";
   const jump = pose === "jump";
   const fall = pose === "fall";
@@ -18,8 +18,8 @@ function playerSvg({ pose = "idle", scarf = "back", legA = 0, legB = 0, arm = 0,
   const headY = jump ? 5 : fall ? 7 : 6;
   const eyeY = headY + 3;
   const scarfPaths = scarf === "forward"
-    ? `<path d="M16 ${bodyY + 5}h6v2h-6zM19 ${bodyY + 7}h4v2h-4z" fill="#b83020"/><path d="M21 ${bodyY + 9}h2v2h-2z" fill="#701818"/>`
-    : `<path d="M3 ${bodyY + 5}h5v2H3zM1 ${bodyY + 7}h5v2H1z" fill="#b83020"/><path d="M1 ${bodyY + 9}h3v2H1z" fill="#701818"/>`;
+    ? `<path d="M16 ${bodyY + 5}h6v2h-6zM19 ${bodyY + 7}h4v2h-4z" fill="${accent}"/><path d="M21 ${bodyY + 9}h2v2h-2z" fill="#701818"/>`
+    : `<path d="M3 ${bodyY + 5}h5v2H3zM1 ${bodyY + 7}h5v2H1z" fill="${accent}"/><path d="M1 ${bodyY + 9}h3v2H1z" fill="#701818"/>`;
   const foot = kick ? `<path d="M17 24h6v4h-6zM17 24h6v1h-6z" fill="${jacket}"/>` : "";
   const armPath = kick
     ? `<path d="M16 ${bodyY + 8}h5v3h-5z" fill="#ffd090"/>`
@@ -29,8 +29,8 @@ function playerSvg({ pose = "idle", scarf = "back", legA = 0, legB = 0, arm = 0,
       <path d="M7 ${27 + legA}h4v4H7zM14 ${27 + legB}h4v4h-4z" fill="#1a3818"/>
       <path d="M5 ${bodyY}h14v17H5z" fill="#1c1f2a"/>
       <path d="M7 ${bodyY + 2}h10v13H7z" fill="${jacket}"/>
-      <path d="M6 ${headY}h12v8H6z" fill="#ffd090"/>
-      <path d="M6 ${headY - 1}h12v4H6z" fill="#281a10"/>
+      <path d="M6 ${headY}h12v8H6z" fill="${skin}"/>
+      <path d="M6 ${headY - 1}h12v4H6z" fill="${hair}"/>
       <path d="M15 ${eyeY}h2v2h-2z" fill="#1c1f2a"/>
       <path d="M16 ${eyeY}h1v1h-1z" fill="#ffffff"/>
       ${scarfPaths}
@@ -38,6 +38,16 @@ function playerSvg({ pose = "idle", scarf = "back", legA = 0, legB = 0, arm = 0,
       ${foot}
       <path d="M4 ${bodyY}h1v17H4zM19 ${bodyY}h1v17h-1zM5 27h15v1H5z" fill="#1c1f2a"/>
     `;
+}
+
+function playerVariantSvg(variant = "green") {
+  const palette = {
+    green: { jacket: "#68c040", hair: "#5a3018", skin: "#ffd090", accent: "#30c8c0" },
+    blue: { jacket: "#4088d8", hair: "#1c1f2a", skin: "#f0b078", accent: "#ffe870" },
+    red: { jacket: "#d85040", hair: "#702018", skin: "#ffc080", accent: "#40d8f8" },
+    violet: { jacket: "#a050c8", hair: "#201030", skin: "#ffd0a0", accent: "#f8c830" },
+  }[variant] ?? {};
+  return playerSvg({ ...palette });
 }
 
 function coinSvg(width = 8) {
@@ -114,6 +124,79 @@ function gemSvg({ main = "#40d8f8", light = "#a0f0ff", shade = "#12485a", shape 
       <path d="M8 2h2l3 4-2 7H5L3 6l3-4z" fill="${main}"/>
       <path d="M7 3h3l1 3-2 1H6L5 6z" fill="${light}"/>
       <path d="M5 11h6v1H5z" fill="#ffffff" opacity=".45"/>
+    `;
+}
+
+function lanternSvg({ flame = "#ffe870", glow = "#40d8f8", post = false } = {}) {
+  const pole = post ? `<path d="M7 22h3v18H7zM3 38h11v2H3z" fill="#402818"/><path d="M8 22h2v16H8z" fill="#8a5a30"/>` : "";
+  const y = post ? 2 : 0;
+  return `
+      ${pole}
+      <path d="M7 ${y}h2v4H7zM4 ${y + 3}h8v2H4z" fill="#402818"/>
+      <path d="M3 ${y + 5}h11v13H3z" fill="#28221a"/>
+      <path d="M5 ${y + 6}h7v11H5z" fill="#0b3048"/>
+      <path d="M6 ${y + 7}h5v9H6z" fill="${glow}" opacity=".74"/>
+      <path d="M7 ${y + 8}h3v7H7z" fill="${flame}" opacity=".9"/>
+      <path d="M2 ${y + 18}h13v2H2zM5 ${y + 20}h7v2H5z" fill="#402818"/>
+      <path d="M1 ${y + 8}h2v7H1zM14 ${y + 8}h2v7h-2z" fill="${glow}" opacity=".16"/>
+    `;
+}
+
+function fireflySvg(frame = 0) {
+  const glow = frame % 2 === 0 ? ".65" : ".34";
+  return `
+      <path d="M0 0h16v16H0z" fill="#000000" opacity="0"/>
+      <path d="M5 7h6v3H5z" fill="#403018"/>
+      <path d="M7 6h2v5H7z" fill="#281a10"/>
+      <path d="M2 4h5v3H2zM9 4h5v3H9z" fill="#d8ffff" opacity=".38"/>
+      <path d="M5 5h6v6H5z" fill="#ffe870" opacity="${glow}"/>
+      <path d="M7 7h2v2H7z" fill="#ffffff" opacity=".9"/>
+    `;
+}
+
+function fogSvg({ w = 256, h = 64 } = {}) {
+  return `
+      <path d="M0 0h${w}v${h}H0z" fill="#000000" opacity="0"/>
+      <path d="M0 28h48v-8h76v8h92v-7h40v22H0z" fill="#d8fff0" opacity=".18"/>
+      <path d="M18 40h64v-6h92v5h64v15H18z" fill="#ffffff" opacity=".14"/>
+      <path d="M0 51h70v-4h80v4h106v10H0z" fill="#a0f0ff" opacity=".11"/>
+    `;
+}
+
+function planksSvg({ broken = false } = {}) {
+  return `
+      <path d="M1 6h38v8H1zM5 15h34v7H5z" fill="#402818"/>
+      <path d="M2 5h36v8H2zM6 14h32v7H6z" fill="#b88048"/>
+      <path d="M3 6h33v2H3zM7 15h29v2H7z" fill="#d8a060"/>
+      <path d="M8 5h1v8H8zM20 5h1v8h-1zM31 5h1v8h-1zM15 14h1v7h-1zM28 14h1v7h-1z" fill="#6a4820"/>
+      ${broken ? `<path d="M34 5h5v4h-5zM35 16h4v5h-4zM1 11h6v3H1z" fill="#000000" opacity="0"/>` : ""}
+      <path d="M6 9h2v1H6zM24 17h2v1h-2zM33 8h2v1h-2z" fill="#402818"/>
+    `;
+}
+
+function flowerPotSvg({ flower = "#ffaabb", pot = "#a85828", hanging = false } = {}) {
+  const hanger = hanging ? `<path d="M7 0h2v4H7zM4 3h8v1H4zM4 4h1v5H4zM11 4h1v5h-1z" fill="#402818"/>` : "";
+  const y = hanging ? 7 : 3;
+  return `
+      ${hanger}
+      <path d="M6 ${y + 2}h2v8H6zM10 ${y + 1}h2v9h-2z" fill="#2e6840"/>
+      <path d="M3 ${y + 10}h13v3H3zM4 ${y + 13}h11v7H4z" fill="#5a2f20"/>
+      <path d="M4 ${y + 9}h11v3H4zM5 ${y + 12}h9v7H5z" fill="${pot}"/>
+      <path d="M6 ${y + 13}h7v2H6z" fill="#d08038"/>
+      <path d="M4 ${y + 1}h4v3H4zM9 ${y}h5v4H9zM7 ${y + 3}h4v3H7z" fill="${flower}"/>
+      <path d="M6 ${y + 2}h1v1H6zM11 ${y + 1}h1v1h-1zM9 ${y + 4}h1v1H9z" fill="#ffe870"/>
+      <path d="M5 ${y + 6}h4v2H5zM10 ${y + 5}h4v2h-4z" fill="#68c040"/>
+    `;
+}
+
+function logSvg() {
+  return `
+      <path d="M3 10h36v10H3z" fill="#402818"/>
+      <path d="M5 8h32v10H5z" fill="#8a5a30"/>
+      <path d="M7 8h27v2H7zM8 14h26v1H8z" fill="#d8a060"/>
+      <path d="M2 10h8v10H2zM33 8h8v10h-8z" fill="#281a10"/>
+      <path d="M4 11h5v7H4zM34 9h5v7h-5z" fill="#b88048"/>
+      <path d="M5 12h3v4H5zM35 10h3v4h-3z" fill="#583a20"/>
     `;
 }
 
