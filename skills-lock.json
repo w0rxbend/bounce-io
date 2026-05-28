@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "pixijs": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs/SKILL.md",
+      "computedHash": "880175c74d347ba7e40e8434544f4ae8c1d006ed68296cec6ba355da0d532508"
+    },
+    "pixijs-application": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs-application/SKILL.md",
+      "computedHash": "17cdbe975621930c1268585b8528a1cdfcca040b2340982326060434db5a9b0d"
+    },
+    "pixijs-assets": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs-assets/SKILL.md",
+      "computedHash": "10be9f4d243ccda92b47fb1bbd72a05ba0ff89d4f5cf218e71e27498cd725c0c"
+    },
+    "pixijs-core-concepts": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs-core-concepts/SKILL.md",
+      "computedHash": "625cde7072b6f4cb178e55cc6da8616637f81b7b0d044579ab871a0823b25c20"
+    },
+    "pixijs-scene-container": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs-scene-container/SKILL.md",
+      "computedHash": "c5cea512c0aff13d97938dd7fbc5955bc04513e367067455b7fa17583ee31c00"
+    },
+    "pixijs-scene-core-concepts": {
+      "source": "pixijs/pixijs-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pixijs-scene-core-concepts/SKILL.md",
+      "computedHash": "4d6941225e873db2dc780a015d33cd698bcc547260975c3a338af5267d9c8b78"
+    }
+  }
+}

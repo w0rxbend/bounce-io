@@ -100,15 +100,27 @@ const PLAYER_COLORS = [
 ] as const;
 
 const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 384px
-const INTERP_DELAY_MS = 100;
+
+// ── Network interpolation tuning ──────────────────────────────────────────────
+const MIN_INTERP_DELAY_MS   = 50;    // floor for local/LAN play
+const MAX_INTERP_DELAY_MS   = 250;   // ceiling; beyond this the delay itself hurts
+const SNAPSHOT_INTERVAL_MS  = 1000 / 20; // 50 ms — matches server SNAPSHOT_RATE
+const PING_HISTORY_SIZE     = 8;     // samples kept for jitter estimation
+let   adaptiveInterpDelayMs = 100;   // starts neutral, self-tunes each frame
+const CHUNKS_KEEP_BEHIND    = 2;     // chunks to keep below player before culling
 
 const ASSET_URLS = {
+  bgMountainPanorama: "/assets/pixel/bg_mountain_panorama_887x1774.png",
+  bgMountainWide:     "/assets/pixel/bg_mountain_wide_1024x192.png",
+  bgMountainWide2:    "/assets/pixel/bg_mountain_wide2_1024x192.png",
+  bgMountainTall:     "/assets/pixel/bg_mountain_tall_192x384.png",
   aiForestRuinsPanorama: "/assets/generated/forest_ruins_ai_panorama.png",
   bgCanopyFrame: "/assets/pixel/bg_canopy_frame_768x160.png",
   bgCloudBank: "/assets/pixel/bg_cloud_bank_768x128.png",
   bgForestRuinsPanorama: "/assets/pixel/bg_forest_ruins_panorama_1024x576.png",
   bgRuinTowers: "/assets/pixel/bg_ruin_towers_512x256.png",
   bgSkyArches: "/assets/pixel/bg_sky_arches_768x432.png",
+  heroSheet: "/assets/pixel/hero_sheet_480x448.png",
   bush: "/assets/pixel/bush_32.png",
   cloud: "/assets/pixel/cloud_96.png",
   cloudSmall: "/assets/pixel/cloud_small_64.png",
@@ -403,14 +415,13 @@ const MAX_PREDICTION_ACCUMULATOR_SECONDS = PHYSICS_STEP_SECONDS * MAX_PREDICTION
 const PREDICTION_STEP_EPSILON = 0.000_001;
 const LOCAL_VISUAL_CORRECTION_RATE = 18;
 const LOCAL_VISUAL_SNAP_THRESHOLD_PX = 72;
-const REMOTE_MAX_EXTRAPOLATION_MS = 80;
-const SERVER_CLOCK_SMOOTHING = 0.12;
-
 let ws: WebSocket | null = null;
 let pingMs        = 0;
 let lastPingTime  = 0;
 let serverTimeOffsetMs = 0;
 let hasServerClock = false;
+const pingSamples: number[] = [];
+let   pingJitterMs = 0;
 let serverTick    = 0;
 let matchPhase    = "waiting";
 let reconnDelay   = 1000;
@@ -547,6 +558,17 @@ function ensureChunksAhead(): void {
   const pTileY  = Math.floor(localPlayer.position.y / TILE_SIZE);
   const pChunkY = Math.max(0, -Math.floor(pTileY / CHUNK_HEIGHT_TILES));
   for (let cy = 0; cy <= pChunkY + 3; cy++) loadChunk(cy);
+
+  // Cull chunks that are too far below — they will never be needed again.
+  const disposeBelow = Math.max(0, pChunkY - CHUNKS_KEEP_BEHIND);
+  if (disposeBelow > 0) {
+    for (const cy of [...loadedChunks.keys()]) {
+      if (cy < disposeBelow) {
+        destroyChunkVisuals(cy);
+        loadedChunks.delete(cy);
+      }
+    }
+  }
 }
 
 function regenerateWorld(): void {
@@ -750,11 +772,30 @@ function buildSkyStatic(sw: number, sh: number): void {
   sunGlowGfx.circle(sunX, sunY, 18).fill({ color: 0xfff8c0, alpha: 0.45 });
   sunGlowGfx.circle(sunX, sunY, 8).fill({ color: 0xfffff0, alpha: 0.8 });
 
+  // Mountain panorama — cover the screen, bottom-anchored so the valley shows at
+  // ground level and snowy peaks emerge as the player climbs. Falls back to the
+  // AI ruins panorama if the mountain asset hasn't loaded yet.
   aiPanoramaBack.removeChildren();
-  addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
+  if (hasAsset("bgMountainPanorama")) {
+    const mSprite = makeSprite("bgMountainPanorama");
+    const texW = Math.max(1, mSprite.texture.width);
+    const texH = Math.max(1, mSprite.texture.height);
+    // Scale so the image covers the full screen width.
+    const mScale = Math.max(sw / texW, sh / texH);
+    const mW = texW * mScale;
+    const mH = texH * mScale;
+    mSprite.scale.set(mScale);
+    mSprite.x = Math.round((sw - mW) / 2);
+    // Anchor at bottom: valley floor sits at the ground-level screen bottom.
+    mSprite.y = Math.round(sh - mH);
+    mSprite.alpha = 0.88;
+    aiPanoramaBack.addChild(mSprite);
+  } else {
+    addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
+  }
 
   forestPanoramaBack.removeChildren();
-  addWideBackdrop(forestPanoramaBack, "bgForestRuinsPanorama", sw, sh * 0.12, 0.38);
+  addWideBackdrop(forestPanoramaBack, "bgForestRuinsPanorama", sw, sh * 0.12, 0.28);
 
   skyArchesBack.removeChildren();
   addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.34);
@@ -908,8 +949,10 @@ function updateSkyParallax(camY: number, scale: number): void {
 
   starsGfx.alpha    = Math.min(1, t * 3.0);
   starsGfx.y        = scrollPx * 0.0;
-  aiPanoramaBack.y = Math.round(scrollPx * 0.018);
-  aiPanoramaBack.alpha = Math.max(0.08, 0.42 - t * 0.34);
+  // Moderate parallax so the valley floor shows near ground and peaks emerge as
+  // the player climbs. Alpha stays high; fades gently at near-space altitudes.
+  aiPanoramaBack.y = Math.round(scrollPx * 0.07);
+  aiPanoramaBack.alpha = Math.max(0.55, 0.88 - t * 0.33);
   forestPanoramaBack.y = scrollPx * 0.035;
   forestPanoramaBack.alpha = Math.max(0.08, 0.38 - t * 0.28);
   skyArchesBack.y   = scrollPx * 0.025;
@@ -1892,7 +1935,7 @@ function updateHud(tSec: number): void {
   hudRankTxt.y    = 52;
 
   // Center phase banner
-  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING…" : matchPhase === "finished" ? "FINISHED!" : "";
+  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING…" : "";
   hudPhaseTxt.text = phText;
   if (phText) {
     hudPhaseTxt.x = Math.round(pixi.screen.width / 2 - hudPhaseTxt.width / 2);
@@ -1977,18 +2020,22 @@ function updateDebug(): void {
   dbgGfx.clear();
   if (!showDebug) return;
 
-  drawHudPanel(dbgGfx, 4, 58, 200, 118);
+  drawHudPanel(dbgGfx, 4, 58, 200, 132);
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
   dbgGfx.rect(8, 70, Math.min(pingMs, 118), 3).fill(pingMs < 60 ? 0x5dff9c : pingMs < 120 ? PAL.coinGold : PAL.hazardRed);
+  // Adaptive interp delay bar (0–250 ms range)
+  dbgGfx.rect(8, 76, Math.round(adaptiveInterpDelayMs / 250 * 118), 3).fill(adaptiveInterpDelayMs < 80 ? 0x5dff9c : adaptiveInterpDelayMs < 150 ? PAL.coinGold : PAL.hazardRed);
+  // Jitter bar (0–80 ms range)
+  dbgGfx.rect(8, 82, Math.round(Math.min(pingJitterMs, 80) / 80 * 118), 3).fill(pingJitterMs < 20 ? 0x5dff9c : pingJitterMs < 40 ? PAL.coinGold : PAL.hazardRed);
 
   if (localPlayer) {
     const { x: vx, y: vy } = localPlayer.velocity;
-    dbgGfx.rect(8, 76, Math.round(Math.abs(vx) / 300 * 118), 3).fill(vx >= 0 ? PAL.portalBlue : PAL.hazardRed);
-    dbgGfx.rect(8, 82, Math.round(Math.abs(vy) / 420 * 118), 3).fill(vy >= 0 ? PAL.coinGold : PAL.canopyLight);
-    dbgGfx.rect(8, 88, 6, 6).fill(localPlayer.grounded ? 0x5dff9c : PAL.hazardMag);
-    dbgGfx.rect(8, 96, Math.min(Math.max(0, -Math.floor(Math.floor(localPlayer.position.y / TILE_SIZE) / CHUNK_HEIGHT_TILES)) * 6, 120), 3).fill(PAL.mistPale);
+    dbgGfx.rect(8, 88, Math.round(Math.abs(vx) / 300 * 118), 3).fill(vx >= 0 ? PAL.portalBlue : PAL.hazardRed);
+    dbgGfx.rect(8, 94, Math.round(Math.abs(vy) / 420 * 118), 3).fill(vy >= 0 ? PAL.coinGold : PAL.canopyLight);
+    dbgGfx.rect(8, 100, 6, 6).fill(localPlayer.grounded ? 0x5dff9c : PAL.hazardMag);
+    dbgGfx.rect(8, 108, Math.min(Math.max(0, -Math.floor(Math.floor(localPlayer.position.y / TILE_SIZE) / CHUNK_HEIGHT_TILES)) * 6, 120), 3).fill(PAL.mistPale);
 
     const sc = getScale();
     const bx = Math.round(worldLayer.x + localPlayer.position.x * sc);
@@ -1996,10 +2043,10 @@ function updateDebug(): void {
     dbgGfx.rect(bx, by, PLAYER_WIDTH * sc, PLAYER_HEIGHT * sc).stroke({ color: 0x5dff9c, width: 1 });
   }
 
-  dbgGfx.rect(8, 103, 118, 6).fill({ color: PAL.uiParchment, alpha: 0.14 });
-  dbgGfx.rect(8, 103, Math.round(predBuf.length * 0.98), 6).fill(PAL.portalBlue);
-  dbgGfx.rect(8, 112, Math.min((serverTick % 60) * 2, 118), 3).fill(PAL.stoneMid);
-  dbgGfx.rect(8, 118, Math.min(particles.length * 1.5, 118), 3).fill(PAL.canopyLight);
+  dbgGfx.rect(8, 115, 118, 6).fill({ color: PAL.uiParchment, alpha: 0.14 });
+  dbgGfx.rect(8, 115, Math.round(predBuf.length * 0.98), 6).fill(PAL.portalBlue);
+  dbgGfx.rect(8, 124, Math.min((serverTick % 60) * 2, 118), 3).fill(PAL.stoneMid);
+  dbgGfx.rect(8, 130, Math.min(particles.length * 1.5, 118), 3).fill(PAL.canopyLight);
 }
 
 // ── Networking ────────────────────────────────────────────────────────────────
@@ -2029,7 +2076,7 @@ function connectRoom(name: string): void {
 
     switch (parsed.type) {
       case "welcome":
-        updateServerClock(parsed.serverTime);
+        updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
@@ -2042,13 +2089,13 @@ function connectRoom(name: string): void {
         resetLocalPrediction(); cameraSnap = true;
         break;
       case "resumed":
-        updateServerClock(parsed.serverTime);
+        updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
         netStatus.textContent = "Reconnected.";
         localPlayer = clonePlayerState(parsed.playerState); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         break;
       case "snapshot":
-        updateServerClock(parsed.serverTime);
+        updateServerClock(parsed.serverTime - Date.now());
         serverTick = parsed.tick; matchPhase = parsed.matchPhase;
         // Reconcile full collected set so late-joiners see correct coin state
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
@@ -2097,15 +2144,19 @@ function connectRoom(name: string): void {
       case "playerLeft":
         { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
-      case "pong":
-        updateServerClock(parsed.serverTime);
-        pingMs = Date.now() - parsed.clientTime;
+      case "pong": {
+        const rtt = Date.now() - parsed.clientTime;
+        pingMs = rtt;
+        addPingSample(rtt);
+        // NTP-style: account for one-way transit so the offset isn't biased by RTT.
+        const offsetMs = parsed.serverTime - (parsed.clientTime + rtt / 2);
+        updateServerClock(offsetMs);
         break;
+      }
       case "matchPhase":
         matchPhase = parsed.phase;
         if (parsed.phase === "countdown") pushNotification("GET READY!", PAL.uiParchment);
         else if (parsed.phase === "playing") pushNotification("GO!", PAL.coinGold);
-        else if (parsed.phase === "finished") pushNotification("MATCH OVER", PAL.hazardRed);
         break;
     }
   });
@@ -2125,22 +2176,42 @@ function sendInput(inp: PlayerInput): void {
 }
 
 function shouldPredictLocalMovement(): boolean {
-  return !ws || ws.readyState !== WebSocket.OPEN || matchPhase === "playing";
+  return localPlayer !== null;
 }
 
 function maybePing(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  if (Date.now() - lastPingTime > 2000) { lastPingTime = Date.now(); ws.send(JSON.stringify({ type: "ping", clientTime: lastPingTime })); }
+  if (Date.now() - lastPingTime > 1000) { lastPingTime = Date.now(); ws.send(JSON.stringify({ type: "ping", clientTime: lastPingTime })); }
 }
 
-function updateServerClock(serverTime: number): void {
-  const sampleOffset = serverTime - Date.now();
+function addPingSample(rtt: number): void {
+  pingSamples.push(rtt);
+  if (pingSamples.length > PING_HISTORY_SIZE) pingSamples.shift();
+  if (pingSamples.length >= 2) {
+    const mean = pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length;
+    pingJitterMs = pingSamples.reduce((s, v) => s + Math.abs(v - mean), 0) / pingSamples.length;
+  }
+}
+
+function updateServerClock(offsetMs: number): void {
   if (!hasServerClock) {
-    serverTimeOffsetMs = sampleOffset;
+    serverTimeOffsetMs = offsetMs;
     hasServerClock = true;
   } else {
-    serverTimeOffsetMs += (sampleOffset - serverTimeOffsetMs) * SERVER_CLOCK_SMOOTHING;
+    // Absorb clock-ahead quickly (prevents render time jumping forward),
+    // shrink slowly (avoids oscillation when offset improves).
+    const alpha = offsetMs > serverTimeOffsetMs ? 0.20 : 0.05;
+    serverTimeOffsetMs += (offsetMs - serverTimeOffsetMs) * alpha;
   }
+}
+
+function updateAdaptiveInterpDelay(): void {
+  if (!hasServerClock || pingSamples.length < 2) return;
+  const target = pingMs / 2 + pingJitterMs + SNAPSHOT_INTERVAL_MS;
+  const clamped = Math.max(MIN_INTERP_DELAY_MS, Math.min(MAX_INTERP_DELAY_MS, target));
+  // Grow fast when network worsens, shrink slowly when it improves.
+  const alpha = clamped > adaptiveInterpDelayMs ? 0.15 : 0.03;
+  adaptiveInterpDelayMs += (clamped - adaptiveInterpDelayMs) * alpha;
 }
 
 function estimatedServerTime(): number {
@@ -2192,37 +2263,55 @@ function updateRemotePlayer(s: PlayerState, serverTime: number): void {
 }
 
 function interpRemotes(): void {
-  const rt = estimatedServerTime() - INTERP_DELAY_MS;
+  const rt = estimatedServerTime() - adaptiveInterpDelayMs;
+  // Adaptive extrapolation cap scales with RTT so high-ping clients project further.
+  const extrapCapMs = Math.max(80, Math.min(pingMs * 0.5 + SNAPSHOT_INTERVAL_MS, 250));
+
   for (const e of remotePlayers.values()) {
     const { states } = e;
     if (states.length === 0) continue;
     if (states.length === 1) { e.current = states[0]!.state; continue; }
     const first = states[0]!;
-    const last = states[states.length - 1]!;
-    if (rt <= first.t) {
-      e.current = first.state;
-      continue;
-    }
+    const last  = states[states.length - 1]!;
+
+    if (rt <= first.t) { e.current = first.state; continue; }
+
     if (rt >= last.t) {
-      const extrapolateMs = Math.min(rt - last.t, REMOTE_MAX_EXTRAPOLATION_MS);
-      const extrapolateSec = extrapolateMs / 1000;
-      e.current = {
-        ...last.state,
-        position: {
-          x: last.state.position.x + last.state.velocity.x * extrapolateSec,
-          y: last.state.position.y + last.state.velocity.y * extrapolateSec
-        }
+      // Physics-based dead-reckoning: run shared stepPlayer() for the missing time.
+      // This correctly applies gravity and collisions instead of naive linear drift.
+      const extrapolateMs = Math.min(rt - last.t, extrapCapMs);
+      const steps = Math.round((extrapolateMs / 1000) / PHYSICS_STEP_SECONDS);
+      let extState = last.state;
+      const dri: PlayerInput = {
+        left:         last.state.velocity.x < -10,
+        right:        last.state.velocity.x >  10,
+        jumpPressed:  false,
+        jumpHeld:     last.state.velocity.y < 0,
+        drop:         false,
+        kick:         false,
+        sequence:     0,
       };
+      for (let i = 0; i < Math.min(steps, 8); i++) {
+        extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
+      }
+      e.current = extState;
       continue;
     }
 
+    // Standard linear interpolation between two bracketing snapshots.
     let bf = first, af = last;
     for (let i = 0; i < states.length - 1; i++) {
       if (states[i]!.t <= rt && states[i + 1]!.t >= rt) { bf = states[i]!; af = states[i + 1]!; break; }
     }
     const span = af.t - bf.t;
     const t = span > 0 ? Math.min(1, (rt - bf.t) / span) : 1;
-    e.current = { ...af.state, position: { x: bf.state.position.x + (af.state.position.x - bf.state.position.x) * t, y: bf.state.position.y + (af.state.position.y - bf.state.position.y) * t } };
+    e.current = {
+      ...af.state,
+      position: {
+        x: bf.state.position.x + (af.state.position.x - bf.state.position.x) * t,
+        y: bf.state.position.y + (af.state.position.y - bf.state.position.y) * t,
+      },
+    };
   }
 }
 
@@ -2312,6 +2401,7 @@ pixi.ticker.add((ticker) => {
   ensureChunksAhead();
   reqChunks();
   maybePing();
+  updateAdaptiveInterpDelay();
   updateParticles(dt);
   spawnAmbientParticles(dt);
   updateRelicAnims(tSec);

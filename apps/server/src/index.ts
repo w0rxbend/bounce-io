@@ -6,7 +6,6 @@ import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   MATCH_COUNTDOWN_SECONDS,
-  MATCH_TIMEOUT_SECONDS,
   MIN_PLAYERS_TO_START,
   PHYSICS_STEP_SECONDS,
   PLAYER_HEIGHT,
@@ -456,13 +455,6 @@ function tickRoom(room: ServerRoom): void {
     broadcastToAll(room, { type: "matchPhase", phase: "playing" });
   }
 
-  if (room.phase === "playing") {
-    const elapsed = (now - room.countdownEndMs) / 1000;
-    if (elapsed > MATCH_TIMEOUT_SECONDS) {
-      endMatch(room);
-    }
-  }
-
   // ── Physics simulation ────────────────────────────────────────────────────
 
   if (room.phase === "playing") {
@@ -505,14 +497,13 @@ function tickRoom(room: ServerRoom): void {
       // Relic collection only during active match
       if (room.phase === "playing") checkRelicCollection(room, pid, next);
 
-      // Finish detection (reached exit of a high chunk)
+      // Apex detection — player reached the exit of a high chunk; record milestone, keep playing
       if (room.phase === "playing" && playerChunkY >= 5) {
         const chunk = room.chunks.get(playerChunkY);
         if (chunk) {
           const exitPx = (chunk.worldTileY + chunk.exit.y) * TILE_SIZE;
-          if (next.position.y <= exitPx + 4) {
-            room.pendingEvents.push({ type: "PLAYER_FINISHED", playerId: pid });
-            endMatch(room);
+          if (next.position.y <= exitPx + 4 && playerChunkY > next.checkpointChunkY) {
+            room.pendingEvents.push({ type: "CHECKPOINT_REACHED", playerId: pid, chunkY: playerChunkY });
           }
         }
       }
@@ -528,6 +519,26 @@ function tickRoom(room: ServerRoom): void {
     }
     for (const p of activePlayers) {
       room.players.set(p.id, p);
+    }
+  }
+
+  // ── Chunk disposal — evict chunks far below every player's checkpoint ────────
+  {
+    const CHUNKS_KEEP_BEHIND_SERVER = 2;
+    let minCheckpoint = Infinity;
+    for (const [pid, s] of room.sessions) {
+      if (s.disconnectedAt !== null) continue;
+      const p = room.players.get(pid);
+      if (p) minCheckpoint = Math.min(minCheckpoint, p.checkpointChunkY);
+    }
+    if (minCheckpoint !== Infinity && minCheckpoint > CHUNKS_KEEP_BEHIND_SERVER) {
+      const disposeBelow = minCheckpoint - CHUNKS_KEEP_BEHIND_SERVER;
+      for (const cy of [...room.chunks.keys()]) {
+        if (cy < disposeBelow) {
+          room.chunks.delete(cy);
+          room.tileMapDirty = true;
+        }
+      }
     }
   }
 
