@@ -234,13 +234,23 @@ app.get(
             serverTime: Date.now(),
             tickRate: SERVER_TICK_RATE,
             matchPhase: room.phase,
-            seed: room.seed
+            seed: room.seed,
+            name: session.name,
           }));
 
           // Send chunk 0 to new player
           const chunk0 = room.chunks.get(0);
           if (chunk0) {
             ws.send(JSON.stringify({ type: "chunk", chunk: chunk0 }));
+          }
+
+          // Send existing players to the new joiner so they see correct names immediately
+          for (const [existingId, existingSess] of room.sessions) {
+            if (existingId === playerId || existingSess.disconnectedAt !== null) continue;
+            const existingPlayer = room.players.get(existingId);
+            if (existingPlayer) {
+              ws.send(JSON.stringify({ type: "playerJoined", player: existingPlayer, name: existingSess.name }));
+            }
           }
 
           room.pendingEvents.push({ type: "PLAYER_JOINED", playerId });

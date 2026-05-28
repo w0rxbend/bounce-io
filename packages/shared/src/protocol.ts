@@ -32,6 +32,7 @@ export type ServerMessage =
       tickRate: number;
       matchPhase: RoomPhase;
       seed: number;
+      name: string;
     }
   | {
       type: "resumed";

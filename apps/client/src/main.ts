@@ -103,10 +103,11 @@ const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 384px
 
 // ── Network interpolation tuning ──────────────────────────────────────────────
 const MIN_INTERP_DELAY_MS   = 50;    // floor for local/LAN play
-const MAX_INTERP_DELAY_MS   = 250;   // ceiling; beyond this the delay itself hurts
+const MAX_INTERP_DELAY_MS   = 300;   // ceiling; beyond this the delay itself hurts
 const SNAPSHOT_INTERVAL_MS  = 1000 / 20; // 50 ms — matches server SNAPSHOT_RATE
-const PING_HISTORY_SIZE     = 8;     // samples kept for jitter estimation
-let   adaptiveInterpDelayMs = 100;   // starts neutral, self-tunes each frame
+const PING_HISTORY_SIZE     = 16;    // larger window for more stable jitter estimate
+let   adaptiveInterpDelayMs = 100;   // starts neutral, self-tunes each pong
+let   smoothedRttMs         = 100;   // EMA-smoothed RTT used for delay target
 const CHUNKS_KEEP_BEHIND    = 2;     // chunks to keep below player before culling
 
 const ASSET_URLS = {
@@ -1825,6 +1826,10 @@ function drawHudCoinIcon(g: Graphics, x: number, y: number, frame: number): void
   g.rect(cx - 1, y - 1, w + 2, 12).fill({ color: PAL.coinGlow, alpha: 0.2 });
 }
 
+// Stable scoreboard row pool — reuse elements to avoid per-frame DOM churn.
+const scoreboardRowPool: HTMLElement[] = [];
+let lastScoreboardKey = "";
+
 let hudBuilt   = false;
 let hudPanelGfx: Graphics;
 let hudIconGfx:  Graphics;   // animated icons — cleared each frame
@@ -1942,31 +1947,36 @@ function updateHud(tSec: number): void {
     hudPhaseTxt.y = 10;
   }
 
-  // HTML scoreboard
-  scoreboard.replaceChildren();
-  for (const [i, r] of rows.entries()) {
-    const row = document.createElement("div");
-    row.className = `score-row${r.local ? " local" : ""}`;
-
-    const rank = document.createElement("span");
-    rank.className = "rank";
-    rank.textContent = String(i + 1);
-
-    const name = document.createElement("span");
-    name.className = "name";
-    const strongName = document.createElement("b");
-    strongName.textContent = r.name;
-    name.append(strongName);
-
-    const stat = document.createElement("span");
-    stat.className = "stat";
-    stat.textContent = `◆${r.coins}`;
-
-    const height = document.createElement("strong");
-    height.textContent = `${r.h}m`;
-
-    row.append(rank, name, stat, height);
-    scoreboard.append(row);
+  // HTML scoreboard — diff-update to avoid per-frame DOM churn causing flash artifacts.
+  const scoreKey = rows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";");
+  if (scoreKey !== lastScoreboardKey) {
+    lastScoreboardKey = scoreKey;
+    // Grow pool if needed.
+    while (scoreboardRowPool.length < rows.length) {
+      const row = document.createElement("div");
+      const rank  = document.createElement("span"); rank.className  = "rank";
+      const name_ = document.createElement("span"); name_.className = "name";
+      const b     = document.createElement("b");    name_.append(b);
+      const stat  = document.createElement("span"); stat.className  = "stat";
+      const ht    = document.createElement("strong");
+      row.append(rank, name_, stat, ht);
+      scoreboard.append(row);
+      scoreboardRowPool.push(row);
+    }
+    // Hide excess rows.
+    for (let i = rows.length; i < scoreboardRowPool.length; i++) {
+      scoreboardRowPool[i]!.style.display = "none";
+    }
+    // Update visible rows in-place.
+    for (const [i, r] of rows.entries()) {
+      const row = scoreboardRowPool[i]!;
+      row.style.display = "";
+      row.className = `score-row${r.local ? " local" : ""}`;
+      (row.children[0] as HTMLElement).textContent = String(i + 1);
+      (row.children[1]!.children[0] as HTMLElement).textContent = r.name;
+      (row.children[2] as HTMLElement).textContent = `◆${r.coins}`;
+      (row.children[3] as HTMLElement).textContent = `${r.h}m`;
+    }
   }
 }
 
@@ -2076,8 +2086,11 @@ function connectRoom(name: string): void {
 
     switch (parsed.type) {
       case "welcome":
-        updateServerClock(parsed.serverTime - Date.now());
+        // Bootstrap clock from welcome only once; pong NTP updates refine it from then on.
+        if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
+        // Store our own sanitized name so the scoreboard shows it correctly.
+        playerNames.set(localPlayerId, parsed.name);
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
           clearWorldChunks();
@@ -2089,13 +2102,12 @@ function connectRoom(name: string): void {
         resetLocalPrediction(); cameraSnap = true;
         break;
       case "resumed":
-        updateServerClock(parsed.serverTime - Date.now());
+        if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
         netStatus.textContent = "Reconnected.";
         localPlayer = clonePlayerState(parsed.playerState); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         break;
       case "snapshot":
-        updateServerClock(parsed.serverTime - Date.now());
         serverTick = parsed.tick; matchPhase = parsed.matchPhase;
         // Reconcile full collected set so late-joiners see correct coin state
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
@@ -2189,8 +2201,13 @@ function addPingSample(rtt: number): void {
   if (pingSamples.length > PING_HISTORY_SIZE) pingSamples.shift();
   if (pingSamples.length >= 2) {
     const mean = pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length;
-    pingJitterMs = pingSamples.reduce((s, v) => s + Math.abs(v - mean), 0) / pingSamples.length;
+    // Use 90th-percentile deviation as jitter to be resilient against occasional spikes.
+    const devs = pingSamples.map((v) => Math.abs(v - mean)).sort((a, b) => a - b);
+    pingJitterMs = devs[Math.floor(devs.length * 0.9)] ?? devs[devs.length - 1] ?? 0;
   }
+  // Smoothed RTT: grow fast on worsening, shrink slowly on recovery.
+  const alpha = rtt > smoothedRttMs ? 0.35 : 0.08;
+  smoothedRttMs += (rtt - smoothedRttMs) * alpha;
 }
 
 function updateServerClock(offsetMs: number): void {
@@ -2207,10 +2224,12 @@ function updateServerClock(offsetMs: number): void {
 
 function updateAdaptiveInterpDelay(): void {
   if (!hasServerClock || pingSamples.length < 2) return;
-  const target = pingMs / 2 + pingJitterMs + SNAPSHOT_INTERVAL_MS;
+  // Target: half the smoothed RTT + p90 jitter + one snapshot interval as safety margin.
+  // Using smoothedRttMs (not raw pingMs) avoids reacting to individual spike RTTs.
+  const target = smoothedRttMs * 0.5 + pingJitterMs * 1.5 + SNAPSHOT_INTERVAL_MS;
   const clamped = Math.max(MIN_INTERP_DELAY_MS, Math.min(MAX_INTERP_DELAY_MS, target));
-  // Grow fast when network worsens, shrink slowly when it improves.
-  const alpha = clamped > adaptiveInterpDelayMs ? 0.15 : 0.03;
+  // Grow fast when network worsens, shrink slowly when it recovers.
+  const alpha = clamped > adaptiveInterpDelayMs ? 0.20 : 0.03;
   adaptiveInterpDelayMs += (clamped - adaptiveInterpDelayMs) * alpha;
 }
 
