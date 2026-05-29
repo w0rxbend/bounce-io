@@ -4,7 +4,7 @@
 
 Skybound Relics is a pixel art vertical race through floating forest ruins. The world feels ancient, overgrown, and magical without losing competitive readability. A player must be able to parse platforms, hazards, coins, portals, opponents, and UI state in a single glance — especially at 1x browser scale.
 
-All visuals are currently generated programmatically via PixiJS `Graphics` calls in `apps/client/src/main.ts`. There are no external image assets or texture atlases. This document describes the implemented aesthetic and serves as the style guide for future hand-authored sprites.
+Visuals use a hybrid approach: gameplay-critical fallbacks are still drawn procedurally in PixiJS, while generated art lives as separate transparent PNG files under `apps/client/public/assets/`. Runtime gameplay assets should remain individual files rather than texture atlases or sprite sheets. See `docs/SEPARATE_ASSET_RULES.md` for the folder contract.
 
 ## Pixel Rules
 

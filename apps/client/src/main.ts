@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -111,144 +111,168 @@ let   smoothedRttMs         = 100;   // EMA-smoothed RTT used for delay target
 const CHUNKS_KEEP_BEHIND    = 2;     // chunks to keep below player before culling
 
 const ASSET_URLS = {
-  bgMountainPanorama: "/assets/pixel/bg_mountain_panorama_887x1774.png",
-  bgMountainWide:     "/assets/pixel/bg_mountain_wide_1024x192.png",
-  bgMountainWide2:    "/assets/pixel/bg_mountain_wide2_1024x192.png",
-  bgMountainTall:     "/assets/pixel/bg_mountain_tall_192x384.png",
-  aiForestRuinsPanorama: "/assets/generated/forest_ruins_ai_panorama.png",
-  bgCloudBank: "/assets/pixel/bg_cloud_bank_768x128.png",
-  bgSkyArches: "/assets/pixel/bg_sky_arches_768x432.png",
-  heroSheet: "/assets/pixel/hero_sheet_640x560.png",
-  environmentSheet: "/assets/pixel/environment_sheet_1024.png",
-  terrainTileset: "/assets/pixel/tileset_terrain_16.png",
-  tilemapShowcase: "/assets/pixel/tilemap_vertical_showcase.png",
-  bush: "/assets/pixel/bush_32.png",
-  cloud: "/assets/pixel/cloud_96.png",
-  cloudSmall: "/assets/pixel/cloud_small_64.png",
-  cloudTall: "/assets/pixel/cloud_tall_80.png",
-  cloudLong: "/assets/pixel/cloud_long_144.png",
-  cloudWispy: "/assets/pixel/cloud_wispy_128.png",
-  cloudCluster: "/assets/pixel/cloud_cluster_160.png",
-  cloudFlat: "/assets/pixel/cloud_flat_192.png",
-  cloudStreak: "/assets/pixel/cloud_streak_224.png",
-  cloudPuff: "/assets/pixel/cloud_puff_112.png",
-  coin: "/assets/pixel/coin_16.png",
-  coinSpin0: "/assets/pixel/coin_spin_0_16.png",
-  coinSpin1: "/assets/pixel/coin_spin_1_16.png",
-  coinSpin2: "/assets/pixel/coin_spin_2_16.png",
-  coinSpin3: "/assets/pixel/coin_spin_3_16.png",
-  collectibleRing: "/assets/pixel/collectible_ring_24.png",
-  collectibleSparkle: "/assets/pixel/collectible_sparkle_16.png",
-  crown: "/assets/pixel/crown_16.png",
-  crystalMarker: "/assets/pixel/crystal_marker_16x24.png",
-  fence: "/assets/pixel/fence_32x16.png",
-  flowerPatch: "/assets/pixel/flower_patch_16.png",
-  floatingIsland: "/assets/pixel/floating_island_96.png",
-  grassClump: "/assets/pixel/grass_clump_16.png",
-  hazardSpikes: "/assets/pixel/hazard_spikes_16.png",
-  heightArrow: "/assets/pixel/height_arrow_16.png",
-  hudPanel: "/assets/pixel/hud_panel_96.png",
-  lanternCyan: "/assets/pixel/lantern_cyan_16x24.png",
-  leafCluster: "/assets/pixel/leaf_cluster_16.png",
-  gemCyan0: "/assets/pixel/gem_cyan_0_16.png",
-  gemCyan1: "/assets/pixel/gem_cyan_1_16.png",
-  gemCyan2: "/assets/pixel/gem_cyan_2_16.png",
-  gemCyan3: "/assets/pixel/gem_cyan_3_16.png",
-  mossPlatformRoots: "/assets/pixel/moss_platform_roots_32.png",
-  mossPlatformRunes: "/assets/pixel/moss_platform_runes_32.png",
-  mossPlatform: "/assets/pixel/moss_platform_32.png",
-  mossPlatformCracked: "/assets/pixel/moss_platform_cracked_32.png",
-  mossPlatformOverhang: "/assets/pixel/moss_platform_overhang_32.png",
-  mossPlatformFlowers: "/assets/pixel/moss_platform_flowers_32.png",
-  mushroomCluster: "/assets/pixel/mushroom_cluster_24.png",
-  pebbleCluster: "/assets/pixel/pebble_cluster_16.png",
-  playerExplorer: "/assets/pixel/player_explorer_24x32.png",
-  playerIdle: "/assets/pixel/player_idle_24x32.png",
-  playerRun1: "/assets/pixel/player_run_1_24x32.png",
-  playerRun2: "/assets/pixel/player_run_2_24x32.png",
-  playerJump: "/assets/pixel/player_jump_24x32.png",
-  playerFall: "/assets/pixel/player_fall_24x32.png",
-  playerKick: "/assets/pixel/player_kick_24x32.png",
-  portalArch: "/assets/pixel/portal_arch_64.png",
-  relicPink0: "/assets/pixel/relic_pink_0_16.png",
-  relicPink1: "/assets/pixel/relic_pink_1_16.png",
-  relicPink2: "/assets/pixel/relic_pink_2_16.png",
-  relicPink3: "/assets/pixel/relic_pink_3_16.png",
-  runeStone: "/assets/pixel/rune_stone_16.png",
-  seedGreen0: "/assets/pixel/seed_green_0_16.png",
-  seedGreen1: "/assets/pixel/seed_green_1_16.png",
-  seedGreen2: "/assets/pixel/seed_green_2_16.png",
-  seedGreen3: "/assets/pixel/seed_green_3_16.png",
-  ropeBridge: "/assets/pixel/rope_bridge_48x16.png",
-  ruinArchFragment: "/assets/pixel/ruin_arch_fragment_32.png",
-  signpost: "/assets/pixel/signpost_16x24.png",
-  starShard0: "/assets/pixel/star_shard_0_16.png",
-  starShard1: "/assets/pixel/star_shard_1_16.png",
-  starShard2: "/assets/pixel/star_shard_2_16.png",
-  starShard3: "/assets/pixel/star_shard_3_16.png",
-  stoneLedge: "/assets/pixel/stone_ledge_48.png",
-  stump: "/assets/pixel/stump_24x24.png",
-  tree: "/assets/pixel/tree_48.png",
-  ruinColumn: "/assets/pixel/ruin_column_24x40.png",
-  vineHanging: "/assets/pixel/vine_hanging_16.png",
+  bgMountainPanorama: "/assets/environment/backgrounds/mountain_panorama.png",
+  bgMountainWide: "/assets/environment/backgrounds/mountain_wide.png",
+  bgMountainWide2: "/assets/environment/backgrounds/mountain_wide_alt.png",
+  bgMountainTall: "/assets/environment/backgrounds/mountain_tall.png",
+  aiForestRuinsPanorama: "/assets/environment/backgrounds/forest_ruins_panorama.png",
+  bgCloudBank: "/assets/environment/backgrounds/cloud_bank.png",
+  bgSkyArches: "/assets/environment/backgrounds/sky_arches.png",
+  bush: "/assets/environment/vegetation/bush_1.png",
+  cloud: "/assets/environment/backgrounds/cloud.png",
+  cloudSmall: "/assets/environment/backgrounds/cloud_small.png",
+  cloudTall: "/assets/environment/backgrounds/cloud_tall.png",
+  cloudLong: "/assets/environment/backgrounds/cloud_long.png",
+  cloudWispy: "/assets/environment/backgrounds/cloud_wispy.png",
+  cloudCluster: "/assets/environment/backgrounds/cloud_cluster.png",
+  cloudFlat: "/assets/environment/backgrounds/cloud_flat.png",
+  cloudStreak: "/assets/environment/backgrounds/cloud_streak.png",
+  cloudPuff: "/assets/environment/backgrounds/cloud_puff.png",
+  coin: "/assets/environment/collectibles/coin_1.png",
+  coinSpin0: "/assets/environment/collectibles/coin_spin_frame1.png",
+  coinSpin1: "/assets/environment/collectibles/coin_spin_frame2.png",
+  coinSpin2: "/assets/environment/collectibles/coin_spin_frame3.png",
+  coinSpin3: "/assets/environment/collectibles/coin_spin_frame4.png",
+  collectibleRing: "/assets/environment/effects/collectible_ring_1.png",
+  collectibleSparkle: "/assets/environment/effects/collectible_sparkle_1.png",
+  crown: "/assets/environment/ui/crown_1.png",
+  crystalMarker: "/assets/environment/structures/crystal_marker_1.png",
+  fence: "/assets/environment/structures/fence_1.png",
+  flowerPatch: "/assets/environment/vegetation/flower_patch_1.png",
+  floatingIsland: "/assets/environment/platforms/floating_island_1.png",
+  grassClump: "/assets/environment/vegetation/grass_clump_1.png",
+  hazardSpikes: "/assets/environment/hazards/spikes_1.png",
+  heightArrow: "/assets/environment/ui/height_arrow_1.png",
+  hudPanel: "/assets/environment/ui/hud_panel_1.png",
+  lanternCyan: "/assets/environment/lights/lantern_cyan_1.png",
+  leafCluster: "/assets/environment/vegetation/leaf_cluster_1.png",
+  gemCyan0: "/assets/environment/collectibles/gem_variant1.png",
+  gemCyan1: "/assets/environment/collectibles/gem_variant2.png",
+  gemCyan2: "/assets/environment/collectibles/gem_variant3.png",
+  gemCyan3: "/assets/environment/collectibles/gem_variant4.png",
+  mossPlatformRoots: "/assets/environment/platforms/moss_platform_roots_1.png",
+  mossPlatformRunes: "/assets/environment/platforms/moss_platform_runes_1.png",
+  mossPlatform: "/assets/environment/platforms/moss_platform_1.png",
+  mossPlatformCracked: "/assets/environment/platforms/moss_platform_cracked_1.png",
+  mossPlatformOverhang: "/assets/environment/platforms/moss_platform_overhang_1.png",
+  mossPlatformFlowers: "/assets/environment/platforms/moss_platform_flowers_1.png",
+  mushroomCluster: "/assets/environment/vegetation/mushroom_cluster_1.png",
+  pebbleCluster: "/assets/environment/vegetation/pebble_cluster_1.png",
+  rockCap: "/assets/environment/rocks/stone_cap_1.png",
+  rockCluster: "/assets/environment/rocks/rock_cluster_plain_1.png",
+  rockClusterMoss: "/assets/environment/rocks/rock_cluster_moss_1.png",
+  rockSpire: "/assets/environment/rocks/rock_spire_1.png",
+  snowPlatform: "/assets/environment/platformVariants/snow_platform.png",
+  frozenPlatform: "/assets/environment/platformVariants/frozen_platform.png",
+  summitPlatform: "/assets/environment/platformVariants/summit_platform.png",
+  crumblingPlatform: "/assets/environment/platformVariants/crumbling_platform.png",
+  tallPillar: "/assets/environment/platformVariants/tall_pillar.png",
+  brokenCliff: "/assets/environment/platformVariants/broken_cliff.png",
+  reedGrassWheat: "/assets/environment/flora/reed_grass_wheat_1.png",
+  reedGrassYellow: "/assets/environment/flora/reed_grass_yellow_1.png",
+  flowerPink: "/assets/environment/flora/flower_pink_1.png",
+  wildflowerMixed: "/assets/environment/flora/wildflower_mixed_1.png",
+  wildflowerPink: "/assets/environment/flora/wildflower_pink_1.png",
+  wildflowerYellow: "/assets/environment/flora/wildflower_yellow_1.png",
+  snowTree: "/assets/environment/snowTrees/snow_pine.png",
+  bentPine: "/assets/environment/snowTrees/frosted_bent_pine.png",
+  fallingIcicle: "/assets/environment/hazards/falling_icicle_1.png",
+  windZone: "/assets/environment/hazards/wind_zone_1.png",
+  lightningHazard: "/assets/environment/hazards/lightning_1.png",
+  rollingBoulder: "/assets/environment/hazards/rolling_boulder_1.png",
+  jumpPad: "/assets/environment/relicShrines/jump_pad_1.png",
+  climbingChain: "/assets/environment/ladders/climbing_chain.png",
+  relicShrine: "/assets/environment/relicShrines/relic_shrine_1.png",
+  ancientBeacon: "/assets/environment/relicShrines/ancient_beacon_1.png",
+  magicOrbBlue: "/assets/environment/collectibles/magic_orb_blue_1.png",
+  magicOrbGold: "/assets/environment/collectibles/magic_orb_gold_1.png",
+  enemyGoblin: "/assets/environment/enemies/goblin_1.png",
+  enemyArcher: "/assets/environment/enemies/archer_1.png",
+  enemyIceBat: "/assets/environment/enemies/ice_bat_1.png",
+  enemySkeleton: "/assets/environment/enemies/skeleton_1.png",
+  enemyYeti: "/assets/environment/enemies/yeti_1.png",
+  enemyWindSpirit: "/assets/environment/enemies/wind_spirit_1.png",
+  playerExplorer: "/assets/playable_characters/character1/main_body.png",
+  playerIdle: "/assets/playable_characters/character1/idle_frame1.png",
+  playerRun1: "/assets/playable_characters/character1/running_frame2.png",
+  playerRun2: "/assets/playable_characters/character1/running_frame5.png",
+  playerJump: "/assets/playable_characters/character1/jumping_frame1.png",
+  playerFall: "/assets/playable_characters/character1/falling_frame1.png",
+  playerKick: "/assets/playable_characters/character1/kick_frame2.png",
+  portalArch: "/assets/environment/effects/portal_arch_1.png",
+  relicPink0: "/assets/environment/collectibles/relic_pink_frame1.png",
+  relicPink1: "/assets/environment/collectibles/relic_pink_frame2.png",
+  relicPink2: "/assets/environment/collectibles/relic_pink_frame3.png",
+  relicPink3: "/assets/environment/collectibles/relic_pink_frame4.png",
+  runeStone: "/assets/environment/structures/rune_stone_1.png",
+  seedGreen0: "/assets/environment/collectibles/seed_green_frame1.png",
+  seedGreen1: "/assets/environment/collectibles/seed_green_frame2.png",
+  seedGreen2: "/assets/environment/collectibles/seed_green_frame3.png",
+  seedGreen3: "/assets/environment/collectibles/seed_green_frame4.png",
+  ropeBridge: "/assets/environment/structures/rope_bridge_1.png",
+  ruinArchFragment: "/assets/environment/structures/ruin_arch_fragment_1.png",
+  signpost: "/assets/environment/structures/signpost_1.png",
+  starShard0: "/assets/environment/collectibles/star_shard_frame1.png",
+  starShard1: "/assets/environment/collectibles/star_shard_frame2.png",
+  starShard2: "/assets/environment/collectibles/star_shard_frame3.png",
+  starShard3: "/assets/environment/collectibles/star_shard_frame4.png",
+  stoneLedge: "/assets/environment/platforms/stone_ledge_1.png",
+  stump: "/assets/environment/vegetation/stump_1.png",
+  tree: "/assets/environment/vegetation/tree_pine_1.png",
+  ruinColumn: "/assets/environment/structures/ruin_column_1.png",
+  vineHanging: "/assets/environment/vegetation/vine_hanging_1.png",
 } as const;
 
 type AssetKey = keyof typeof ASSET_URLS;
 
-const HERO_SPRITE_SCALE = 0.58;
-const HERO_FALLBACK_ANCHOR_Y = 0.9;
-const HERO_SHEET_META_URL = "/assets/pixel/hero_sheet.json";
-const HERO_ANIMATION_NAMES = ["idle", "walk", "run", "jump_fall", "kick_push", "shoot_fire", "hit_death_special"] as const;
+const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
+type BiomeId = typeof BIOME_IDS[number];
 
-type HeroAnimationName = typeof HERO_ANIMATION_NAMES[number];
-
-interface HeroSheetAnimation {
-  row: number;
-  frames: number[];
-  durationMs: number;
+function biomeForChunkY(chunkY: number): BiomeId {
+  if (chunkY >= 16) return "celestialSummit";
+  if (chunkY >= 12) return "frozenSpires";
+  if (chunkY >= 8) return "snowfallCliffs";
+  if (chunkY >= 4) return "cloudRidge";
+  return "pineValley";
 }
 
-interface HeroSheetFrame {
-  frame: { x: number; y: number; w: number; h: number };
-  sourceSize: { w: number; h: number };
-  spriteSourceSize: { x: number; y: number; w: number; h: number };
-  pivot: { x: number; y: number };
-  tags: string[];
-  durationMs: number;
+function altitude01(chunkY: number, start: number, end: number): number {
+  return Math.max(0, Math.min(1, (chunkY - start) / Math.max(1, end - start)));
 }
 
-interface HeroSheetMetadata {
-  image: string;
-  frameWidth: number;
-  frameHeight: number;
-  columns: number;
-  rows: number;
-  anchor: { x: number; y: number };
-  anchorPixel?: { x: number; y: number };
-  animations: Record<string, HeroSheetAnimation>;
-  frames: Record<string, HeroSheetFrame>;
-}
+const CHARACTER_IDS = ["character1", "character2", "character3", "character4"] as const;
+const CHARACTER_ANIMATION_NAMES = ["idle", "walk", "run", "jump_fall", "kick_push", "shoot_fire", "hit_death_special"] as const;
+const CHARACTER_SPRITE_SCALE = 0.72;
+const CHARACTER_ANCHOR_Y = 0.96;
 
-interface HeroRuntimeAnimation {
+type CharacterId = typeof CHARACTER_IDS[number];
+type CharacterAnimationName = typeof CHARACTER_ANIMATION_NAMES[number];
+
+interface CharacterRuntimeAnimation {
   textures: Texture[];
   durationMs: number;
 }
 
-interface HeroAtlas {
-  aliases: Partial<Record<AssetKey, Texture>>;
-  animations: Partial<Record<HeroAnimationName, HeroRuntimeAnimation>>;
+interface CharacterRig {
+  main: Texture;
+  animations: Partial<Record<CharacterAnimationName, CharacterRuntimeAnimation>>;
   anchorY: number;
 }
 
-const HERO_ALIAS_FRAMES = {
-  playerExplorer: { animation: "idle", index: 0 },
-  playerIdle:     { animation: "idle", index: 1 },
-  playerRun1:     { animation: "run", index: 1 },
-  playerRun2:     { animation: "run", index: 4 },
-  playerJump:     { animation: "jump_fall", index: 1 },
-  playerFall:     { animation: "jump_fall", index: 5 },
-  playerKick:     { animation: "kick_push", index: 2 },
-} satisfies Partial<Record<AssetKey, { animation: HeroAnimationName; index: number }>>;
+const CHARACTER_ANIMATION_URLS = Object.fromEntries(CHARACTER_IDS.map((id) => [id, {
+  main: `/assets/playable_characters/${id}/main_body.png`,
+  idle: frameUrls(id, "idle", 4),
+  walk: frameUrls(id, "walking", 6),
+  run: frameUrls(id, "running", 6),
+  jump_fall: [...frameUrls(id, "jumping", 2), ...frameUrls(id, "falling", 2)],
+  kick_push: frameUrls(id, "kick", 3),
+  shoot_fire: frameUrls(id, "shooting", 4),
+  hit_death_special: frameUrls(id, "lying_dead", 2),
+}])) as Record<CharacterId, { main: string } & Record<CharacterAnimationName, string[]>>;
+
+function frameUrls(characterId: CharacterId, animation: string, count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `/assets/playable_characters/${characterId}/${animation}_frame${i + 1}.png`);
+}
 
 // ── HTML shell ────────────────────────────────────────────────────────────────
 
@@ -315,83 +339,58 @@ async function loadPixelAssets(): Promise<Partial<Record<AssetKey, Texture>>> {
   return loaded;
 }
 
-async function loadHeroSheetMetadata(): Promise<HeroSheetMetadata | null> {
-  try {
-    return await Assets.load<HeroSheetMetadata>({ src: HERO_SHEET_META_URL, parser: "json" });
-  } catch (err) {
-    console.warn(`Could not load hero sheet metadata ${HERO_SHEET_META_URL}`, err);
-    return null;
-  }
-}
-
 const pixelAssets = await loadPixelAssets();
-const heroSheetMetadata = await loadHeroSheetMetadata();
-const heroAtlas = createHeroAtlas(pixelAssets.heroSheet, heroSheetMetadata);
+const characterRigs = await loadCharacterRigs();
 
-function isHeroAnimationName(name: string): name is HeroAnimationName {
-  return (HERO_ANIMATION_NAMES as readonly string[]).includes(name);
+async function loadCharacterRigs(): Promise<Partial<Record<CharacterId, CharacterRig>>> {
+  const rigs: Partial<Record<CharacterId, CharacterRig>> = {};
+  await Promise.all(CHARACTER_IDS.map(async (id) => {
+    const spec = CHARACTER_ANIMATION_URLS[id];
+    try {
+      const main = await Assets.load<Texture>(spec.main);
+      const animations: Partial<Record<CharacterAnimationName, CharacterRuntimeAnimation>> = {};
+      await Promise.all(CHARACTER_ANIMATION_NAMES.map(async (name) => {
+        const textures = await loadTextureSequence(spec[name]);
+        if (textures.length > 0) {
+          animations[name] = { textures, durationMs: durationForCharacterAnimation(name) };
+        }
+      }));
+      rigs[id] = { main, animations, anchorY: CHARACTER_ANCHOR_Y };
+    } catch (err) {
+      console.warn(`Could not load character rig ${id}`, err);
+    }
+  }));
+  return rigs;
 }
 
-function createHeroAtlas(sheet?: Texture, metadata?: HeroSheetMetadata | null): HeroAtlas {
-  if (!sheet || sheet === Texture.EMPTY || !metadata) {
-    return { aliases: {}, animations: {}, anchorY: HERO_FALLBACK_ANCHOR_Y };
-  }
-
-  const expectedW = metadata.columns * metadata.frameWidth;
-  const expectedH = metadata.rows * metadata.frameHeight;
-  if (sheet.width !== expectedW || sheet.height !== expectedH) {
-    console.warn(`Hero sheet mismatch: texture is ${sheet.width}x${sheet.height}, metadata expects ${expectedW}x${expectedH}`);
-    return { aliases: {}, animations: {}, anchorY: HERO_FALLBACK_ANCHOR_Y };
-  }
-
-  const frameTextures: Record<string, Texture> = {};
-  const anchorY = metadata.anchor?.y ?? HERO_FALLBACK_ANCHOR_Y;
-
-  for (const [name, info] of Object.entries(metadata.frames)) {
-    if (
-      info.frame.x < 0 || info.frame.y < 0 ||
-      info.frame.x + info.frame.w > sheet.width ||
-      info.frame.y + info.frame.h > sheet.height
-    ) {
-      console.warn(`Skipping out-of-bounds hero frame ${name}`);
-      continue;
+async function loadTextureSequence(urls: string[]): Promise<Texture[]> {
+  const textures = await Promise.all(urls.map(async (url) => {
+    try {
+      return await Assets.load<Texture>(url);
+    } catch (err) {
+      console.warn(`Could not load character frame ${url}`, err);
+      return null;
     }
-    frameTextures[name] = new Texture({
-      source: sheet.source,
-      frame: new Rectangle(info.frame.x, info.frame.y, info.frame.w, info.frame.h),
-      orig: new Rectangle(0, 0, info.sourceSize.w, info.sourceSize.h),
-      defaultAnchor: { x: metadata.anchor?.x ?? 0.5, y: anchorY },
-      label: name,
-    });
-  }
+  }));
+  return textures.filter((texture): texture is Texture => !!texture && texture !== Texture.EMPTY);
+}
 
-  const animations: Partial<Record<HeroAnimationName, HeroRuntimeAnimation>> = {};
-  for (const [name, animation] of Object.entries(metadata.animations)) {
-    if (!isHeroAnimationName(name)) continue;
-    const textures = animation.frames
-      .map((col) => frameTextures[`hero_r${animation.row}_c${col}`])
-      .filter((texture): texture is Texture => !!texture);
-    if (textures.length > 0) {
-      animations[name] = { textures, durationMs: Math.max(16, animation.durationMs) };
-    }
-  }
-
-  const aliases: Partial<Record<AssetKey, Texture>> = {};
-  for (const [key, ref] of Object.entries(HERO_ALIAS_FRAMES) as [AssetKey, { animation: HeroAnimationName; index: number }][]) {
-    const animation = animations[ref.animation];
-    if (!animation || animation.textures.length === 0) continue;
-    aliases[key] = animation.textures[Math.min(ref.index, animation.textures.length - 1)];
-  }
-
-  return { aliases, animations, anchorY };
+function durationForCharacterAnimation(name: CharacterAnimationName): number {
+  if (name === "run") return 82;
+  if (name === "walk") return 115;
+  if (name === "idle") return 180;
+  if (name === "shoot_fire") return 85;
+  if (name === "kick_push") return 95;
+  if (name === "hit_death_special") return 180;
+  return 120;
 }
 
 function assetTexture(key: AssetKey): Texture {
-  return heroAtlas.aliases[key] ?? pixelAssets[key] ?? Texture.EMPTY;
+  return pixelAssets[key] ?? Texture.EMPTY;
 }
 
 function hasAsset(key: AssetKey): boolean {
-  return !!heroAtlas.aliases[key] || !!pixelAssets[key];
+  return !!pixelAssets[key];
 }
 
 function makeSprite(key: AssetKey): Sprite {
@@ -400,40 +399,52 @@ function makeSprite(key: AssetKey): Sprite {
   return s;
 }
 
-function hasPlayerAnimationAssets(): boolean {
-  return hasHeroAnimationSheet() || (hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick"));
+function makeCharacterSprite(characterId: CharacterId): Sprite {
+  const s = new Sprite(characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer"));
+  s.roundPixels = true;
+  return s;
 }
 
-function hasHeroAnimationSheet(): boolean {
-  return !!heroAtlas.animations.idle && !!heroAtlas.animations.run && !!heroAtlas.animations.jump_fall && !!heroAtlas.animations.kick_push;
+function hasPlayerAnimationAssets(): boolean {
+  return hasCharacterAnimationAssets("character1") || (hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick"));
+}
+
+function hasCharacterAnimationAssets(characterId: CharacterId): boolean {
+  const rig = characterRigs[characterId];
+  return !!rig?.animations.idle && !!rig.animations.run && !!rig.animations.jump_fall && !!rig.animations.kick_push;
 }
 
 function playerSpriteScale(): number {
-  return hasHeroAnimationSheet() ? HERO_SPRITE_SCALE : 1;
+  return hasPlayerAnimationAssets() ? CHARACTER_SPRITE_SCALE : 1;
 }
 
 function playerSpriteAnchorY(): number {
-  return hasHeroAnimationSheet() ? heroAtlas.anchorY : 1;
+  return hasPlayerAnimationAssets() ? CHARACTER_ANCHOR_Y : 1;
 }
 
-function heroAnimationTexture(name: HeroAnimationName, elapsed: number): Texture | null {
-  const animation = heroAtlas.animations[name];
+function characterAnimationTexture(characterId: CharacterId, name: CharacterAnimationName, elapsed: number): Texture | null {
+  const rig = characterRigs[characterId] ?? characterRigs.character1;
+  const animation = rig?.animations[name];
   if (!animation || animation.textures.length === 0) return null;
   const frame = Math.floor(elapsed / animation.durationMs) % animation.textures.length;
   return animation.textures[frame] ?? null;
 }
 
-function playerAnimationTexture(s: PlayerState, elapsed: number): Texture | null {
-  if (!hasHeroAnimationSheet()) return null;
-  if (s.kickPhase === "active") return heroAnimationTexture("shoot_fire", elapsed) ?? heroAnimationTexture("kick_push", elapsed);
-  if (s.kickPhase !== "idle") return heroAnimationTexture("kick_push", elapsed);
-  if (s.invulnerable > 0) return heroAnimationTexture("hit_death_special", elapsed) ?? heroAnimationTexture("idle", elapsed);
-  if (!s.grounded) return heroAnimationTexture("jump_fall", elapsed);
+function characterForRemote(colorIndex: number): CharacterId {
+  return CHARACTER_IDS[colorIndex % CHARACTER_IDS.length]!;
+}
+
+function playerAnimationTexture(s: PlayerState, elapsed: number, characterId: CharacterId = "character1"): Texture | null {
+  if (!hasCharacterAnimationAssets(characterId)) return null;
+  if (s.kickPhase === "active") return characterAnimationTexture(characterId, "shoot_fire", elapsed) ?? characterAnimationTexture(characterId, "kick_push", elapsed);
+  if (s.kickPhase !== "idle") return characterAnimationTexture(characterId, "kick_push", elapsed);
+  if (s.invulnerable > 0) return characterAnimationTexture(characterId, "hit_death_special", elapsed) ?? characterAnimationTexture(characterId, "idle", elapsed);
+  if (!s.grounded) return characterAnimationTexture(characterId, "jump_fall", elapsed);
 
   const speed = Math.abs(s.velocity.x);
-  if (speed > 115) return heroAnimationTexture("run", elapsed);
-  if (speed > 28) return heroAnimationTexture("walk", elapsed) ?? heroAnimationTexture("run", elapsed);
-  return heroAnimationTexture("idle", elapsed);
+  if (speed > 115) return characterAnimationTexture(characterId, "run", elapsed);
+  if (speed > 28) return characterAnimationTexture(characterId, "walk", elapsed) ?? characterAnimationTexture(characterId, "run", elapsed);
+  return characterAnimationTexture(characterId, "idle", elapsed);
 }
 
 function fallbackPlayerAnimationAsset(s: PlayerState, elapsed: number): AssetKey {
@@ -480,15 +491,15 @@ function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
   return "cloud";
 }
 
-function platformCapAsset(seed: number): AssetKey {
-  const variants: AssetKey[] = [
-    "mossPlatform",
-    "mossPlatformCracked",
-    "mossPlatformOverhang",
-    "mossPlatformFlowers",
-    "mossPlatformRoots",
-    "mossPlatformRunes",
-  ];
+function platformCapAsset(seed: number, biome: BiomeId): AssetKey {
+  const variantsByBiome: Record<BiomeId, AssetKey[]> = {
+    pineValley: ["mossPlatform", "mossPlatformFlowers", "mossPlatformRoots", "mossPlatformCracked"],
+    cloudRidge: ["mossPlatformRunes", "stoneLedge", "snowPlatform", "mossPlatformOverhang"],
+    snowfallCliffs: ["snowPlatform", "crumblingPlatform", "stoneLedge", "frozenPlatform"],
+    frozenSpires: ["frozenPlatform", "snowPlatform", "crumblingPlatform", "brokenCliff"],
+    celestialSummit: ["summitPlatform", "frozenPlatform", "mossPlatformRunes", "stoneLedge"],
+  };
+  const variants = variantsByBiome[biome];
   for (let tries = 0; tries < variants.length; tries++) {
     const key = variants[(seed + tries) % variants.length]!;
     if (hasAsset(key)) return key;
@@ -499,12 +510,15 @@ function platformCapAsset(seed: number): AssetKey {
 // ── Layer hierarchy ───────────────────────────────────────────────────────────
 // skyLayer    — screen-space parallax bg (not inside worldLayer)
 // worldLayer  — world-space (camera-transformed)
-//   chunkLayer  — static tile Graphics per loaded chunk
-//   relicLayer  — animated coin containers
-//   remoteLayer — opponent sprites (persistent Graphics per player)
-//   localLayer  — local player sprite
-//   effectLayer — particles
-// hudLayer    — screen-space UI overlay
+//   backDecorationLayer — backgroundMid / non-colliding scenery
+//   chunkLayer          — terrain / simple rectangular collision tiles
+//   decorationLayer     — decorations / hazards as non-blocking sprites
+//   portalLayer         — relic shrines and portal effects
+//   relicLayer          — collectibles
+//   remoteLayer         — players
+//   localLayer          — players
+//   effectLayer         — particles
+// hudLayer              — ui
 
 const skyLayer    = new Container();
 const worldLayer  = new Container();
@@ -598,7 +612,7 @@ let cloudDriftMid   = 0;
 let cloudDriftFront = 0;
 
 // Pre-allocated persistent graphics for local player
-const localSprite = makeSprite("playerExplorer");
+const localSprite = makeCharacterSprite("character1");
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
 localSprite.anchor.set(0.5, playerSpriteAnchorY());
@@ -941,17 +955,17 @@ function buildSkyStatic(sw: number, sh: number): void {
     mSprite.x = Math.round((sw - mW) / 2);
     // Anchor at bottom: valley floor sits at the ground-level screen bottom.
     mSprite.y = Math.round(sh - mH);
-    mSprite.alpha = 0.88;
+    mSprite.alpha = 1;
     aiPanoramaBack.addChild(mSprite);
   } else {
     addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
   }
 
   skyArchesBack.removeChildren();
-  addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.34);
+  addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.12);
 
   cloudBankBack.removeChildren();
-  addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.42);
+  addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.18);
 
   // Distant floating island silhouettes
   islandsFar.removeChildren();
@@ -1096,7 +1110,7 @@ function updateSkyParallax(camY: number, scale: number): void {
   // Moderate parallax so the valley floor shows near ground and peaks emerge as
   // the player climbs. Alpha stays high; fades gently at near-space altitudes.
   aiPanoramaBack.y = Math.round(scrollPx * 0.07);
-  aiPanoramaBack.alpha = Math.max(0.55, 0.88 - t * 0.33);
+  aiPanoramaBack.alpha = Math.max(0.72, 1 - t * 0.18);
   forestPanoramaBack.y = scrollPx * 0.035;
   forestPanoramaBack.alpha = Math.max(0.08, 0.38 - t * 0.28);
   skyArchesBack.y   = scrollPx * 0.025;
@@ -1180,6 +1194,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
   back.sortableChildren = true;
   front.sortableChildren = true;
   const baseTileY = chunk.worldTileY;
+  const biome = biomeForChunkY(chunk.chunkY);
 
   for (let ly = 0; ly < chunk.height; ly++) {
     for (let lx = 0; lx < chunk.width; lx++) {
@@ -1188,20 +1203,26 @@ function decorateChunk(chunk: GeneratedChunk): void {
       const seed = (chunk.chunkY * 92821 + lx * 3701 + ly * 809) >>> 0;
       const kind = chunk.tiles[ly * chunk.width + lx] as TileKind;
 
-      if (kind === "hazard" && hasAsset("hazardSpikes")) {
-        const spikes = makeSprite("hazardSpikes");
-        spikes.x = wx;
-        spikes.y = wy;
-        spikes.alpha = 0.96;
-        spikes.zIndex = 3;
-        front.addChild(spikes);
+      if (kind === "hazard") {
+        const hazardKey: AssetKey =
+          biome === "celestialSummit" && hasAsset("lightningHazard") ? "lightningHazard" :
+          (biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("fallingIcicle") ? "fallingIcicle" :
+          "hazardSpikes";
+        if (hasAsset(hazardKey)) {
+          const hazard = makeSprite(hazardKey);
+          hazard.x = hazardKey === "lightningHazard" ? wx - 4 : wx;
+          hazard.y = hazardKey === "fallingIcicle" ? wy - 16 : hazardKey === "lightningHazard" ? wy - 24 : wy;
+          hazard.alpha = 0.96;
+          hazard.zIndex = 4;
+          front.addChild(hazard);
+        }
         continue;
       }
 
       if (!canPlaceDecoration(chunk, lx, ly)) continue;
 
       if (hasAsset("mossPlatform") && lx % 2 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const cap = makeSprite(platformCapAsset(seed));
+        const cap = makeSprite(platformCapAsset(seed, biome));
         cap.x = wx;
         cap.y = wy - 1;
         cap.alpha = 0.92;
@@ -1218,7 +1239,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(ledge);
       }
 
-      if (hasAsset("grassClump") && seed % 7 === 0) {
+      if (biome !== "frozenSpires" && biome !== "celestialSummit" && hasAsset("grassClump") && seed % 7 === 0) {
         const grass = makeSprite("grassClump");
         grass.x = wx + (seed % 5);
         grass.y = wy - 12;
@@ -1227,7 +1248,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(grass);
       }
 
-      if (hasAsset("flowerPatch") && seed % 19 === 0) {
+      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("flowerPatch") && seed % 19 === 0) {
         const flower = makeSprite("flowerPatch");
         flower.x = wx;
         flower.y = wy - 13;
@@ -1236,7 +1257,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(flower);
       }
 
-      if (hasAsset("leafCluster") && seed % 11 === 0) {
+      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("leafCluster") && seed % 11 === 0) {
         const leaves = makeSprite("leafCluster");
         leaves.x = wx + (seed % 4);
         leaves.y = wy - 14;
@@ -1245,7 +1266,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(leaves);
       }
 
-      if (hasAsset("vineHanging") && seed % 17 === 0) {
+      if (biome !== "celestialSummit" && hasAsset("vineHanging") && seed % 17 === 0) {
         const vine = makeSprite("vineHanging");
         vine.x = wx + (seed % 6);
         vine.y = wy + TILE_SIZE - 2;
@@ -1261,6 +1282,60 @@ function decorateChunk(chunk: GeneratedChunk): void {
         pebbles.alpha = 0.72;
         pebbles.zIndex = 2;
         front.addChild(pebbles);
+      }
+
+      if (hasAsset("rockCap") && seed % 89 === 0) {
+        const cap = makeSprite("rockCap");
+        cap.x = wx - 2;
+        cap.y = wy - 9;
+        cap.alpha = 0.82;
+        cap.zIndex = 2;
+        front.addChild(cap);
+      }
+
+      if (hasAsset("rockCluster") && seed % 127 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const rocks = makeSprite(seed % 2 === 0 && hasAsset("rockClusterMoss") ? "rockClusterMoss" : "rockCluster");
+        rocks.x = wx - 6;
+        rocks.y = wy - 25;
+        rocks.alpha = 0.74;
+        rocks.zIndex = 0;
+        back.addChild(rocks);
+      }
+
+      if (hasAsset("rockSpire") && seed % 193 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const spire = makeSprite("rockSpire");
+        spire.x = wx - 5;
+        spire.y = wy - 27;
+        spire.alpha = 0.68;
+        spire.zIndex = 0;
+        back.addChild(spire);
+      }
+
+      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("reedGrassWheat") && seed % 31 === 0) {
+        const reeds = makeSprite(seed % 3 === 0 && hasAsset("reedGrassYellow") ? "reedGrassYellow" : "reedGrassWheat");
+        reeds.x = wx - 3;
+        reeds.y = wy - 27;
+        reeds.alpha = 0.84;
+        reeds.zIndex = 3;
+        front.addChild(reeds);
+      }
+
+      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("wildflowerMixed") && seed % 37 === 0) {
+        const flowers = makeSprite(seed % 5 === 0 && hasAsset("wildflowerPink") ? "wildflowerPink" : seed % 7 === 0 && hasAsset("wildflowerYellow") ? "wildflowerYellow" : "wildflowerMixed");
+        flowers.x = wx - 3;
+        flowers.y = wy - 19;
+        flowers.alpha = 0.9;
+        flowers.zIndex = 3;
+        front.addChild(flowers);
+      }
+
+      if (biome === "pineValley" && hasAsset("flowerPink") && seed % 61 === 0) {
+        const flower = makeSprite("flowerPink");
+        flower.x = wx - 3;
+        flower.y = wy - 27;
+        flower.alpha = 0.82;
+        flower.zIndex = 3;
+        front.addChild(flower);
       }
 
       if (hasAsset("runeStone") && chunk.chunkY >= 8 && seed % 53 === 0) {
@@ -1290,7 +1365,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(fence);
       }
 
-      if (hasAsset("ropeBridge") && seed % 181 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+      if (biome !== "celestialSummit" && hasAsset("ropeBridge") && seed % 181 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
         const bridge = makeSprite("ropeBridge");
         bridge.x = wx;
         bridge.y = wy - 8;
@@ -1353,7 +1428,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(crystal);
       }
 
-      if (hasAsset("bush") && seed % 47 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("bush") && seed % 47 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
         const bush = makeSprite("bush");
         bush.x = wx - 6;
         bush.y = wy - 22;
@@ -1362,14 +1437,80 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(bush);
       }
 
-      if (hasAsset("tree") && seed % 139 === 0 && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, 4)) {
-        const tree = makeSprite("tree");
+      if ((biome === "pineValley" || biome === "cloudRidge" || biome === "snowfallCliffs") && hasAsset("tree") && seed % 139 === 0 && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, 4)) {
+        const treeKey: AssetKey =
+          biome === "snowfallCliffs" && hasAsset("snowTree") ? "snowTree" :
+          biome === "cloudRidge" && hasAsset("bentPine") ? "bentPine" :
+          "tree";
+        const tree = makeSprite(treeKey);
         tree.anchor.set(0.5, 1);
         tree.x = wx + TILE_SIZE / 2;
         tree.y = wy + 6;
         tree.alpha = 0.72;
         tree.zIndex = 0;
         back.addChild(tree);
+      }
+
+      if ((biome === "cloudRidge" || biome === "snowfallCliffs") && hasAsset("climbingChain") && seed % 149 === 0) {
+        const chain = makeSprite("climbingChain");
+        chain.x = wx;
+        chain.y = wy - 3;
+        chain.alpha = 0.62;
+        chain.zIndex = 1;
+        back.addChild(chain);
+      }
+
+      if ((biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("windZone") && seed % 167 === 0) {
+        const wind = makeSprite("windZone");
+        wind.x = wx - 24;
+        wind.y = wy - 36;
+        wind.alpha = 0.52;
+        wind.zIndex = 5;
+        front.addChild(wind);
+      }
+
+      if (hasAsset("jumpPad") && seed % 211 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const pad = makeSprite("jumpPad");
+        pad.x = wx;
+        pad.y = wy - 25;
+        pad.alpha = 0.9;
+        pad.zIndex = 4;
+        front.addChild(pad);
+      }
+
+      if ((biome === "frozenSpires" || biome === "celestialSummit") && hasAsset("rollingBoulder") && seed % 223 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const boulder = makeSprite("rollingBoulder");
+        boulder.x = wx - 4;
+        boulder.y = wy - 26;
+        boulder.alpha = 0.82;
+        boulder.zIndex = 3;
+        front.addChild(boulder);
+      }
+
+      if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && seed % 241 === 0) {
+        const enemyKeys: AssetKey[] =
+          biome === "cloudRidge" ? ["enemyGoblin", "enemyArcher"] :
+          biome === "snowfallCliffs" ? ["enemyIceBat", "enemySkeleton"] :
+          ["enemyYeti", "enemyWindSpirit"];
+        const enemyKey = enemyKeys[(seed >> 3) % enemyKeys.length]!;
+        if (hasAsset(enemyKey)) {
+          const enemy = makeSprite(enemyKey);
+          enemy.x = wx - 6;
+          enemy.y = wy - 26;
+          enemy.alpha = 0.72;
+          enemy.zIndex = 4;
+          front.addChild(enemy);
+        }
+      }
+
+      if (biome === "celestialSummit" && hasAsset("relicShrine") && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const shrine = makeSprite(seed % 2 === 0 && hasAsset("ancientBeacon") ? "ancientBeacon" : "relicShrine");
+        shrine.anchor.set(0.5, 1);
+        shrine.x = wx + TILE_SIZE;
+        shrine.y = wy + 2;
+        shrine.alpha = 0.9;
+        shrine.zIndex = 2;
+        back.addChild(shrine);
       }
     }
   }
@@ -1786,7 +1927,7 @@ function makeLabel(name: string): Text {
 
 function createRemoteEntry(player: PlayerState, name: string, serverTime: number): RemoteEntry {
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
-  const sprite = makeSprite("playerExplorer");
+  const sprite = makeCharacterSprite(characterForRemote(ci));
   const crownSprite = makeSprite("crown");
   sprite.anchor.set(0.5, playerSpriteAnchorY());
   sprite.alpha = hasPlayerAnimationAssets() ? 0.82 : hasAsset("playerExplorer") ? 0.54 : 0;
@@ -2510,8 +2651,9 @@ function drawActors(): void {
 
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
+    const characterId = characterForRemote(e.colorIndex);
     e.sprite.visible = hasAsset("playerExplorer") && !(e.current.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
-    if (hasPlayerAnimationAssets()) e.sprite.texture = playerAnimationTexture(e.current, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs));
+    if (hasCharacterAnimationAssets(characterId)) e.sprite.texture = playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs));
     e.sprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
     e.sprite.y = Math.round(e.current.position.y + PLAYER_HEIGHT + 2);
     e.sprite.scale.x = (e.current.facing < 0 ? -1 : 1) * playerSpriteScale();
