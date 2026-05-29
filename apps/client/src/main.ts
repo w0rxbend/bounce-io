@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -116,12 +116,12 @@ const ASSET_URLS = {
   bgMountainWide2:    "/assets/pixel/bg_mountain_wide2_1024x192.png",
   bgMountainTall:     "/assets/pixel/bg_mountain_tall_192x384.png",
   aiForestRuinsPanorama: "/assets/generated/forest_ruins_ai_panorama.png",
-  bgCanopyFrame: "/assets/pixel/bg_canopy_frame_768x160.png",
   bgCloudBank: "/assets/pixel/bg_cloud_bank_768x128.png",
-  bgForestRuinsPanorama: "/assets/pixel/bg_forest_ruins_panorama_1024x576.png",
-  bgRuinTowers: "/assets/pixel/bg_ruin_towers_512x256.png",
   bgSkyArches: "/assets/pixel/bg_sky_arches_768x432.png",
-  heroSheet: "/assets/pixel/hero_sheet_480x448.png",
+  heroSheet: "/assets/pixel/hero_sheet_640x560.png",
+  environmentSheet: "/assets/pixel/environment_sheet_1024.png",
+  terrainTileset: "/assets/pixel/tileset_terrain_16.png",
+  tilemapShowcase: "/assets/pixel/tilemap_vertical_showcase.png",
   bush: "/assets/pixel/bush_32.png",
   cloud: "/assets/pixel/cloud_96.png",
   cloudSmall: "/assets/pixel/cloud_small_64.png",
@@ -195,6 +195,61 @@ const ASSET_URLS = {
 
 type AssetKey = keyof typeof ASSET_URLS;
 
+const HERO_SPRITE_SCALE = 0.58;
+const HERO_FALLBACK_ANCHOR_Y = 0.9;
+const HERO_SHEET_META_URL = "/assets/pixel/hero_sheet.json";
+const HERO_ANIMATION_NAMES = ["idle", "walk", "run", "jump_fall", "kick_push", "shoot_fire", "hit_death_special"] as const;
+
+type HeroAnimationName = typeof HERO_ANIMATION_NAMES[number];
+
+interface HeroSheetAnimation {
+  row: number;
+  frames: number[];
+  durationMs: number;
+}
+
+interface HeroSheetFrame {
+  frame: { x: number; y: number; w: number; h: number };
+  sourceSize: { w: number; h: number };
+  spriteSourceSize: { x: number; y: number; w: number; h: number };
+  pivot: { x: number; y: number };
+  tags: string[];
+  durationMs: number;
+}
+
+interface HeroSheetMetadata {
+  image: string;
+  frameWidth: number;
+  frameHeight: number;
+  columns: number;
+  rows: number;
+  anchor: { x: number; y: number };
+  anchorPixel?: { x: number; y: number };
+  animations: Record<string, HeroSheetAnimation>;
+  frames: Record<string, HeroSheetFrame>;
+}
+
+interface HeroRuntimeAnimation {
+  textures: Texture[];
+  durationMs: number;
+}
+
+interface HeroAtlas {
+  aliases: Partial<Record<AssetKey, Texture>>;
+  animations: Partial<Record<HeroAnimationName, HeroRuntimeAnimation>>;
+  anchorY: number;
+}
+
+const HERO_ALIAS_FRAMES = {
+  playerExplorer: { animation: "idle", index: 0 },
+  playerIdle:     { animation: "idle", index: 1 },
+  playerRun1:     { animation: "run", index: 1 },
+  playerRun2:     { animation: "run", index: 4 },
+  playerJump:     { animation: "jump_fall", index: 1 },
+  playerFall:     { animation: "jump_fall", index: 5 },
+  playerKick:     { animation: "kick_push", index: 2 },
+} satisfies Partial<Record<AssetKey, { animation: HeroAnimationName; index: number }>>;
+
 // ── HTML shell ────────────────────────────────────────────────────────────────
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -260,14 +315,83 @@ async function loadPixelAssets(): Promise<Partial<Record<AssetKey, Texture>>> {
   return loaded;
 }
 
+async function loadHeroSheetMetadata(): Promise<HeroSheetMetadata | null> {
+  try {
+    return await Assets.load<HeroSheetMetadata>({ src: HERO_SHEET_META_URL, parser: "json" });
+  } catch (err) {
+    console.warn(`Could not load hero sheet metadata ${HERO_SHEET_META_URL}`, err);
+    return null;
+  }
+}
+
 const pixelAssets = await loadPixelAssets();
+const heroSheetMetadata = await loadHeroSheetMetadata();
+const heroAtlas = createHeroAtlas(pixelAssets.heroSheet, heroSheetMetadata);
+
+function isHeroAnimationName(name: string): name is HeroAnimationName {
+  return (HERO_ANIMATION_NAMES as readonly string[]).includes(name);
+}
+
+function createHeroAtlas(sheet?: Texture, metadata?: HeroSheetMetadata | null): HeroAtlas {
+  if (!sheet || sheet === Texture.EMPTY || !metadata) {
+    return { aliases: {}, animations: {}, anchorY: HERO_FALLBACK_ANCHOR_Y };
+  }
+
+  const expectedW = metadata.columns * metadata.frameWidth;
+  const expectedH = metadata.rows * metadata.frameHeight;
+  if (sheet.width !== expectedW || sheet.height !== expectedH) {
+    console.warn(`Hero sheet mismatch: texture is ${sheet.width}x${sheet.height}, metadata expects ${expectedW}x${expectedH}`);
+    return { aliases: {}, animations: {}, anchorY: HERO_FALLBACK_ANCHOR_Y };
+  }
+
+  const frameTextures: Record<string, Texture> = {};
+  const anchorY = metadata.anchor?.y ?? HERO_FALLBACK_ANCHOR_Y;
+
+  for (const [name, info] of Object.entries(metadata.frames)) {
+    if (
+      info.frame.x < 0 || info.frame.y < 0 ||
+      info.frame.x + info.frame.w > sheet.width ||
+      info.frame.y + info.frame.h > sheet.height
+    ) {
+      console.warn(`Skipping out-of-bounds hero frame ${name}`);
+      continue;
+    }
+    frameTextures[name] = new Texture({
+      source: sheet.source,
+      frame: new Rectangle(info.frame.x, info.frame.y, info.frame.w, info.frame.h),
+      orig: new Rectangle(0, 0, info.sourceSize.w, info.sourceSize.h),
+      defaultAnchor: { x: metadata.anchor?.x ?? 0.5, y: anchorY },
+      label: name,
+    });
+  }
+
+  const animations: Partial<Record<HeroAnimationName, HeroRuntimeAnimation>> = {};
+  for (const [name, animation] of Object.entries(metadata.animations)) {
+    if (!isHeroAnimationName(name)) continue;
+    const textures = animation.frames
+      .map((col) => frameTextures[`hero_r${animation.row}_c${col}`])
+      .filter((texture): texture is Texture => !!texture);
+    if (textures.length > 0) {
+      animations[name] = { textures, durationMs: Math.max(16, animation.durationMs) };
+    }
+  }
+
+  const aliases: Partial<Record<AssetKey, Texture>> = {};
+  for (const [key, ref] of Object.entries(HERO_ALIAS_FRAMES) as [AssetKey, { animation: HeroAnimationName; index: number }][]) {
+    const animation = animations[ref.animation];
+    if (!animation || animation.textures.length === 0) continue;
+    aliases[key] = animation.textures[Math.min(ref.index, animation.textures.length - 1)];
+  }
+
+  return { aliases, animations, anchorY };
+}
 
 function assetTexture(key: AssetKey): Texture {
-  return pixelAssets[key] ?? Texture.EMPTY;
+  return heroAtlas.aliases[key] ?? pixelAssets[key] ?? Texture.EMPTY;
 }
 
 function hasAsset(key: AssetKey): boolean {
-  return !!pixelAssets[key];
+  return !!heroAtlas.aliases[key] || !!pixelAssets[key];
 }
 
 function makeSprite(key: AssetKey): Sprite {
@@ -277,10 +401,42 @@ function makeSprite(key: AssetKey): Sprite {
 }
 
 function hasPlayerAnimationAssets(): boolean {
-  return hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick");
+  return hasHeroAnimationSheet() || (hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick"));
 }
 
-function playerAnimationAsset(s: PlayerState, elapsed: number): AssetKey {
+function hasHeroAnimationSheet(): boolean {
+  return !!heroAtlas.animations.idle && !!heroAtlas.animations.run && !!heroAtlas.animations.jump_fall && !!heroAtlas.animations.kick_push;
+}
+
+function playerSpriteScale(): number {
+  return hasHeroAnimationSheet() ? HERO_SPRITE_SCALE : 1;
+}
+
+function playerSpriteAnchorY(): number {
+  return hasHeroAnimationSheet() ? heroAtlas.anchorY : 1;
+}
+
+function heroAnimationTexture(name: HeroAnimationName, elapsed: number): Texture | null {
+  const animation = heroAtlas.animations[name];
+  if (!animation || animation.textures.length === 0) return null;
+  const frame = Math.floor(elapsed / animation.durationMs) % animation.textures.length;
+  return animation.textures[frame] ?? null;
+}
+
+function playerAnimationTexture(s: PlayerState, elapsed: number): Texture | null {
+  if (!hasHeroAnimationSheet()) return null;
+  if (s.kickPhase === "active") return heroAnimationTexture("shoot_fire", elapsed) ?? heroAnimationTexture("kick_push", elapsed);
+  if (s.kickPhase !== "idle") return heroAnimationTexture("kick_push", elapsed);
+  if (s.invulnerable > 0) return heroAnimationTexture("hit_death_special", elapsed) ?? heroAnimationTexture("idle", elapsed);
+  if (!s.grounded) return heroAnimationTexture("jump_fall", elapsed);
+
+  const speed = Math.abs(s.velocity.x);
+  if (speed > 115) return heroAnimationTexture("run", elapsed);
+  if (speed > 28) return heroAnimationTexture("walk", elapsed) ?? heroAnimationTexture("run", elapsed);
+  return heroAnimationTexture("idle", elapsed);
+}
+
+function fallbackPlayerAnimationAsset(s: PlayerState, elapsed: number): AssetKey {
   if (s.kickPhase === "active" || s.kickPhase === "windup") return "playerKick";
   if (!s.grounded) return s.velocity.y < -20 ? "playerJump" : "playerFall";
   if (Math.abs(s.velocity.x) > 28) return Math.floor(elapsed / 95) % 2 === 0 ? "playerRun1" : "playerRun2";
@@ -445,7 +601,7 @@ let cloudDriftFront = 0;
 const localSprite = makeSprite("playerExplorer");
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
-localSprite.anchor.set(0.5, 1);
+localSprite.anchor.set(0.5, playerSpriteAnchorY());
 localSprite.alpha = hasPlayerAnimationAssets() ? 0.92 : hasAsset("playerExplorer") ? 0.62 : 0;
 localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
@@ -734,10 +890,6 @@ function addWideBackdrop(container: Container, key: AssetKey, sw: number, y: num
     container.addChild(extra);
   }
 
-  // Keep tall foreground canopies from covering too much on short screens.
-  if (key === "bgCanopyFrame") {
-    sprite.height = Math.min(texH * scale, Math.max(92, pixi.screen.height * 0.22));
-  }
 }
 
 function addCoverBackdrop(container: Container, key: AssetKey, sw: number, sh: number, alpha: number): void {
@@ -795,20 +947,11 @@ function buildSkyStatic(sw: number, sh: number): void {
     addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
   }
 
-  forestPanoramaBack.removeChildren();
-  addWideBackdrop(forestPanoramaBack, "bgForestRuinsPanorama", sw, sh * 0.12, 0.28);
-
   skyArchesBack.removeChildren();
   addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.34);
 
-  ruinTowersBack.removeChildren();
-  addWideBackdrop(ruinTowersBack, "bgRuinTowers", sw, sh * 0.54, 0.22);
-
   cloudBankBack.removeChildren();
   addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.42);
-
-  canopyFrameFront.removeChildren();
-  addWideBackdrop(canopyFrameFront, "bgCanopyFrame", sw, -8, 0.58);
 
   // Distant floating island silhouettes
   islandsFar.removeChildren();
@@ -1645,7 +1788,7 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
   const sprite = makeSprite("playerExplorer");
   const crownSprite = makeSprite("crown");
-  sprite.anchor.set(0.5, 1);
+  sprite.anchor.set(0.5, playerSpriteAnchorY());
   sprite.alpha = hasPlayerAnimationAssets() ? 0.82 : hasAsset("playerExplorer") ? 0.54 : 0;
   sprite.tint = 0xffffff;
   crownSprite.anchor.set(0.5, 1);
@@ -2368,11 +2511,11 @@ function drawActors(): void {
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
     e.sprite.visible = hasAsset("playerExplorer") && !(e.current.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
-    if (hasPlayerAnimationAssets()) e.sprite.texture = assetTexture(playerAnimationAsset(e.current, elapsedMs));
+    if (hasPlayerAnimationAssets()) e.sprite.texture = playerAnimationTexture(e.current, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs));
     e.sprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
     e.sprite.y = Math.round(e.current.position.y + PLAYER_HEIGHT + 2);
-    e.sprite.scale.x = e.current.facing < 0 ? -1 : 1;
-    e.sprite.scale.y = 1;
+    e.sprite.scale.x = (e.current.facing < 0 ? -1 : 1) * playerSpriteScale();
+    e.sprite.scale.y = playerSpriteScale();
     e.sprite.tint = 0xffffff;
     drawPlayerInto(e.gfx, e.current, col, elapsedMs);
     e.label.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2 - e.label.width / 2);
@@ -2387,11 +2530,11 @@ function drawActors(): void {
     const renderPos = getLocalRenderPosition();
     const renderState = renderPos ? { ...localPlayer, position: renderPos } : localPlayer;
     localSprite.visible = hasAsset("playerExplorer") && !(renderState.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
-    if (hasPlayerAnimationAssets()) localSprite.texture = assetTexture(playerAnimationAsset(renderState, elapsedMs));
+    if (hasPlayerAnimationAssets()) localSprite.texture = playerAnimationTexture(renderState, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(renderState, elapsedMs));
     localSprite.x = Math.round(renderState.position.x + PLAYER_WIDTH / 2);
     localSprite.y = Math.round(renderState.position.y + PLAYER_HEIGHT + 2);
-    localSprite.scale.x = renderState.facing < 0 ? -1 : 1;
-    localSprite.scale.y = 1;
+    localSprite.scale.x = (renderState.facing < 0 ? -1 : 1) * playerSpriteScale();
+    localSprite.scale.y = playerSpriteScale();
     localSprite.tint = 0xffffff;
     drawPlayerInto(localGfx, renderState, PLAYER_COLORS[0]!, elapsedMs);
     localCrownSprite.visible = hasAsset("crown") && localPlayerId === leaderId;

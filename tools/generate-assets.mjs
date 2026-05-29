@@ -3,8 +3,10 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 
 const outDir = "apps/client/public/assets/pixel";
+const preservedFiles = new Set(["bg_mountain_panorama_887x1774.png"]);
 mkdirSync(outDir, { recursive: true });
 for (const file of readdirSync(outDir)) {
+  if (preservedFiles.has(file)) continue;
   if (file.endsWith(".png") || file.endsWith(".svg") || file === "manifest.json" || file === "sprite_atlas.json") {
     rmSync(join(outDir, file));
   }
@@ -73,20 +75,23 @@ function platformSvg({ variant = "normal", w = 32 } = {}) {
   const roots = variant === "roots";
   const runes = variant === "runes";
   return `
-      <path d="M0 3h${w}v13H0z" fill="#28221a"/>
-      <path d="M1 4h${w - 2}v11H1z" fill="${runes ? "#786858" : cracked ? "#7f6a50" : "#907858"}"/>
-      <path d="M1 4h${w - 2}v2H1z" fill="#7a5030"/>
-      <path d="M1 2h${w - 2}v3H1z" fill="#3a7818"/>
-      <path d="M1 1h${w - 2}v2H1z" fill="#90d838"/>
-      <path d="M3 0h2v2H3zM8 0h1v2H8zM14 0h2v2h-2zM21 0h1v2h-1zM27 0h2v2h-2z${w > 32 ? `M36 0h2v2h-2zM43 0h2v2h-2z` : ""}" fill="#a8e85c"/>
-      <path d="M2 9h12v1H2zM17 8h${Math.max(8, w - 19)}v1H17zM8 4h1v5H8zM22 9h1v5h-1z" fill="#28221a" opacity=".45"/>
-      <path d="M4 6h5v2H4zM${Math.max(18, w - 12)} 5h4v2h-${4}z" fill="#68c040"/>
-      ${cracked ? `<path d="M13 6h1v4h1v3h-1v2h-1v-4h-1V8h1zM${w - 9} 7h1v5h-1z" fill="#28221a" opacity=".65"/>` : ""}
-      ${overhang ? `<path d="M2 14h4v3H2zM10 14h3v4h-3zM${w - 8} 14h5v3h-5z" fill="#402818"/><path d="M4 16h1v5H4zM${w - 6} 16h1v4h-1z" fill="#583a20"/>` : ""}
-      ${flowers ? `<path d="M6 -2h1v2H6zM7 -3h2v2H7zM${w - 9} -2h1v2h-1zM${w - 8} -3h2v2h-2z" fill="#ffaabb"/><path d="M15 -2h1v2h-1zM16 -3h2v2h-2z" fill="#ffe870"/>` : ""}
-      ${roots ? `<path d="M4 15h2v5H4zM7 15h1v3H7zM17 15h2v6h-2zM24 15h1v4h-1zM27 15h2v5h-2z" fill="#402818"/><path d="M5 19h4v1H5zM18 20h5v1h-5zM27 19h3v1h-3z" fill="#583a20"/>` : ""}
-      ${runes ? `<path d="M7 8h3v1H7zM8 6h1v5H8zM18 7h5v1h-5zM20 7h1v5h-1zM24 10h2v1h-2z" fill="#30c8c0" opacity=".8"/><path d="M8 7h1v1H8zM20 8h1v1h-1z" fill="#a0f0ff"/>` : ""}
-      <path d="M6 14h1v2H6zM15 14h1v2h-1zM${w - 7} 14h1v2h-1z" fill="#583a20"/>
+      <path d="M0 3h${w}v13H0z" fill="#26354a"/>
+      <path d="M1 4h${w - 2}v11H1z" fill="${runes ? "#526985" : cracked ? "#5a6f8a" : "#4c5e78"}"/>
+      <path d="M1 4h${w - 2}v2H1z" fill="#657c9a"/>
+      <path d="M1 1h${w - 2}v4H1z" fill="#a8c4dc"/>
+      <path d="M2 0h${Math.max(1, w - 5)}v3H2z" fill="#e9f2ff"/>
+      <path d="M0 2h6v3H0zM9 1h8v3H9zM20 2h7v3h-7z${w > 32 ? `M32 1h8v3h-8zM42 2h5v3h-5z` : ""}" fill="#f8fbff"/>
+      <path d="M4 4h5v1H4zM13 3h7v1h-7zM${Math.max(22, w - 8)} 4h5v1h-5z" fill="#b8d4ee"/>
+      <path d="M2 9h12v1H2zM17 8h${Math.max(8, w - 19)}v1H17zM8 5h1v4H8zM22 9h1v5h-1z" fill="#26354a" opacity=".58"/>
+      <path d="M4 7h4v2H4zM${Math.max(18, w - 13)} 6h5v2h-${5}z" fill="#6d8c47"/>
+      <path d="M5 6h3v1H5zM${Math.max(19, w - 12)} 5h3v1h-${3}z" fill="#7d9a5b"/>
+      <path d="M3 11h4v1H3zM11 12h3v1h-3zM${Math.max(18, w - 10)} 11h6v1h-${6}z" fill="#3b4c64" opacity=".8"/>
+      ${cracked ? `<path d="M13 6h1v4h1v3h-1v2h-1v-4h-1V8h1zM${w - 9} 7h1v5h-1z" fill="#1a2536" opacity=".78"/><path d="M12 5h4v1h-4zM${w - 11} 6h4v1h-4z" fill="#e9f2ff"/>` : ""}
+      ${overhang ? `<path d="M2 14h4v3H2zM10 14h3v4h-3zM${w - 8} 14h5v3h-5z" fill="#1a2536"/><path d="M4 16h1v5H4zM${w - 6} 16h1v4h-1z" fill="#6d8c47"/><path d="M4 16h1v1H4zM${w - 6} 16h1v1h-1z" fill="#e9f2ff"/>` : ""}
+      ${flowers ? `<path d="M6 -2h1v2H6zM7 -3h2v2H7zM${w - 9} -2h1v2h-1zM${w - 8} -3h2v2h-2z" fill="#ffffff"/><path d="M15 -2h1v2h-1zM16 -3h2v2h-2z" fill="#e2b84f"/><path d="M21 -2h1v2h-1zM22 -3h2v2h-2z" fill="#b7a2ee"/>` : ""}
+      ${roots ? `<path d="M4 15h2v5H4zM7 15h1v3H7zM17 15h2v6h-2zM24 15h1v4h-1zM27 15h2v5h-2z" fill="#26354a"/><path d="M5 19h4v1H5zM18 20h5v1h-5zM27 19h3v1h-3z" fill="#6d8c47"/>` : ""}
+      ${runes ? `<path d="M7 8h3v1H7zM8 6h1v5H8zM18 7h5v1h-5zM20 7h1v5h-1zM24 10h2v1h-2z" fill="#55b6ff" opacity=".88"/><path d="M8 7h1v1H8zM20 8h1v1h-1z" fill="#e9f2ff"/>` : ""}
+      <path d="M6 14h1v2H6zM15 14h1v2h-1zM${w - 7} 14h1v2h-1z" fill="#1a2536"/>
     `;
 }
 
@@ -207,49 +212,18 @@ const assets = [
     h: 432,
     svg: `
       <path d="M0 0h768v432H0z" fill="#000000" opacity="0"/>
-      <path d="M60 292h98v24H60zM230 268h132v30H230zM478 282h160v28H478z" fill="#304068" opacity=".36"/>
-      <path d="M78 270h18v42H78zM125 262h20v50h-20zM258 238h18v58h-18zM320 232h22v66h-22zM516 244h22v63h-22zM590 236h24v70h-24z" fill="#222e48" opacity=".32"/>
-      <path d="M65 268h88v6H65zM237 235h116v7H237zM492 241h137v7H492z" fill="#222e48" opacity=".38"/>
-      <path d="M88 254h8v14h-8zM132 246h9v16h-9zM264 218h10v17h-10zM328 214h10v18h-10zM525 224h9v17h-9zM598 216h11v20h-11z" fill="#30c8c0" opacity=".18"/>
-      <path d="M40 318h160v8H40zM212 298h178v8H212zM450 310h220v9H450z" fill="#489030" opacity=".25"/>
-      <path d="M44 314h154v4H44zM216 294h170v4H216zM454 306h212v4H454z" fill="#78d050" opacity=".24"/>
-      <path d="M30 326h190v5H30zM206 306h194v5H206zM440 319h242v6H440z" fill="#080e1e" opacity=".18"/>
-    `,
-  },
-  {
-    name: "bg_forest_ruins_panorama_1024x576",
-    w: 1024,
-    h: 576,
-    svg: `
-      <path d="M0 0h1024v576H0z" fill="#000000" opacity="0"/>
-      <path d="M40 96h122v42H40zM240 72h168v48H240zM612 84h176v48H612zM846 118h108v35H846z" fill="#f0e8d8" opacity=".54"/>
-      <path d="M58 82h60v28H58zM276 54h80v34h-80zM654 64h88v36h-88zM874 102h48v26h-48z" fill="#fffff0" opacity=".42"/>
-      <path d="M70 342h188v30H70zM348 300h236v36H348zM712 328h226v32H712z" fill="#304068" opacity=".34"/>
-      <path d="M95 300h26v68H95zM198 284h30v84h-30zM390 246h32v86h-32zM525 232h36v100h-36zM746 266h32v88h-32zM876 250h36v104h-36z" fill="#222e48" opacity=".35"/>
-      <path d="M82 292h162v10H82zM368 238h204v12H368zM725 258h202v12H725z" fill="#222e48" opacity=".42"/>
-      <path d="M108 274h8v18h-8zM209 264h10v20h-10zM403 220h10v20h-10zM540 214h12v18h-12zM758 244h10v20h-10zM890 228h12v22h-12z" fill="#30c8c0" opacity=".2"/>
-      <path d="M54 374h226v12H54zM326 336h282v12H326zM690 360h270v12H690z" fill="#489030" opacity=".28"/>
-      <path d="M62 366h210v8H62zM334 328h264v8H334zM700 352h250v8H700z" fill="#78d050" opacity=".34"/>
-      <path d="M0 424h150v-36h110v-26h140v44h122v-30h142v42h136v-34h224v192H0z" fill="#1a3818" opacity=".32"/>
-      <path d="M0 448h162v-34h118v-24h132v42h122v-28h148v40h120v-32h222v164H0z" fill="#2e6840" opacity=".28"/>
-      <path d="M84 408h10v168H84zM262 392h12v184h-12zM458 420h10v156h-10zM742 402h14v174h-14zM934 416h12v160h-12z" fill="#402818" opacity=".35"/>
-      <path d="M98 470h62v10H98zM236 502h46v9h-46zM466 478h60v10h-60zM704 514h58v10h-58zM888 490h64v10h-64z" fill="#583a20" opacity=".35"/>
-    `,
-  },
-  {
-    name: "bg_ruin_towers_512x256",
-    w: 512,
-    h: 256,
-    svg: `
-      <path d="M0 0h512v256H0z" fill="#000000" opacity="0"/>
-      <path d="M34 86h38v158H34zM91 122h30v122H91zM170 54h52v190h-52zM250 108h42v136h-42zM354 72h58v172h-58zM436 132h32v112h-32z" fill="#222e48" opacity=".42"/>
-      <path d="M28 80h50v10H28zM166 46h60v12h-60zM348 64h70v12h-70z" fill="#222e48" opacity=".5"/>
-      <path d="M44 64h18l9 16H35zM188 30h16l20 18h-58zM374 48h14l27 18h-66z" fill="#222e48" opacity=".45"/>
-      <path d="M47 116h8v18h-8zM100 154h6v14h-6zM188 92h8v22h-8zM207 128h7v18h-7zM266 146h7v16h-7zM376 111h8v22h-8zM397 154h7v18h-7zM447 164h6v14h-6z" fill="#40d8f8" opacity=".18"/>
-      <path d="M0 226h512v30H0z" fill="#1a3818" opacity=".22"/>
-      <path d="M0 236h512v20H0z" fill="#080e1e" opacity=".34"/>
-      <path d="M20 222h474v6H20z" fill="#2e6840" opacity=".22"/>
-      <path d="M28 242h50v14H28zM166 238h60v18h-60zM348 236h70v20h-70z" fill="#080e1e" opacity=".28"/>
+      <path d="M0 336h768v96H0z" fill="#26354a" opacity=".08"/>
+      <path d="M28 326h124v10H28zM226 300h146v10H226zM470 316h174v10H470z" fill="#4c5e78" opacity=".26"/>
+      <path d="M48 310h82v16H48zM244 282h108v18H244zM496 296h122v20H496z" fill="#26354a" opacity=".22"/>
+      <path d="M65 246h22v80H65zM111 258h18v68h-18zM263 214h24v86h-24zM326 226h18v74h-18zM520 232h24v84h-24zM592 220h26v96h-26z" fill="#26354a" opacity=".30"/>
+      <path d="M58 238h80v9H58zM252 205h104v10H252zM504 212h126v11H504z" fill="#4c5e78" opacity=".34"/>
+      <path d="M69 232h16l8 7H61zM272 194h18l10 12h-40zM534 200h18l14 13h-48zM594 205h18l13 8h-42z" fill="#e9f2ff" opacity=".42"/>
+      <path d="M77 252h6v20h-6zM118 270h6v18h-6zM273 226h7v24h-7zM331 240h6v20h-6zM531 244h7v25h-7zM601 236h8v27h-8z" fill="#55b6ff" opacity=".22"/>
+      <path d="M75 254h10v2H75zM271 229h11v2h-11zM529 247h11v2h-11zM599 239h12v2h-12z" fill="#e9f2ff" opacity=".24"/>
+      <path d="M40 333h132v5H40zM218 307h164v6H218zM458 323h200v6H458z" fill="#e9f2ff" opacity=".34"/>
+      <path d="M52 338h104v4H52zM236 313h130v4H236zM486 329h146v5H486z" fill="#a8c4dc" opacity=".22"/>
+      <path d="M34 354h150v6H34zM210 334h190v6H210zM446 348h230v7H446z" fill="#1a2536" opacity=".14"/>
+      <path d="M88 314h12v3H88zM286 290h15v3h-15zM566 304h18v3h-18z" fill="#7d9a5b" opacity=".22"/>
     `,
   },
   {
@@ -258,24 +232,13 @@ const assets = [
     h: 128,
     svg: `
       <path d="M0 0h768v128H0z" fill="#000000" opacity="0"/>
-      <path d="M22 76h90V50h54V32h82v23h72v20h98V52h68V36h88v30h78v15h94v34H22z" fill="#8898b8" opacity=".5"/>
-      <path d="M10 68h96V42h66V24h82v26h78v18h92V44h78V26h86v28h82v17h84v30H10z" fill="#a8c0d8" opacity=".72"/>
-      <path d="M38 58h74V36h58V18h70v24h70v14h78V36h74V18h76v25h72v14h70v24H38z" fill="#f0e8d8" opacity=".78"/>
-      <path d="M66 49h42V37h54V28h62v13h58v9h68V41h72V29h54v12h64v9h52v8H66z" fill="#fffff0" opacity=".46"/>
-    `,
-  },
-  {
-    name: "bg_canopy_frame_768x160",
-    w: 768,
-    h: 160,
-    svg: `
-      <path d="M0 0h768v160H0z" fill="#000000" opacity="0"/>
-      <path d="M0 18h72V6h110v20h84V8h132v25h104V12h116v18h150v60H0z" fill="#1a3818" opacity=".78"/>
-      <path d="M0 24h92V12h96v22h88V16h126v24h100V22h126v22h140v50H0z" fill="#2e6840" opacity=".74"/>
-      <path d="M0 36h86V25h92v20h96V27h116v24h96V34h130v20h152v42H0z" fill="#489030" opacity=".62"/>
-      <path d="M46 44h42v8H46zM146 34h56v10h-56zM314 42h72v9h-72zM514 38h58v9h-58zM641 48h66v8h-66z" fill="#78d050" opacity=".55"/>
-      <path d="M68 72h8v78h-8zM218 66h10v88h-10zM456 70h8v82h-8zM670 62h11v92h-11z" fill="#402818" opacity=".62"/>
-      <path d="M74 96h28v6H74zM198 110h26v6h-26zM462 96h30v6h-30zM642 118h32v6h-32z" fill="#583a20" opacity=".62"/>
+      <path d="M0 84h768v44H0z" fill="#26354a" opacity=".16"/>
+      <path d="M18 78h92V58h56V44h86v20h72v16h96V60h70V46h90v22h82v16h88v30H18z" fill="#7894b4" opacity=".46"/>
+      <path d="M0 70h110V50h66V36h90v22h78v14h94V52h80V38h94v20h84v17h72v30H0z" fill="#a8c4dc" opacity=".68"/>
+      <path d="M32 60h82V42h62V28h76v20h72v12h82V42h78V30h80v20h76v13h90v22H32z" fill="#e9f2ff" opacity=".82"/>
+      <path d="M62 52h48V42h54V34h62v12h58v8h72V46h74V36h58v10h68v8h56v8H62z" fill="#ffffff" opacity=".52"/>
+      <path d="M12 96h160v9H12zM196 91h138v8H196zM382 97h172v8H382zM596 88h150v9H596z" fill="#4c5e78" opacity=".16"/>
+      <path d="M66 112h95v4H66zM240 108h110v4H240zM455 113h120v4H455zM638 104h88v4H638z" fill="#55b6ff" opacity=".08"/>
     `,
   },
   {

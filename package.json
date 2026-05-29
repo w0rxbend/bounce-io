@@ -7,7 +7,7 @@
     "dev": "npm-run-all --parallel dev:*",
     "dev:client": "npm --workspace apps/client run dev",
     "dev:server": "npm --workspace apps/server run dev",
-    "assets:generate": "node tools/generate-assets.mjs",
+    "assets:generate": "node tools/generate-assets.mjs && python3 tools/process-pixel-assets.py",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "node --import tsx --test tests/**/*.test.ts"
