@@ -1,5 +1,5 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
-import type { EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
+import type { CollectibleState, EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
 
 export type SnapshotEntity = {
   id: PlayerId;
@@ -56,6 +56,10 @@ export type ClientMessage =
   | {
       type: "ping";
       clientTime: number;
+    }
+  | {
+      type: "pickup_collectible";
+      collectibleId: string;
     };
 
 export type ServerMessage =
@@ -88,6 +92,7 @@ export type ServerMessage =
       entities: SnapshotEntity[];
       playerEntities?: PlayerEntityFrame[];
       enemies?: EnemyState[];
+      collectibles?: CollectibleState[];
       collectedRelics: RelicId[];
       events: MatchEvent[];
       lastProcessedSeq: Record<PlayerId, number>;

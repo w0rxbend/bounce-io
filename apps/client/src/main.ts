@@ -3,6 +3,7 @@ import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   CHECKPOINT_PORTAL_WIDTH_TILES,
+  GAME_REWARD_CONFIG,
   GAME_VERSION,
   JUMP_SPEED,
   KICK_ACTIVE_SECONDS,
@@ -16,10 +17,12 @@ import {
   PLAYER_WIDTH,
   PROTOCOL_VERSION,
   RECONCILIATION_TOLERANCE_PX,
-  RELICS_PER_LEVEL,
   TILE_SIZE,
 } from "@skybound/shared";
 import {
+  addPlayerXp,
+  applyCollectible,
+  applyDamage,
   applyWindZones,
   collectibleKindForRelicId,
   createMultiChunkTileMap,
@@ -28,9 +31,10 @@ import {
   isPlayerDead,
   respawnPlayerState,
   stepPlayer,
+  xpRequiredForLevel,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, RelicSpawn, ServerMessage, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
+import type { CollectibleKind, CollectibleState, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
 import "./styles.css";
 
@@ -1049,6 +1053,12 @@ function coinFrameAsset(frame: number): AssetKey {
 }
 
 function collectibleVisual(kind: CollectibleKind | undefined): { color: number; label: string; notification: string } {
+  if (kind === "xp") {
+    return { color: 0x5b2a86, label: "+XP", notification: "XP GAINED" };
+  }
+  if (kind === "coin") {
+    return { color: PAL.coinGold, label: "+COIN", notification: "COIN +XP" };
+  }
   if (kind === "smallHeart" || kind === "bigHeart" || kind === "greenCrystal") {
     return { color: 0x5dff9c, label: "+HP", notification: "HP +1" };
   }
@@ -1087,6 +1097,7 @@ function collectibleFrames(kind: CollectibleKind, id: string, tileX: number, til
     ["relicPink0", "relicPink1", "relicPink2", "relicPink3"],
   ]);
 
+  if (kind === "xp" || kind === "coin") return repeatedFrame("coin");
   if (kind === "smallHeart" || kind === "bigHeart" || kind === "greenCrystal") return hpGroup ?? repeatedFrame("coin");
   if (kind === "purpleCrystal" || kind === "blueCrystal") return jumpGroup ?? repeatedFrame("coin");
   if (attackGroup) return attackGroup;
@@ -2457,6 +2468,10 @@ const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const pendingChunkRenders = new Set<number>();
 const collectedRelics = new Set<string>();
+const dynamicCollectibles = new Map<string, CollectibleState>();
+const pendingPickupCollectibles = new Set<string>();
+const localDefeatedEnemies = new Set<string>();
+const localEnemyLastHitBy = new Map<string, string>();
 const chunkRenderQueueScratch: number[] = [];
 const chunkPruneScratch: number[] = [];
 
@@ -2479,8 +2494,8 @@ interface RelicAnim {
   kind: CollectibleKind;
   auraColor: number;
   frames: AssetKey[];
-  tileX: number;
-  tileY: number;
+  worldX: number;
+  worldY: number;
   lastParticleMs: number;
 }
 const relicAnims = new Map<string, RelicAnim>();
@@ -3257,6 +3272,10 @@ function resetGameSession(mode: GameMode): void {
   clearWorldChunks();
   clearRemotePlayers();
   collectedRelics.clear();
+  dynamicCollectibles.clear();
+  pendingPickupCollectibles.clear();
+  localDefeatedEnemies.clear();
+  localEnemyLastHitBy.clear();
   playerNames.clear();
   localPlayer = null;
   localVisualPosition = null;
@@ -3415,7 +3434,7 @@ function destroyChunkVisuals(chunkY: number): void {
 
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
-    const animChunkY = Math.max(0, -Math.floor(anim.tileY / CHUNK_HEIGHT_TILES));
+    const animChunkY = chunkYForWorldY(anim.worldY);
     if (id.startsWith(relicPrefix) || animChunkY === chunkY) {
       anim.container.destroy({ children: true });
       relicAnims.delete(id);
@@ -5509,9 +5528,8 @@ function jumpPadFeedback(wx: number, wy: number, multiplier: number): void {
 
 // ── Relic animations ──────────────────────────────────────────────────────────
 
-function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
+function spawnCollectibleAnim(id: string, kind: CollectibleKind, worldX: number, worldY: number): void {
   if (relicAnims.has(id)) return;
-  const kind = collectibleKindForRelicId(id);
   const visual = collectibleVisual(kind);
   const container = new Container();
   const aura = new Graphics();
@@ -5537,10 +5555,12 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
     container.addChild(sparkle);
   }
   container.addChild(sprite, gfx);
-  container.x = tileX * TILE_SIZE + TILE_SIZE / 2;
-  container.y = tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET;
+  container.x = worldX;
+  container.y = worldY;
   container.scale.set(COLLECTIBLE_ASSET_SCALE);
   relicLayer.addChild(container);
+  const tileX = Math.round(worldX / TILE_SIZE);
+  const tileY = Math.round(worldY / TILE_SIZE);
   relicAnims.set(id, {
     container,
     aura,
@@ -5551,23 +5571,43 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
     kind,
     auraColor: visual.color,
     frames: collectibleFrames(kind, id, tileX, tileY),
-    tileX,
-    tileY,
+    worldX,
+    worldY,
     lastParticleMs: 0,
   });
+}
+
+function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
+  spawnCollectibleAnim(
+    id,
+    collectibleKindForRelicId(id),
+    tileX * TILE_SIZE + TILE_SIZE / 2,
+    tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET
+  );
+}
+
+function spawnStateCollectibleAnim(collectible: CollectibleState): void {
+  spawnCollectibleAnim(
+    collectible.id,
+    collectible.type === "xp" ? "xp" : "coin",
+    collectible.x,
+    collectible.y
+  );
 }
 
 function spawnCollectibleAuraSparks(anim: RelicAnim, tSec: number, bob: number, pulse: number): void {
   if (elapsedMs - anim.lastParticleMs < 95 / Math.max(0.1, activePerformanceConfig().collectibleSparkScale)) return;
   anim.lastParticleMs = elapsedMs;
 
-  const wx = anim.tileX * TILE_SIZE + TILE_SIZE / 2;
-  const wy = anim.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
-  const seed = midMountainNoise(anim.tileX + Math.round(tSec * 18), anim.tileY, Math.round(elapsedMs / 16), 719);
+  const tileX = Math.round(anim.worldX / TILE_SIZE);
+  const tileY = Math.round(anim.worldY / TILE_SIZE);
+  const wx = anim.worldX;
+  const wy = anim.worldY + bob;
+  const seed = midMountainNoise(tileX + Math.round(tSec * 18), tileY, Math.round(elapsedMs / 16), 719);
   const count = Math.max(1, Math.round((seed % 4 === 0 ? 3 : 2) * activePerformanceConfig().collectibleSparkScale));
 
   for (let i = 0; i < count; i++) {
-    const n = midMountainNoise(seed, i * 37, anim.tileX + anim.tileY * 13, 743);
+    const n = midMountainNoise(seed, i * 37, tileX + tileY * 13, 743);
     const angle = ((n % 628) / 100) + tSec * 0.7;
     const radius = 13 + ((n >> 5) % 8) + pulse * 5;
     const speed = 18 + ((n >> 11) % 24);
@@ -5594,45 +5634,66 @@ function updateRelicAnims(tSec: number): void {
       relicAnims.delete(id);
       continue;
     }
-    const active = isWorldYActive(a.tileY * TILE_SIZE);
+    const active = isWorldYActive(a.worldY);
     a.container.visible = active;
     if (!active) continue;
-    const bob   = Math.sin(tSec * 3.0 + a.tileX * 0.8) * 2.5;
-    a.container.y = a.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
+    const tileX = Math.round(a.worldX / TILE_SIZE);
+    const tileY = Math.round(a.worldY / TILE_SIZE);
+    const bob   = Math.sin(tSec * 3.0 + tileX * 0.8) * 2.5;
+    a.container.y = a.worldY + bob;
 
     const frame  = Math.floor((tSec * 5) % 4);
     const coinW  = frame === 0 ? 8 : frame === 1 ? 5 : frame === 2 ? 2 : 5;
     const cx     = -coinW / 2;
-    const pulse = 0.5 + Math.sin(tSec * 4.6 + a.tileX * 0.7 + a.tileY * 0.3) * 0.5;
+    const pulse = 0.5 + Math.sin(tSec * 4.6 + tileX * 0.7 + tileY * 0.3) * 0.5;
 
     a.aura.clear();
-    a.aura.circle(0, 0, 22 + pulse * 4).fill({ color: a.auraColor, alpha: 0.08 + pulse * 0.07 });
-    a.aura.circle(0, 0, 16 + pulse * 3).stroke({ color: a.auraColor, alpha: 0.28 + pulse * 0.22, width: 1 });
-    a.aura.circle(0, 0, 10 + pulse * 2).stroke({ color: a.auraColor, alpha: 0.42 + pulse * 0.2, width: 1 });
-    a.aura.circle(0, 0, 6 + pulse).stroke({ color: 0xffffff, alpha: 0.18 + pulse * 0.16, width: 1 });
+    if (a.kind === "xp") {
+      a.aura.circle(0, 0, 25 + pulse * 6).fill({ color: 0x08040f, alpha: 0.2 + pulse * 0.08 });
+      a.aura.circle(0, 0, 19 + pulse * 4).stroke({ color: 0x5b2a86, alpha: 0.34 + pulse * 0.22, width: 2 });
+      a.aura.circle(0, 0, 11 + pulse * 2).stroke({ color: 0x16091f, alpha: 0.62 + pulse * 0.22, width: 1 });
+      a.aura.circle(0, 0, 6 + pulse).stroke({ color: 0xb184ff, alpha: 0.14 + pulse * 0.16, width: 1 });
+    } else {
+      a.aura.circle(0, 0, 22 + pulse * 4).fill({ color: a.auraColor, alpha: 0.08 + pulse * 0.07 });
+      a.aura.circle(0, 0, 16 + pulse * 3).stroke({ color: a.auraColor, alpha: 0.28 + pulse * 0.22, width: 1 });
+      a.aura.circle(0, 0, 10 + pulse * 2).stroke({ color: a.auraColor, alpha: 0.42 + pulse * 0.2, width: 1 });
+      a.aura.circle(0, 0, 6 + pulse).stroke({ color: 0xffffff, alpha: 0.18 + pulse * 0.16, width: 1 });
+    }
     for (let i = 0; i < 4; i++) {
-      const angle = tSec * 1.35 + a.tileX * 0.5 + i * Math.PI * 0.5;
+      const angle = tSec * 1.35 + tileX * 0.5 + i * Math.PI * 0.5;
       const r = 18 + pulse * 5 + (i % 2) * 3;
       a.aura.rect(Math.round(Math.cos(angle) * r) - 1, Math.round(Math.sin(angle) * r * 0.75) - 1, 2, 2)
         .fill({ color: i % 3 === 0 ? 0xffffff : a.auraColor, alpha: 0.3 + pulse * 0.28 });
     }
     spawnCollectibleAuraSparks(a, tSec, bob, pulse);
 
-    if (hasAsset("coin")) {
+    if (a.kind === "xp") {
+      a.sprite.visible = false;
+      a.gfx.clear();
+      const core = 7 + Math.round(pulse * 2);
+      a.gfx.rect(-core, -core, core * 2, core * 2).fill(0x050309);
+      a.gfx.rect(-core + 2, -core + 2, core * 2 - 4, core * 2 - 4).fill(0x12091b);
+      a.gfx.rect(-3, -core - 2, 6, 2).fill({ color: 0x5b2a86, alpha: 0.72 });
+      a.gfx.rect(-2, core, 4, 2).fill({ color: 0x2d143f, alpha: 0.85 });
+      a.gfx.rect(core - 3, -core + 1, 2, core * 2 - 2).fill({ color: 0x000000, alpha: 0.8 });
+      a.gfx.rect(-core + 2, -core + 1, 3, 2).fill({ color: 0xb184ff, alpha: 0.42 + pulse * 0.25 });
+    } else if (hasAsset("coin")) {
+      a.sprite.visible = true;
       a.gfx.clear();
       a.sprite.texture = assetTexture(a.frames[frame % a.frames.length] ?? coinFrameAsset(frame));
-      a.sprite.scale.set(1 + Math.sin(tSec * 4.2 + a.tileX) * 0.05);
+      a.sprite.scale.set(1 + Math.sin(tSec * 4.2 + tileX) * 0.05);
       if (a.sparkle) {
         a.sparkle.rotation = tSec * 0.8;
-        a.sparkle.scale.set(0.72 + Math.sin(tSec * 5 + a.tileY) * 0.08);
-        a.sparkle.alpha = 0.28 + Math.sin(tSec * 4.4 + a.tileX) * 0.16;
+        a.sparkle.scale.set(0.72 + Math.sin(tSec * 5 + tileY) * 0.08);
+        a.sparkle.alpha = 0.28 + Math.sin(tSec * 4.4 + tileX) * 0.16;
       }
       if (a.ring) {
-        a.ring.rotation = tSec * 0.45 + a.tileX * 0.1;
-        a.ring.scale.set(0.72 + Math.sin(tSec * 3.2 + a.tileY) * 0.06);
-        a.ring.alpha = 0.24 + Math.sin(tSec * 2.8 + a.tileX) * 0.12;
+        a.ring.rotation = tSec * 0.45 + tileX * 0.1;
+        a.ring.scale.set(0.72 + Math.sin(tSec * 3.2 + tileY) * 0.06);
+        a.ring.alpha = 0.24 + Math.sin(tSec * 2.8 + tileX) * 0.12;
       }
     } else {
+      a.sprite.visible = false;
       a.gfx.clear();
       a.gfx.rect(cx - 1, -7, coinW + 2, 14).fill({ color: PAL.coinGlow, alpha: 0.28 });
       a.gfx.rect(cx, -6, coinW, 12).fill(PAL.coinGold);
@@ -6265,7 +6326,15 @@ function burst(wx: number, wy: number, color: number): void {
 
 function pickupBurst(wx: number, wy: number, pickupType: string | undefined): void {
   const visual = collectibleVisual(pickupType as CollectibleKind | undefined);
-  coinBurst(wx, wy);
+  if (pickupType === "xp") {
+    spawnWorldPulse(wx, wy, 0x5b2a86, 42, 0.5, 2);
+    for (let i = 0; i < 10; i++) {
+      const a = (Math.PI * 2 * i) / 10;
+      spawnPart(wx, wy, Math.cos(a) * 58, Math.sin(a) * 58 - 14, 0.34, i % 3 === 0 ? 0xb184ff : 0x12091b, 3);
+    }
+  } else {
+    coinBurst(wx, wy);
+  }
   spawnWorldPulse(wx, wy, visual.color, 36, 0.44, 2);
   spawnFloatingText(wx, wy - 14, visual.label, visual.color);
 }
@@ -6349,10 +6418,244 @@ function updateEnemyEntries(enemies: EnemyState[], tSec: number): void {
   }
 }
 
-function spawnDropAnimations(drops: RelicSpawn[]): void {
+function spawnDropAnimations(drops: CollectibleState[]): void {
   for (const drop of drops) {
-    if (!collectedRelics.has(drop.id)) spawnRelicAnim(drop.id, drop.x, drop.y);
+    dynamicCollectibles.set(drop.id, drop);
+    if (!collectedRelics.has(drop.id)) spawnStateCollectibleAnim(drop);
   }
+}
+
+function rewardHash(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function enemyStateFromLocalSpawn(chunk: GeneratedChunk, spawn: GeneratedChunk["enemies"][number]): EnemyState {
+  let platform = chunk.entry;
+  for (const candidate of chunk.platforms) {
+    if (candidate.y === spawn.y + 1 && spawn.x >= candidate.x && spawn.x < candidate.x + candidate.width) {
+      platform = candidate;
+      break;
+    }
+  }
+  const platformY = (chunk.worldTileY + platform.y) * TILE_SIZE;
+  const facing = spawn.x % 2 === 0 ? 1 : -1;
+  return {
+    id: spawn.id,
+    kind: spawn.kind,
+    position: { x: spawn.x * TILE_SIZE - 10, y: platformY - 24 },
+    velocity: { x: facing * 22, y: 0 },
+    facing,
+    health: 2,
+    maxHealth: 2,
+    chunkY: chunk.chunkY,
+    patrolMinX: platform.x * TILE_SIZE + 2,
+    patrolMaxX: (platform.x + platform.width) * TILE_SIZE - 22,
+    platformY,
+    attackCooldown: 0.35,
+    hurtCooldown: 0,
+  };
+}
+
+function syncLocalEnemies(): void {
+  if (selectedMode !== "local") return;
+  for (const chunk of loadedChunks.values()) {
+    for (const spawn of chunk.enemies) {
+      if (localDefeatedEnemies.has(spawn.id) || enemyEntries.has(spawn.id)) continue;
+      enemyEntries.set(spawn.id, createEnemyEntry(enemyStateFromLocalSpawn(chunk, spawn)));
+    }
+  }
+}
+
+function localPlayerKickHitsEnemy(player: PlayerState, enemy: EnemyState): boolean {
+  if (player.kickPhase !== "active" || enemy.hurtCooldown > 0 || enemy.health <= 0) return false;
+  const rangeX = player.facing > 0 ? player.position.x : player.position.x - 20;
+  return rangeX < enemy.position.x + 22 &&
+    rangeX + PLAYER_WIDTH + 20 > enemy.position.x &&
+    player.position.y - 4 < enemy.position.y + 24 &&
+    player.position.y + PLAYER_HEIGHT + 4 > enemy.position.y;
+}
+
+function enemyTouchesLocalPlayer(enemy: EnemyState, player: PlayerState): boolean {
+  return enemy.position.x + 2 < player.position.x + PLAYER_WIDTH &&
+    enemy.position.x + 20 > player.position.x &&
+    enemy.position.y + 3 < player.position.y + PLAYER_HEIGHT &&
+    enemy.position.y + 24 > player.position.y;
+}
+
+function makeLocalEnemyDrops(enemy: EnemyState): CollectibleState[] {
+  const seed = rewardHash(`${enemy.id}:${elapsedMs | 0}`);
+  const range = Math.max(0, GAME_REWARD_CONFIG.enemyDropMax - GAME_REWARD_CONFIG.enemyDropMin);
+  const count = GAME_REWARD_CONFIG.enemyDropMin + (range > 0 ? seed % (range + 1) : 0);
+  const drops: CollectibleState[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const n = rewardHash(`${enemy.id}:drop:${i}:${seed}`);
+    const type = ((n >>> 11) % 100) / 100 < GAME_REWARD_CONFIG.enemyXpDropChance ? "xp" : "coin";
+    const scatterX = (n % 25) - 12;
+    const popY = -(8 + ((n >>> 5) % 10));
+    drops.push({
+      id: `drop:${enemy.id}:${type}:${elapsedMs | 0}:${i}`,
+      type,
+      x: Math.max(8, Math.min(WORLD_WIDTH - 8, enemy.position.x + 11 + scatterX)),
+      y: enemy.position.y + 12 + popY,
+      xpValue: GAME_REWARD_CONFIG.xpCollectibleValue,
+      picked: false,
+      spawnedBy: "enemy_drop",
+    });
+  }
+  return drops;
+}
+
+function levelUpFeedback(player: PlayerState): void {
+  const x = player.position.x + PLAYER_WIDTH / 2;
+  const y = player.position.y - 8;
+  spawnRing(x, y, PAL.portalGlow);
+  spawnFloatingText(x, y - 14, `LVL ${player.level}`, PAL.coinGold);
+  triggerShake(2, -2);
+}
+
+function grantLocalXp(player: PlayerState, amount: number): number {
+  const beforeLevel = player.level;
+  const gained = addPlayerXp(player, amount);
+  if (player.level > beforeLevel) levelUpFeedback(player);
+  return gained;
+}
+
+function collectLocalCollectible(id: string, kind: CollectibleKind, x: number, y: number, xpValue: number, coinValue: number): void {
+  if (!localPlayer || collectedRelics.has(id)) return;
+  const beforeLevel = localPlayer.level;
+  collectedRelics.add(id);
+  if (kind === "xp") {
+    grantLocalXp(localPlayer, xpValue);
+  } else {
+    applyCollectible(localPlayer, kind, xpValue);
+    if (localPlayer.level > beforeLevel) levelUpFeedback(localPlayer);
+  }
+  localPlayer.coins += coinValue;
+  pickupBurst(x, y, kind);
+  const visual = collectibleVisual(kind);
+  pushNotification(visual.notification, visual.color);
+}
+
+function collectLocalPickups(): void {
+  if (!localPlayer || selectedMode !== "local") return;
+  const px = localPlayer.position.x + PLAYER_WIDTH / 2;
+  const py = localPlayer.position.y + PLAYER_HEIGHT / 2;
+  const radius = GAME_REWARD_CONFIG.pickupRadius;
+  const centerChunkY = chunkYForWorldY(localPlayer.position.y);
+
+  for (let chunkY = Math.max(0, centerChunkY - 1); chunkY <= centerChunkY + 1; chunkY += 1) {
+    const chunk = loadedChunks.get(chunkY);
+    if (!chunk) continue;
+    for (const relic of chunk.relics) {
+      if (collectedRelics.has(relic.id)) continue;
+      const x = relic.x * TILE_SIZE + TILE_SIZE / 2;
+      const y = (chunk.worldTileY + relic.y) * TILE_SIZE + TILE_SIZE / 2;
+      if (Math.hypot(px - x, py - y) > radius) continue;
+      collectLocalCollectible(relic.id, collectibleKindForRelicId(relic.id), x, y, GAME_REWARD_CONFIG.xpCollectibleValue, 1);
+    }
+  }
+
+  for (const collectible of dynamicCollectibles.values()) {
+    if (collectible.picked || collectedRelics.has(collectible.id)) continue;
+    if (Math.hypot(px - collectible.x, py - collectible.y) > radius) continue;
+    collectible.picked = true;
+    collectLocalCollectible(
+      collectible.id,
+      collectible.type === "xp" ? "xp" : "coin",
+      collectible.x,
+      collectible.y,
+      collectible.xpValue,
+      collectible.type === "coin" ? 1 : 0
+    );
+  }
+}
+
+function requestOnlinePickupsNearPlayer(): void {
+  if (!localPlayer || selectedMode !== "online") return;
+  const px = localPlayer.position.x + PLAYER_WIDTH / 2;
+  const py = localPlayer.position.y + PLAYER_HEIGHT / 2;
+  const radius = GAME_REWARD_CONFIG.pickupRadius;
+  for (const collectible of dynamicCollectibles.values()) {
+    if (collectible.picked || collectedRelics.has(collectible.id) || pendingPickupCollectibles.has(collectible.id)) continue;
+    if (Math.hypot(px - collectible.x, py - collectible.y) > radius) continue;
+    if (sendWsMessage({ type: "pickup_collectible", collectibleId: collectible.id }, "input")) {
+      pendingPickupCollectibles.add(collectible.id);
+    }
+  }
+}
+
+function syncAuthoritativeCollectibles(collectibles: CollectibleState[]): void {
+  const ids = new Set<string>();
+  for (const collectible of collectibles) {
+    ids.add(collectible.id);
+    dynamicCollectibles.set(collectible.id, collectible);
+    if (!collectible.picked && !collectedRelics.has(collectible.id)) spawnStateCollectibleAnim(collectible);
+  }
+  for (const [id] of dynamicCollectibles) {
+    if (!ids.has(id)) {
+      dynamicCollectibles.delete(id);
+      pendingPickupCollectibles.delete(id);
+    }
+  }
+}
+
+function simulateLocalEnemies(dt: number, tSec: number): void {
+  if (!localPlayer || selectedMode !== "local") return;
+  syncLocalEnemies();
+  for (const [id, entry] of [...enemyEntries.entries()]) {
+    const enemy = entry.state;
+    if (enemy.health <= 0) continue;
+    enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dt);
+    enemy.hurtCooldown = Math.max(0, enemy.hurtCooldown - dt);
+    enemy.position.x += enemy.velocity.x * dt;
+    if (enemy.position.x <= enemy.patrolMinX) {
+      enemy.position.x = enemy.patrolMinX;
+      enemy.velocity.x = Math.abs(enemy.velocity.x);
+      enemy.facing = 1;
+    } else if (enemy.position.x >= enemy.patrolMaxX) {
+      enemy.position.x = enemy.patrolMaxX;
+      enemy.velocity.x = -Math.abs(enemy.velocity.x);
+      enemy.facing = -1;
+    }
+    enemy.position.y = enemy.platformY - 24;
+
+    if (localPlayerKickHitsEnemy(localPlayer, enemy)) {
+      const damage = Math.max(1, Math.round(localPlayer.damage));
+      enemy.health = Math.max(0, enemy.health - damage);
+      enemy.hurtCooldown = 0.28;
+      enemy.velocity.x = localPlayer.facing * 22;
+      localEnemyLastHitBy.set(enemy.id, localPlayerId ?? "local");
+      damageFeedback(enemy.position.x + 11, enemy.position.y + 12, damage);
+      if (enemy.health <= 0 && localEnemyLastHitBy.get(enemy.id) === (localPlayerId ?? "local")) {
+        localDefeatedEnemies.add(enemy.id);
+        enemyEntries.delete(id);
+        entry.sprite.destroy();
+        entry.hp.destroy();
+        grantLocalXp(localPlayer, GAME_REWARD_CONFIG.enemyKillXp);
+        const drops = makeLocalEnemyDrops(enemy);
+        spawnDropAnimations(drops);
+        burst(enemy.position.x + 11, enemy.position.y + 12, PAL.coinGold);
+        spawnFloatingText(enemy.position.x + 11, enemy.position.y - 2, `+${GAME_REWARD_CONFIG.enemyKillXp} XP`, PAL.coinGold);
+        pushNotification("NPC DOWN", PAL.coinGold);
+        continue;
+      }
+    }
+
+    if (enemy.attackCooldown <= 0 && enemyTouchesLocalPlayer(enemy, localPlayer)) {
+      const dir = localPlayer.position.x + PLAYER_WIDTH / 2 < enemy.position.x + 11 ? -1 : 1;
+      const beforeHealth = localPlayer.health;
+      applyDamage(localPlayer, 1, dir * 125, -70, 0.16);
+      if (localPlayer.health < beforeHealth) {
+        damageFeedback(localPlayer.position.x + PLAYER_WIDTH / 2, localPlayer.position.y + PLAYER_HEIGHT * 0.45, beforeHealth - localPlayer.health);
+      }
+      enemy.attackCooldown = 0.9;
+    }
+  }
+  updateEnemyEntries([...enemyEntries.values()].map((entry) => entry.state), tSec);
 }
 
 // ── Camera ────────────────────────────────────────────────────────────────────
@@ -6508,13 +6811,14 @@ class PlayerStatsHud {
     const level = Math.max(1, Math.floor(hudStatNumber(player.level, 1)));
     const attack = Math.max(0, hudStatNumber(player.damage, PLAYER_BASE_DAMAGE));
     const xp = Math.max(0, Math.floor(hudStatNumber(player.relics, 0)));
-    const xpProgress = xp % RELICS_PER_LEVEL;
-    const statsKey = `${hp}|${hpMax}|${level}|${attack}|${xpProgress}|${xp}`;
+    const xpNeeded = xpRequiredForLevel(level);
+    const xpProgress = Math.min(xp, xpNeeded);
+    const statsKey = `${hp}|${hpMax}|${level}|${attack}|${xpProgress}|${xpNeeded}|${xp}`;
     if (statsKey === this.statsKey) return;
     this.statsKey = statsKey;
 
     const hpRatio = Math.max(0, Math.min(1, hp / hpMax));
-    const xpRatio = Math.max(0, Math.min(1, xpProgress / RELICS_PER_LEVEL));
+    const xpRatio = Math.max(0, Math.min(1, xpProgress / xpNeeded));
     const hpBarW = width - 86;
     const xpBarW = width - 86;
     this.bars.clear();
@@ -6530,7 +6834,7 @@ class PlayerStatsHud {
     this.bars.rect(width - 51, 48, 6, 2).fill(PAL.hazardGlow);
 
     this.hpText.text = `HP ${Math.ceil(hp)}/${Math.ceil(hpMax)}`;
-    this.xpText.text = `XP ${xpProgress}/${RELICS_PER_LEVEL}`;
+    this.xpText.text = `XP ${xpProgress}/${xpNeeded}`;
     this.levelText.text = `LVL ${level}`;
     this.atkText.text = `ATK ${formatHudStat(attack)}`;
   }
@@ -7868,6 +8172,8 @@ function handleMatchEvents(events: MatchEvent[]): void {
     if (!shouldApplyMatchEvent(ev2)) continue;
     if (ev2.type === "COIN_COLLECTED") {
       collectedRelics.add(ev2.coinId);
+      dynamicCollectibles.delete(ev2.coinId);
+      pendingPickupCollectibles.delete(ev2.coinId);
       const remote = remotePlayers.get(ev2.playerId);
       if (remote && ev2.playerId !== localPlayerId) remote.current.coins += ev2.value;
       pickupBurst(ev2.x, ev2.y, ev2.pickupType);
@@ -7887,9 +8193,23 @@ function handleMatchEvents(events: MatchEvent[]): void {
       if (ev2.playerId === localPlayerId) pushNotification("NPC HIT", PAL.hazardGlow);
     } else if (ev2.type === "ENEMY_KILLED") {
       burst(ev2.x, ev2.y, PAL.coinGold);
-      spawnFloatingText(ev2.x, ev2.y - 14, "DROP", PAL.coinGold);
+      spawnFloatingText(ev2.x, ev2.y - 14, ev2.xpGranted ? `+${ev2.xpGranted} XP` : "DROP", PAL.coinGold);
       spawnDropAnimations(ev2.drops);
       if (ev2.playerId === localPlayerId) pushNotification("NPC DOWN", PAL.coinGold);
+    } else if (ev2.type === "COLLECTIBLE_SPAWNED") {
+      dynamicCollectibles.set(ev2.collectible.id, ev2.collectible);
+      if (!collectedRelics.has(ev2.collectible.id)) spawnStateCollectibleAnim(ev2.collectible);
+    } else if (ev2.type === "COLLECTIBLE_PICKED") {
+      collectedRelics.add(ev2.collectibleId);
+      dynamicCollectibles.delete(ev2.collectibleId);
+      pendingPickupCollectibles.delete(ev2.collectibleId);
+    } else if (ev2.type === "PLAYER_STATS" && ev2.playerId === localPlayerId && localPlayer) {
+      const beforeLevel = localPlayer.level;
+      localPlayer.relics = ev2.xp;
+      localPlayer.level = ev2.level;
+      localPlayer.health = ev2.hp;
+      localPlayer.damage = ev2.atk;
+      if (localPlayer.level > beforeLevel) levelUpFeedback(localPlayer);
     } else if (ev2.type === "JUMP_PAD_TRIGGERED") {
       if (ev2.playerId !== localPlayerId || elapsedMs - lastLocalJumpPadFxMs > 250) {
         jumpPadFeedback(ev2.x, ev2.y, ev2.multiplier);
@@ -7971,6 +8291,7 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   serverTick = parsed.tick; matchPhase = parsed.matchPhase;
   // Reconcile full collected set so late-joiners see correct coin state
   for (const id of parsed.collectedRelics) collectedRelics.add(id);
+  syncAuthoritativeCollectibles(parsed.collectibles ?? []);
   handleMatchEvents(parsed.events);
   const fullPlayerIds = new Set<string>();
   for (const sp of parsed.players) {
@@ -8639,22 +8960,30 @@ pixi.ticker.add((ticker) => {
         );
       }
 
+      if (selectedMode === "local") {
+        localPlayer = next;
+        simulateLocalEnemies(PHYSICS_STEP_SECONDS, tSec);
+        collectLocalPickups();
+      }
+
       if (next.health < wasHealth) {
         damageFeedback(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT * 0.45, wasHealth - next.health);
       }
 
-      if (isPlayerDead(next)) {
-        burst(next.position.x + PLAYER_WIDTH / 2, next.position.y, PAL.hazardRed);
-        localPlayer = next;
+      const current: PlayerState = localPlayer ?? next;
+      if (isPlayerDead(current)) {
+        burst(current.position.x + PLAYER_WIDTH / 2, current.position.y, PAL.hazardRed);
+        localPlayer = current;
         respawnLocal();
         break;
       }
 
-      localPlayer = next;
+      localPlayer = current;
       if (predBuf.length >= 120) predBuf.shift();
-      predBuf.push({ seq: inp.sequence, input: inp, state: clonePlayerState(next) });
+      predBuf.push({ seq: inp.sequence, input: inp, state: clonePlayerState(current) });
       netMetrics.pendingInputCount = predBuf.length;
       sendInput(inp);
+      requestOnlinePickupsNearPlayer();
     }
   } else {
     jumpEdge = false;

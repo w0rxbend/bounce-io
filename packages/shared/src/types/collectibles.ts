@@ -1,1 +1,1 @@
-export type { RelicId, RelicSpawn } from "../types.js";
+export type { CollectibleState, CollectibleType, RelicId, RelicSpawn } from "../types.js";

@@ -323,6 +323,8 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 			s.handleInput(client, data)
 		case "requestChunk":
 			s.handleRequestChunk(client, data)
+		case "pickup_collectible":
+			s.handlePickupCollectible(client, data)
 		case "ping":
 			var ping ClientPing
 			if json.Unmarshal(data, &ping) == nil {
@@ -410,6 +412,20 @@ func (s *Server) handleRequestChunk(client *Client, data []byte) {
 	} else {
 		s.logParseError(client, nil, "PARSE_ERROR", err)
 	}
+}
+
+func (s *Server) handlePickupCollectible(client *Client, data []byte) {
+	room, playerID, _ := client.Session()
+	if room == nil || playerID == "" {
+		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: "NOT_JOINED", Message: "send join first"})
+		return
+	}
+	var msg ClientPickupCollectible
+	if err := json.Unmarshal(data, &msg); err != nil || msg.CollectibleID == "" {
+		s.logParseError(client, nil, "PARSE_ERROR", err)
+		return
+	}
+	room.PickupCollectible(playerID, msg.CollectibleID)
 }
 
 func (s *Server) getOrCreateRoom(id string) *Room {

@@ -1,6 +1,6 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { ClientMessage, NetworkMessage, ServerMessage } from "./protocol.js";
-import type { EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
+import type { CollectibleState, EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -107,6 +107,18 @@ function isEnemyState(value: unknown): value is EnemyState {
     isFiniteNumber(value.platformY) &&
     isFiniteNumber(value.attackCooldown) &&
     isFiniteNumber(value.hurtCooldown);
+}
+
+function isCollectibleState(value: unknown): value is CollectibleState {
+  return isRecord(value) &&
+    isString(value.id) &&
+    (value.type === "coin" || value.type === "xp") &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.xpValue) &&
+    (value.xpValue as number) >= 0 &&
+    isBoolean(value.picked) &&
+    (value.spawnedBy === undefined || value.spawnedBy === "level" || value.spawnedBy === "enemy_drop");
 }
 
 function isSnapshotEntity(value: unknown): boolean {
@@ -256,6 +268,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return isInteger(value.chunkY);
     case "ping":
       return isFiniteNumber(value.clientTime);
+    case "pickup_collectible":
+      return isString(value.collectibleId);
     default:
       return false;
   }
@@ -290,6 +304,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         (value.entities as unknown[]).every(isSnapshotEntity) &&
         (value.playerEntities === undefined || (Array.isArray(value.playerEntities) && (value.playerEntities as unknown[]).every(isPlayerEntityFrame))) &&
         (value.enemies === undefined || (Array.isArray(value.enemies) && (value.enemies as unknown[]).every(isEnemyState))) &&
+        (value.collectibles === undefined || (Array.isArray(value.collectibles) && (value.collectibles as unknown[]).every(isCollectibleState))) &&
         Array.isArray(value.collectedRelics) &&
         (value.collectedRelics as unknown[]).every(isString) &&
         Array.isArray(value.events) &&

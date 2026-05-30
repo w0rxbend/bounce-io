@@ -23,5 +23,5 @@ export const WORLD = {
 } as const;
 
 export const COLLECTIBLES = {
-  coinPickupRadius: 20
+  coinPickupRadius: 24
 } as const;

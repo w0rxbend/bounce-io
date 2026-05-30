@@ -46,6 +46,7 @@ type roomState struct {
 	collectedRelics   map[string]struct{}
 	defeatedEnemies   map[string]struct{}
 	enemies           map[string]EnemyState
+	collectibles      map[string]CollectibleState
 	jumpPadCooldowns  map[string]uint64
 	pendingEvents     []MatchEvent
 	metrics           RoomMetrics
@@ -220,6 +221,19 @@ type chunkCommand struct {
 	chunkY   int
 }
 
+type pickupCollectibleCommand struct {
+	playerID      string
+	collectibleID string
+}
+
+func (cmd pickupCollectibleCommand) apply(s *roomState) {
+	sess := s.sessions[cmd.playerID]
+	if sess == nil || !sess.connected {
+		return
+	}
+	s.tryPickupCollectible(sess, cmd.collectibleID)
+}
+
 func (cmd chunkCommand) apply(s *roomState) {
 	if cmd.chunkY < 0 || cmd.chunkY > 200 {
 		return
@@ -337,6 +351,13 @@ func (r *Room) RequestChunk(playerID string, chunkY int) {
 	}
 }
 
+func (r *Room) PickupCollectible(playerID, collectibleID string) {
+	select {
+	case r.commands <- pickupCollectibleCommand{playerID: playerID, collectibleID: collectibleID}:
+	default:
+	}
+}
+
 func (r *Room) Snapshot(timeout time.Duration) (RoomSnapshot, bool) {
 	reply := make(chan RoomSnapshot, 1)
 	select {
@@ -372,6 +393,7 @@ func (r *Room) loop() {
 		collectedRelics:   map[string]struct{}{},
 		defeatedEnemies:   map[string]struct{}{},
 		enemies:           map[string]EnemyState{},
+		collectibles:      map[string]CollectibleState{},
 		jumpPadCooldowns:  map[string]uint64{},
 		pendingEvents:     make([]MatchEvent, 0, 32),
 		lastTickWallClock: time.Now(),
@@ -471,6 +493,7 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 				})
 			}
 			s.checkRelicCollection(sess)
+			s.checkDynamicCollectibleCollection(sess)
 			chunkY := ChunkYForWorldY(sess.player.Position.Y)
 			if chunkY > sess.player.CheckpointChunkY && IsCheckpointChunk(chunkY) {
 				sess.player.CheckpointChunkY = chunkY
@@ -565,7 +588,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		Entities:         []EntityState{},
 		PlayerEntities:   playerEntities,
 		Enemies:          s.enemyList(),
-		CollectedRelics:  []string{},
+		Collectibles:     s.collectibleList(),
+		CollectedRelics:  s.collectedRelicList(),
 		Events:           []MatchEvent{},
 		LastProcessedSeq: lastProcessed,
 	}
@@ -658,13 +682,14 @@ func (s *roomState) checkRelicCollection(sess *session) {
 			}
 			worldX := float64(relic.X*TileSize) + float64(TileSize)/2
 			worldY := float64((chunk.WorldTileY+relic.Y)*TileSize) + float64(TileSize)/2
-			if math.Abs(px-worldX) >= 20 || math.Abs(py-worldY) >= 20 {
+			if math.Hypot(px-worldX, py-worldY) > PickupRadius {
 				continue
 			}
 			s.collectedRelics[relic.ID] = struct{}{}
 			pickupType := collectibleKindForRelicID(relic.ID)
 			applyCollectible(player, pickupType)
 			player.Coins++
+			s.emitPlayerStats(sess)
 			s.pendingEvents = append(s.pendingEvents, MatchEvent{
 				"type":       "COIN_COLLECTED",
 				"playerId":   sess.playerID,
@@ -673,9 +698,22 @@ func (s *roomState) checkRelicCollection(sess *session) {
 				"x":          worldX,
 				"y":          worldY,
 				"pickupType": pickupType,
+				"xpGranted":  XPCollectibleValue,
+				"level":      player.Level,
 			})
 		}
 	}
+}
+
+func (s *roomState) emitPlayerStats(sess *session) {
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{
+		"type":     "PLAYER_STATS",
+		"playerId": sess.playerID,
+		"xp":       sess.player.Relics,
+		"level":    sess.player.Level,
+		"hp":       sess.player.Health,
+		"atk":      sess.player.Damage,
+	})
 }
 
 func (s *roomState) collectedRelicList() []string {
@@ -685,6 +723,66 @@ func (s *roomState) collectedRelicList() []string {
 	}
 	sort.Strings(relics)
 	return relics
+}
+
+func (s *roomState) collectibleList() []CollectibleState {
+	collectibles := make([]CollectibleState, 0, len(s.collectibles))
+	for _, collectible := range s.collectibles {
+		if !collectible.Picked {
+			collectibles = append(collectibles, collectible)
+		}
+	}
+	sort.Slice(collectibles, func(i, j int) bool { return collectibles[i].ID < collectibles[j].ID })
+	return collectibles
+}
+
+func (s *roomState) checkDynamicCollectibleCollection(sess *session) {
+	for id := range s.collectibles {
+		s.tryPickupCollectible(sess, id)
+	}
+}
+
+func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bool {
+	if s.collectibles == nil {
+		s.collectibles = map[string]CollectibleState{}
+	}
+	collectible, ok := s.collectibles[collectibleID]
+	if !ok || collectible.Picked {
+		return false
+	}
+
+	player := &sess.player
+	px := player.Position.X + float64(PlayerWidth)/2
+	py := player.Position.Y + float64(PlayerHeight)/2
+	if math.Hypot(px-collectible.X, py-collectible.Y) > PickupRadius {
+		return false
+	}
+
+	collectible.Picked = true
+	s.collectibles[collectibleID] = collectible
+	xpGranted := addPlayerXP(player, collectible.XPValue)
+	if collectible.Type == "coin" {
+		player.Coins++
+	}
+	s.emitPlayerStats(sess)
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{
+		"type":          "COLLECTIBLE_PICKED",
+		"playerId":      sess.playerID,
+		"collectibleId": collectible.ID,
+		"xpGranted":     xpGranted,
+	})
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{
+		"type":       "COIN_COLLECTED",
+		"playerId":   sess.playerID,
+		"coinId":     collectible.ID,
+		"value":      boolInt(collectible.Type == "coin"),
+		"x":          collectible.X,
+		"y":          collectible.Y,
+		"pickupType": collectible.Type,
+		"xpGranted":  xpGranted,
+		"level":      player.Level,
+	})
+	return true
 }
 
 func (s *roomState) ensureEnemiesAround(player PlayerState) {
@@ -759,14 +857,27 @@ func (s *roomState) simulateEnemies(dt float64) {
 				if enemy.Health <= 0 {
 					s.defeatedEnemies[enemy.ID] = struct{}{}
 					drops := s.makeEnemyDrops(enemy)
+					xpGranted := addPlayerXP(&sess.player, EnemyKillXP)
+					s.emitPlayerStats(sess)
+					for _, drop := range drops {
+						if s.collectibles == nil {
+							s.collectibles = map[string]CollectibleState{}
+						}
+						s.collectibles[drop.ID] = drop
+						s.pendingEvents = append(s.pendingEvents, MatchEvent{
+							"type":        "COLLECTIBLE_SPAWNED",
+							"collectible": drop,
+						})
+					}
 					delete(s.enemies, id)
 					s.pendingEvents = append(s.pendingEvents, MatchEvent{
-						"type":     "ENEMY_KILLED",
-						"playerId": sess.playerID,
-						"enemyId":  enemy.ID,
-						"x":        enemy.Position.X + 11,
-						"y":        enemy.Position.Y + 12,
-						"drops":    drops,
+						"type":      "ENEMY_KILLED",
+						"playerId":  sess.playerID,
+						"enemyId":   enemy.ID,
+						"x":         enemy.Position.X + 11,
+						"y":         enemy.Position.Y + 12,
+						"drops":     drops,
+						"xpGranted": xpGranted,
 					})
 					goto nextEnemy
 				}
@@ -820,11 +931,33 @@ func (s *roomState) respawn(sess *session) {
 	sess.player.CheckpointChunkY = checkpoint
 }
 
-func (s *roomState) makeEnemyDrops(enemy EnemyState) []RelicSpawn {
-	tileX := clampInt(int(math.Round((enemy.Position.X+11)/TileSize)), 1, ChunkWidthTiles-2)
-	tileY := int(math.Round((enemy.Position.Y + 14) / TileSize))
-	drop := RelicSpawn{ID: "drop:" + enemy.ID + ":heart:" + itoa(int(s.tick)), X: tileX, Y: tileY}
-	return []RelicSpawn{drop}
+func (s *roomState) makeEnemyDrops(enemy EnemyState) []CollectibleState {
+	seed := HashString(enemy.ID + ":" + itoa(int(s.tick)))
+	countRange := max(0, EnemyDropMax-EnemyDropMin)
+	count := EnemyDropMin
+	if countRange > 0 {
+		count += int(seed%uint32(countRange+1))
+	}
+	drops := make([]CollectibleState, 0, count)
+	for i := 0; i < count; i++ {
+		n := HashString(enemy.ID + ":drop:" + itoa(i) + ":" + itoa(int(s.tick)))
+		scatterX := float64(int(n%25)) - 12
+		popY := -float64(8 + int((n>>5)%10))
+		kind := "coin"
+		if float64((n>>11)%100)/100.0 < EnemyXPDropChance {
+			kind = "xp"
+		}
+		drops = append(drops, CollectibleState{
+			ID:        "drop:" + enemy.ID + ":" + kind + ":" + itoa(int(s.tick)) + ":" + itoa(i),
+			Type:      kind,
+			X:         math.Max(8, math.Min(float64(ChunkWidthTiles*TileSize-8), enemy.Position.X+11+scatterX)),
+			Y:         enemy.Position.Y + 12 + popY,
+			XPValue:   XPCollectibleValue,
+			Picked:    false,
+			SpawnedBy: "enemy_drop",
+		})
+	}
+	return drops
 }
 
 func (s *roomState) applyPlayerInteractions(dt float64) {

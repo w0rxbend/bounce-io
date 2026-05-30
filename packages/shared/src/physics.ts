@@ -3,6 +3,7 @@ import {
   AIR_PUSH_FACTOR,
   COYOTE_TIME_SECONDS,
   FATAL_FALL_DISTANCE_PX,
+  GAME_REWARD_CONFIG,
   GRAVITY,
   GROUND_FRICTION,
   HAZARD_HIT_INVULNERABLE_SECONDS,
@@ -32,7 +33,6 @@ import {
   PLAYER_MAX_PUSH_VELOCITY,
   PLAYER_PUSH_FORCE,
   PLAYER_WIDTH,
-  RELICS_PER_LEVEL,
   RESPAWN_INVULNERABILITY_SECONDS,
   SHORT_HOP_CUTOFF,
   TILE_SIZE
@@ -127,10 +127,32 @@ function recalculateMovementProgression(player: PlayerState): void {
 }
 
 function recalculateAttackProgression(player: PlayerState): void {
-  const damageBonus = diminishingBonus(player.relics, 0.035, 0.32);
-  const speedBonus = diminishingBonus(player.relics, 0.014, 0.36);
+  const damageBonus = diminishingBonus(player.relicFragments, 0.035, 0.32);
+  const speedBonus = diminishingBonus(player.relicFragments, 0.014, 0.36);
   player.damage = Math.min(1.45, PLAYER_BASE_DAMAGE + damageBonus);
   player.attackSpeed = Math.min(1.28, PLAYER_BASE_ATTACK_SPEED + speedBonus);
+}
+
+export function xpRequiredForLevel(level: number): number {
+  const safeLevel = Math.max(1, Math.floor(level));
+  return Math.max(1, Math.round(GAME_REWARD_CONFIG.xpPerLevelBase * Math.pow(GAME_REWARD_CONFIG.xpPerLevelGrowth, safeLevel - 1)));
+}
+
+export function addPlayerXp(player: PlayerState, amount: number): number {
+  const gained = Math.max(0, Math.floor(amount));
+  if (gained <= 0) return 0;
+
+  player.relics += gained;
+  while (player.relics >= xpRequiredForLevel(player.level)) {
+    player.relics -= xpRequiredForLevel(player.level);
+    player.level += 1;
+    if (player.level % 2 === 0) {
+      player.maxHealth = Math.min(9, player.maxHealth + 1);
+      player.health = Math.min(player.maxHealth, player.health + 1);
+    }
+  }
+  recalculateAttackProgression(player);
+  return gained;
 }
 
 function solidAt(map: TileMap, tileX: number, tileY: number): boolean {
@@ -343,8 +365,11 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
   return pushed;
 }
 
-export function applyCollectible(player: PlayerState, kind: CollectibleKind): void {
+export function applyCollectible(player: PlayerState, kind: CollectibleKind, xpValue: number = GAME_REWARD_CONFIG.xpCollectibleValue): number {
   switch (kind) {
+    case "coin":
+    case "xp":
+      break;
     case "smallHeart":
       player.health = Math.min(player.maxHealth, player.health + 1);
       break;
@@ -364,13 +389,12 @@ export function applyCollectible(player: PlayerState, kind: CollectibleKind): vo
       break;
     case "relic":
     default: {
-      player.relics += 1;
       player.relicFragments += 1;
-      player.level = 1 + Math.floor(player.relics / RELICS_PER_LEVEL);
       recalculateAttackProgression(player);
       break;
     }
   }
+  return addPlayerXp(player, xpValue);
 }
 
 export function collectibleKindForRelicId(id: string): CollectibleKind {
@@ -378,6 +402,7 @@ export function collectibleKindForRelicId(id: string): CollectibleKind {
     if (id.includes(":heart:")) return "smallHeart";
     if (id.includes(":jump:")) return "purpleCrystal";
     if (id.includes(":relic:")) return "relic";
+    if (id.includes(":xp:")) return "xp";
   }
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) {

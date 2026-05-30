@@ -51,6 +51,17 @@ export const HIT_STUN_SECONDS = 0.16;
 export const HAZARD_HIT_INVULNERABLE_SECONDS = 0.85;
 export const MELEE_ATTACK_COOLDOWN_SECONDS = 0.80;
 
+export const GAME_REWARD_CONFIG = {
+  enemyKillXp: 25,
+  xpCollectibleValue: 10,
+  enemyDropMin: 1,
+  enemyDropMax: 3,
+  enemyXpDropChance: 0.75,
+  pickupRadius: 24,
+  xpPerLevelBase: 100,
+  xpPerLevelGrowth: 1.25,
+} as const;
+
 // Kick system
 export const KICK_WINDUP_SECONDS = 0.10;
 export const KICK_ACTIVE_SECONDS = 0.08;

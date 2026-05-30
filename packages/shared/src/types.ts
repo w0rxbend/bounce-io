@@ -109,12 +109,26 @@ export interface WindZoneSpawn {
 }
 
 export type CollectibleKind =
+  | "coin"
+  | "xp"
   | "relic"
   | "blueCrystal"
   | "greenCrystal"
   | "purpleCrystal"
   | "smallHeart"
   | "bigHeart";
+
+export type CollectibleType = "coin" | "xp";
+
+export interface CollectibleState {
+  id: EntityId;
+  type: CollectibleType;
+  x: number;
+  y: number;
+  xpValue: number;
+  picked: boolean;
+  spawnedBy?: "level" | "enemy_drop";
+}
 
 export type HazardKind =
   | "spikeTrap"
@@ -268,9 +282,12 @@ export type MatchEventPayload =
   | { type: "PLAYER_KICK_STARTED";  playerId: PlayerId }
   | { type: "PLAYER_KICK_HIT";      playerId: PlayerId; targetId: PlayerId }
   | { type: "ENEMY_HIT";            playerId: PlayerId; enemyId: EntityId; x: number; y: number; damage: number }
-  | { type: "ENEMY_KILLED";         playerId: PlayerId; enemyId: EntityId; x: number; y: number; drops: RelicSpawn[] }
+  | { type: "ENEMY_KILLED";         playerId: PlayerId; enemyId: EntityId; x: number; y: number; drops: CollectibleState[]; xpGranted?: number }
   | { type: "JUMP_PAD_TRIGGERED";   playerId: PlayerId; padId: EntityId; x: number; y: number; multiplier: number }
-  | { type: "COIN_COLLECTED";       playerId: PlayerId; coinId: RelicId; value: number; x: number; y: number; pickupType?: CollectibleKind }
+  | { type: "COIN_COLLECTED";       playerId: PlayerId; coinId: RelicId; value: number; x: number; y: number; pickupType?: CollectibleKind; xpGranted?: number; level?: number }
+  | { type: "COLLECTIBLE_SPAWNED";  collectible: CollectibleState }
+  | { type: "COLLECTIBLE_PICKED";   playerId: PlayerId; collectibleId: EntityId; xpGranted: number }
+  | { type: "PLAYER_STATS";         playerId: PlayerId; xp: number; level: number; hp: number; atk: number }
   | { type: "MATCH_COUNTDOWN_STARTED"; countdownMs: number }
   | { type: "MATCH_STARTED" }
   | { type: "MATCH_ENDED" };

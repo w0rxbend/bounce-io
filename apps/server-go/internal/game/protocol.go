@@ -52,6 +52,14 @@ const (
 	AirPushFactor              = 0.35
 	RelicsPerLevel             = 5
 	FatalFallDistancePX        = 12 * 32.0
+	EnemyKillXP                = 25
+	XPCollectibleValue         = 10
+	EnemyDropMin               = 1
+	EnemyDropMax               = 3
+	EnemyXPDropChance          = 0.75
+	PickupRadius               = 24.0
+	XPPerLevelBase             = 100.0
+	XPPerLevelGrowth           = 1.25
 )
 
 type MessageEnvelope struct {
@@ -104,6 +112,11 @@ type ClientInput struct {
 	Movement   *InputState  `json:"movement,omitempty"`
 	Aim        *AimState    `json:"aim,omitempty"`
 	Action     *ActionState `json:"action,omitempty"`
+}
+
+type ClientPickupCollectible struct {
+	Type          string `json:"type"`
+	CollectibleID string `json:"collectibleId"`
 }
 
 type InputState struct {
@@ -226,6 +239,16 @@ type EnemyState struct {
 	HurtCooldown   float64 `json:"hurtCooldown"`
 }
 
+type CollectibleState struct {
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	XPValue   int     `json:"xpValue"`
+	Picked    bool    `json:"picked"`
+	SpawnedBy string  `json:"spawnedBy,omitempty"`
+}
+
 type MatchEvent map[string]any
 
 type WelcomeMessage struct {
@@ -251,6 +274,7 @@ type SnapshotMessage struct {
 	Entities         []EntityState       `json:"entities"`
 	PlayerEntities   []PlayerEntityFrame `json:"playerEntities"`
 	Enemies          []EnemyState        `json:"enemies"`
+	Collectibles     []CollectibleState  `json:"collectibles,omitempty"`
 	CollectedRelics  []string            `json:"collectedRelics"`
 	Events           []MatchEvent        `json:"events"`
 	LastProcessedSeq map[string]int64    `json:"lastProcessedSeq"`

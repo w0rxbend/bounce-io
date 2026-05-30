@@ -1075,6 +1075,8 @@ func collectibleKindForRelicID(id string) string {
 			return "purpleCrystal"
 		case strings.Contains(id, ":relic:"):
 			return "relic"
+		case strings.Contains(id, ":xp:"):
+			return "xp"
 		}
 	}
 	hash := uint32(0)
@@ -1095,6 +1097,7 @@ func collectibleKindForRelicID(id string) string {
 
 func applyCollectible(player *PlayerState, kind string) {
 	switch kind {
+	case "coin", "xp":
 	case "smallHeart":
 		player.Health = min(player.MaxHealth, player.Health+1)
 	case "bigHeart":
@@ -1107,12 +1110,40 @@ func applyCollectible(player *PlayerState, kind string) {
 	case "greenCrystal":
 		player.Health = min(player.MaxHealth, player.Health+1)
 	default:
-		player.Relics++
 		player.RelicFragments++
-		player.Level = 1 + player.Relics/RelicsPerLevel
-		player.Damage = 1 + player.Level/3
-		player.AttackSpeed = math.Min(3, 1+float64(player.Level-1)*0.04)
+		recalculateAttackProgression(player)
 	}
+	addPlayerXP(player, XPCollectibleValue)
+}
+
+func xpRequiredForLevel(level int) int {
+	if level < 1 {
+		level = 1
+	}
+	return max(1, int(math.Round(XPPerLevelBase*math.Pow(XPPerLevelGrowth, float64(level-1)))))
+}
+
+func addPlayerXP(player *PlayerState, amount int) int {
+	gained := max(0, amount)
+	if gained == 0 {
+		return 0
+	}
+	player.Relics += gained
+	for player.Relics >= xpRequiredForLevel(player.Level) {
+		player.Relics -= xpRequiredForLevel(player.Level)
+		player.Level++
+		if player.Level%2 == 0 {
+			player.MaxHealth = min(9, player.MaxHealth+1)
+			player.Health = min(player.MaxHealth, player.Health+1)
+		}
+	}
+	recalculateAttackProgression(player)
+	return gained
+}
+
+func recalculateAttackProgression(player *PlayerState) {
+	player.Damage = 1 + player.RelicFragments/8
+	player.AttackSpeed = math.Min(3, 1+float64(player.RelicFragments)*0.014)
 }
 
 func playerKickHitsEnemy(player PlayerState, enemy EnemyState) bool {

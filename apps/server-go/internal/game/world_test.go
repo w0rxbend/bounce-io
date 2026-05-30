@@ -206,8 +206,10 @@ func TestRelicCollectionUpdatesAuthoritativeState(t *testing.T) {
 	if _, ok := state.collectedRelics[relic.ID]; !ok {
 		t.Fatalf("expected relic %q to be collected", relic.ID)
 	}
-	if len(state.pendingEvents) != 1 || state.pendingEvents[0]["type"] != "COIN_COLLECTED" {
-		t.Fatalf("expected one COIN_COLLECTED event, got %#v", state.pendingEvents)
+	if len(state.pendingEvents) != 2 ||
+		state.pendingEvents[0]["type"] != "PLAYER_STATS" ||
+		state.pendingEvents[1]["type"] != "COIN_COLLECTED" {
+		t.Fatalf("expected PLAYER_STATS and COIN_COLLECTED events, got %#v", state.pendingEvents)
 	}
 }
 
