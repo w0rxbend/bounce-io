@@ -84,6 +84,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/ws", s.handleWebSocket)
+	mux.HandleFunc("/debug/world", s.handleWorldDebug)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/metrics/prometheus", s.handlePrometheusMetrics)
 	return mux
@@ -122,6 +123,53 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.metricsSnapshot())
+}
+
+func (s *Server) handleWorldDebug(w http.ResponseWriter, r *http.Request) {
+	roomID := r.URL.Query().Get("room")
+	if roomID == "" {
+		roomID = "demo"
+	}
+	chunkY := parseIntQuery(r, "chunk", 0)
+	minChunkY := parseIntQuery(r, "minChunk", chunkY)
+	maxChunkY := parseIntQuery(r, "maxChunk", chunkY)
+	if r.URL.Query().Has("radius") {
+		radius := parseIntQuery(r, "radius", 0)
+		minChunkY = chunkY - radius
+		maxChunkY = chunkY + radius
+	}
+	if maxChunkY < minChunkY {
+		minChunkY, maxChunkY = maxChunkY, minChunkY
+	}
+	if minChunkY < 0 {
+		minChunkY = 0
+	}
+	if maxChunkY < 0 {
+		maxChunkY = 0
+	}
+	if maxChunkY-minChunkY > 24 {
+		http.Error(w, `{"type":"error","code":"DEBUG_RANGE_TOO_LARGE","message":"debug world range is limited to 25 chunks"}`, http.StatusBadRequest)
+		return
+	}
+	seed := HashString(roomID)
+	s.mu.Lock()
+	if room := s.rooms[roomID]; room != nil {
+		seed = room.seed
+	}
+	s.mu.Unlock()
+	writeJSON(w, BuildWorldDebugDump(roomID, seed, minChunkY, maxChunkY))
+}
+
+func parseIntQuery(r *http.Request, key string, fallback int) int {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func (s *Server) handlePrometheusMetrics(w http.ResponseWriter, r *http.Request) {

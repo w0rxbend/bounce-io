@@ -587,6 +587,228 @@ func SpawnPosition(seed uint32, chunkY int) (float64, float64) {
 	return x, y
 }
 
+type DebugBox struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type DebugPoint struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type WorldDebugDump struct {
+	RoomID           string             `json:"roomId"`
+	Seed             uint32             `json:"seed"`
+	TileSize         int                `json:"tileSize"`
+	ChunkWidthTiles  int                `json:"chunkWidthTiles"`
+	ChunkHeightTiles int                `json:"chunkHeightTiles"`
+	PlayerBox        DebugBox           `json:"playerBox"`
+	CoordinateRules  []string           `json:"coordinateRules"`
+	Chunks           []ChunkDebugRecord `json:"chunks"`
+}
+
+type ChunkDebugRecord struct {
+	ChunkY       int                   `json:"chunkY"`
+	WorldTileY   int                   `json:"worldTileY"`
+	PixelTopY    float64               `json:"pixelTopY"`
+	PixelBottomY float64               `json:"pixelBottomY"`
+	Platforms    []PlatformDebugRecord `json:"platforms"`
+	SolidTiles   []TileDebugRecord     `json:"solidTiles"`
+	Relics       []RelicDebugRecord    `json:"relics"`
+	JumpPads     []JumpPadDebugRecord  `json:"jumpPads"`
+	Enemies      []EnemyDebugRecord    `json:"enemies"`
+	Entry        PlatformDebugRecord   `json:"entry"`
+	Exit         PlatformDebugRecord   `json:"exit"`
+}
+
+type PlatformDebugRecord struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Tile     PlatformSpan `json:"tile"`
+	WorldBox DebugBox     `json:"worldBox"`
+}
+
+type TileDebugRecord struct {
+	ID       string   `json:"id"`
+	Type     string   `json:"type"`
+	TileX    int      `json:"tileX"`
+	TileY    int      `json:"tileY"`
+	WorldBox DebugBox `json:"worldBox"`
+}
+
+type RelicDebugRecord struct {
+	ID            string     `json:"id"`
+	TileX         int        `json:"tileX"`
+	TileY         int        `json:"tileY"`
+	WorldCenter   DebugPoint `json:"worldCenter"`
+	TriggerRadius float64    `json:"triggerRadius"`
+}
+
+type JumpPadDebugRecord struct {
+	ID          string     `json:"id"`
+	TileX       int        `json:"tileX"`
+	TileY       int        `json:"tileY"`
+	Multiplier  float64    `json:"multiplier"`
+	WorldCenter DebugPoint `json:"worldCenter"`
+	TriggerBox  DebugBox   `json:"triggerBox"`
+}
+
+type EnemyDebugRecord struct {
+	ID          string     `json:"id"`
+	Kind        string     `json:"kind"`
+	SpawnTileX  int        `json:"spawnTileX"`
+	SpawnTileY  int        `json:"spawnTileY"`
+	WorldBox    DebugBox   `json:"worldBox"`
+	GroundY     float64    `json:"groundY"`
+	PatrolMinX  float64    `json:"patrolMinX"`
+	PatrolMaxX  float64    `json:"patrolMaxX"`
+	GroundProbe DebugPoint `json:"groundProbe"`
+}
+
+func BuildWorldDebugDump(roomID string, seed uint32, minChunkY, maxChunkY int) WorldDebugDump {
+	if maxChunkY < minChunkY {
+		minChunkY, maxChunkY = maxChunkY, minChunkY
+	}
+	if minChunkY < 0 {
+		minChunkY = 0
+	}
+	if maxChunkY < 0 {
+		maxChunkY = 0
+	}
+	dump := WorldDebugDump{
+		RoomID:           roomID,
+		Seed:             seed,
+		TileSize:         TileSize,
+		ChunkWidthTiles:  ChunkWidthTiles,
+		ChunkHeightTiles: ChunkHeightTiles,
+		PlayerBox:        DebugBox{Width: PlayerWidth, Height: PlayerHeight},
+		CoordinateRules: []string{
+			"world units are pixels",
+			"positive Y points downward",
+			"chunk.worldTileY is negative for chunks above the start",
+			"tile world pixel origin is (tileX * tileSize, (chunk.worldTileY + tileY) * tileSize)",
+			"player/enemy positions are top-left collision boxes",
+			"platforms are one-way surfaces at the top edge of their tile row",
+		},
+	}
+	for chunkY := minChunkY; chunkY <= maxChunkY; chunkY++ {
+		chunk := GenerateChunk(seed, chunkY)
+		record := ChunkDebugRecord{
+			ChunkY:       chunkY,
+			WorldTileY:   chunk.WorldTileY,
+			PixelTopY:    float64(chunk.WorldTileY * TileSize),
+			PixelBottomY: float64((chunk.WorldTileY + ChunkHeightTiles) * TileSize),
+			Platforms:    make([]PlatformDebugRecord, 0, len(chunk.Platforms)),
+			SolidTiles:   []TileDebugRecord{},
+			Relics:       make([]RelicDebugRecord, 0, len(chunk.Relics)),
+			JumpPads:     make([]JumpPadDebugRecord, 0, len(chunk.JumpPads)),
+			Enemies:      make([]EnemyDebugRecord, 0, len(chunk.Enemies)),
+		}
+		for i, platform := range chunk.Platforms {
+			platformRecord := debugPlatformRecord(chunk, platform, "platform:"+itoa(chunkY)+":"+itoa(i), "oneWay")
+			record.Platforms = append(record.Platforms, platformRecord)
+			if platform == chunk.Entry {
+				record.Entry = platformRecord
+			}
+			if platform == chunk.Exit {
+				record.Exit = platformRecord
+			}
+		}
+		for tileIndex, tile := range chunk.Tiles {
+			if tile != "solid" {
+				continue
+			}
+			tileX := tileIndex % ChunkWidthTiles
+			tileY := tileIndex / ChunkWidthTiles
+			record.SolidTiles = append(record.SolidTiles, TileDebugRecord{
+				ID:    "tile:" + itoa(chunkY) + ":" + itoa(tileX) + ":" + itoa(tileY),
+				Type:  tile,
+				TileX: tileX,
+				TileY: tileY,
+				WorldBox: DebugBox{
+					X:      float64(tileX * TileSize),
+					Y:      float64((chunk.WorldTileY + tileY) * TileSize),
+					Width:  TileSize,
+					Height: TileSize,
+				},
+			})
+		}
+		for _, relic := range chunk.Relics {
+			record.Relics = append(record.Relics, RelicDebugRecord{
+				ID:    relic.ID,
+				TileX: relic.X,
+				TileY: relic.Y,
+				WorldCenter: DebugPoint{
+					X: float64(relic.X*TileSize) + float64(TileSize)/2,
+					Y: float64((chunk.WorldTileY+relic.Y)*TileSize) + float64(TileSize)/2,
+				},
+				TriggerRadius: 20,
+			})
+		}
+		for _, pad := range chunk.JumpPads {
+			centerX := float64(pad.X*TileSize) + float64(TileSize)/2
+			centerY := float64((chunk.WorldTileY+pad.Y)*TileSize) + float64(TileSize)/2
+			record.JumpPads = append(record.JumpPads, JumpPadDebugRecord{
+				ID:         pad.ID,
+				TileX:      pad.X,
+				TileY:      pad.Y,
+				Multiplier: pad.Multiplier,
+				WorldCenter: DebugPoint{
+					X: centerX,
+					Y: centerY,
+				},
+				TriggerBox: DebugBox{
+					X:      centerX - float64(TileSize)*0.85,
+					Y:      centerY - float64(TileSize)*0.9,
+					Width:  float64(TileSize) * 1.7,
+					Height: float64(TileSize) * 1.8,
+				},
+			})
+		}
+		for _, spawn := range chunk.Enemies {
+			enemy := EnemyStateFromSpawn(chunk, spawn)
+			record.Enemies = append(record.Enemies, EnemyDebugRecord{
+				ID:         spawn.ID,
+				Kind:       spawn.Kind,
+				SpawnTileX: spawn.X,
+				SpawnTileY: spawn.Y,
+				WorldBox: DebugBox{
+					X:      enemy.Position.X,
+					Y:      enemy.Position.Y,
+					Width:  22,
+					Height: 24,
+				},
+				GroundY:    enemy.PlatformY,
+				PatrolMinX: enemy.PatrolMinX,
+				PatrolMaxX: enemy.PatrolMaxX,
+				GroundProbe: DebugPoint{
+					X: enemy.Position.X + 11,
+					Y: enemy.PlatformY,
+				},
+			})
+		}
+		dump.Chunks = append(dump.Chunks, record)
+	}
+	return dump
+}
+
+func debugPlatformRecord(chunk GeneratedChunk, platform PlatformSpan, id, kind string) PlatformDebugRecord {
+	return PlatformDebugRecord{
+		ID:   id,
+		Type: kind,
+		Tile: platform,
+		WorldBox: DebugBox{
+			X:      float64(platform.X * TileSize),
+			Y:      float64((chunk.WorldTileY + platform.Y) * TileSize),
+			Width:  float64(platform.Width * TileSize),
+			Height: TileSize,
+		},
+	}
+}
+
 func GroundYForPlayer(seed uint32, p PlayerState) float64 {
 	chunkY := ChunkYForWorldY(p.Position.Y)
 	chunk := GenerateChunk(seed, chunkY)

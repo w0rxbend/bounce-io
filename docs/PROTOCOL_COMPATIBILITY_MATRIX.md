@@ -1,5 +1,7 @@
 # Protocol Compatibility Matrix
 
+World/map compatibility is tracked separately in [WORLD_CONTRACT_AUDIT.md](./WORLD_CONTRACT_AUDIT.md). The critical migration fix is that multiplayer clients must replace local fallback chunks with authoritative Go `chunk` messages before using those chunks for rendering or prediction.
+
 This document compares three contracts:
 
 - **Node backend**: `apps/server/src/index.ts` plus `packages/shared/src/protocol.ts`.

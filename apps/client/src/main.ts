@@ -2253,6 +2253,8 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
     color: false,
   },
 });
+const worldDebugLayer = new Container();
+const worldDebugGfx = new Graphics();
 const hudLayer    = new Container({ isRenderGroup: true });
 
 for (const layer of [
@@ -2269,13 +2271,16 @@ for (const layer of [
   localLayer,
   effectLayer,
   effectParticleLayer,
+  worldDebugLayer,
   hudLayer,
 ]) {
   disableDisplayEvents(layer);
 }
 enemyLayer.sortableChildren = true;
 effectLayer.addChild(effectParticleLayer);
-worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
+worldDebugLayer.addChild(worldDebugGfx);
+worldDebugLayer.visible = false;
+worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer, worldDebugLayer);
 pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
 
 const screenFlashGfx = new Graphics();
@@ -2293,6 +2298,8 @@ let sessionToken: string | null = null;
 let serverSeed = 0x5eed_babe; // updated from welcome message to match server chunks
 
 const loadedChunks   = new Map<number, GeneratedChunk>();
+const authoritativeChunks = new Set<number>();
+const pendingAuthoritativeChunks = new Set<number>();
 const chunkGraphics  = new Map<number, Graphics>();
 const chunkDecorations = new Map<number, { back: Container; front: Container }>();
 const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
@@ -2624,6 +2631,7 @@ function loadChunk(cy: number, immediateRender = false): void {
   if (cy < 0) return;
   if (loadedChunks.has(cy)) return;
   const chunk = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
+  authoritativeChunks.delete(cy);
   loadedChunks.set(cy, chunk);
   if (immediateRender) enqueueChunkRender(cy, true);
 }
@@ -2768,6 +2776,8 @@ function ensureChunksAhead(): void {
     if (cy < window.min || cy > window.max) {
       destroyChunkVisuals(cy);
       loadedChunks.delete(cy);
+      authoritativeChunks.delete(cy);
+      pendingAuthoritativeChunks.delete(cy);
     }
   }
 }
@@ -2780,6 +2790,8 @@ function regenerateWorld(): void {
 
 function clearWorldChunks(): void {
   loadedChunks.clear();
+  authoritativeChunks.clear();
+  pendingAuthoritativeChunks.clear();
   pendingChunkRenders.clear();
   for (const g of chunkGraphics.values()) g.destroy();
   chunkGraphics.clear();
@@ -6107,7 +6119,127 @@ disableDisplayEvents(dbgGfx);
 disableDisplayEvents(dbgText);
 hudLayer.addChild(dbgGfx, dbgText);
 
+const worldDebugLabels: Text[] = [];
+
+function worldDebugLabel(index: number): Text {
+  let label = worldDebugLabels[index];
+  if (!label) {
+    label = new Text({
+      text: "",
+      style: {
+        fill: 0xe8fff8,
+        fontFamily: "monospace",
+        fontSize: 6,
+        lineHeight: 7,
+        stroke: { color: 0x07121c, width: 2 },
+      },
+    });
+    disableDisplayEvents(label);
+    worldDebugLayer.addChild(label);
+    worldDebugLabels[index] = label;
+  }
+  label.visible = true;
+  return label;
+}
+
+function hideWorldDebugLabels(fromIndex: number): void {
+  for (let i = fromIndex; i < worldDebugLabels.length; i++) {
+    worldDebugLabels[i]!.visible = false;
+  }
+}
+
+function drawWorldDebugOverlay(): void {
+  worldDebugGfx.clear();
+  worldDebugLayer.visible = showDebug;
+  if (!showDebug) {
+    hideWorldDebugLabels(0);
+    return;
+  }
+
+  let labelIndex = 0;
+  const addLabel = (text: string, x: number, y: number): void => {
+    const label = worldDebugLabel(labelIndex++);
+    label.text = text;
+    label.x = Math.round(x);
+    label.y = Math.round(y);
+  };
+
+  const chunks = [...loadedChunks.values()]
+    .filter((chunk) => isChunkActive(chunk.chunkY, VISUAL_RETAIN_MARGIN_PX))
+    .sort((a, b) => a.chunkY - b.chunkY);
+
+  for (const chunk of chunks) {
+    const worldTileY = chunk.worldTileY;
+    const sourceColor = authoritativeChunks.has(chunk.chunkY) ? 0x66e7ff : 0xffcf66;
+    addLabel(authoritativeChunks.has(chunk.chunkY) ? `server c${chunk.chunkY}` : `local c${chunk.chunkY}`, 4, worldTileY * TILE_SIZE + 4);
+
+    for (let i = 0; i < chunk.platforms.length; i++) {
+      const platform = chunk.platforms[i]!;
+      const x = platform.x * TILE_SIZE;
+      const y = (worldTileY + platform.y) * TILE_SIZE;
+      const w = platform.width * TILE_SIZE;
+      worldDebugGfx.rect(x, y, w, TILE_SIZE).stroke({ color: sourceColor, alpha: 0.95, width: 1 });
+      worldDebugGfx.rect(x, y, w, 2).fill({ color: sourceColor, alpha: 0.24 });
+      addLabel(`p${i}`, x + 2, y - 8);
+    }
+
+    if (chunk.chunkY === 0) {
+      const y = (worldTileY + CHUNK_HEIGHT_TILES - 1) * TILE_SIZE;
+      worldDebugGfx.rect(0, y, WORLD_WIDTH, TILE_SIZE).stroke({ color: 0xf2f7ff, alpha: 0.85, width: 1 });
+      addLabel("floor", 2, y - 8);
+    }
+
+    for (const relic of chunk.relics) {
+      if (collectedRelics.has(relic.id)) continue;
+      const x = relic.x * TILE_SIZE + TILE_SIZE / 2;
+      const y = (worldTileY + relic.y) * TILE_SIZE + TILE_SIZE / 2;
+      worldDebugGfx.circle(x, y, 20).stroke({ color: 0xff7bd5, alpha: 0.88, width: 1 });
+      worldDebugGfx.circle(x, y, 2).fill({ color: 0xff7bd5, alpha: 0.9 });
+      addLabel(relic.id, x + 7, y - 12);
+    }
+
+    for (const pad of chunk.jumpPads) {
+      const x = pad.x * TILE_SIZE + TILE_SIZE / 2;
+      const y = (worldTileY + pad.y) * TILE_SIZE + TILE_SIZE / 2;
+      worldDebugGfx.rect(x - TILE_SIZE * 0.85, y - TILE_SIZE * 0.9, TILE_SIZE * 1.7, TILE_SIZE * 1.8)
+        .stroke({ color: 0xa881ff, alpha: 0.9, width: 1 });
+      worldDebugGfx.circle(x, y, 3).fill({ color: 0xa881ff, alpha: 0.9 });
+      addLabel(pad.id, x + 7, y + 2);
+    }
+  }
+
+  for (const entry of enemyEntries.values()) {
+    const enemy = entry.state;
+    worldDebugGfx.rect(enemy.position.x, enemy.position.y, 22, 24).stroke({ color: 0xff6969, alpha: 0.9, width: 1 });
+    worldDebugGfx.moveTo(enemy.patrolMinX, enemy.platformY).lineTo(enemy.patrolMaxX, enemy.platformY).stroke({ color: 0xff6969, alpha: 0.45, width: 1 });
+    worldDebugGfx.circle(enemy.position.x + 11, enemy.platformY, 2).fill({ color: 0xff6969, alpha: 0.85 });
+    addLabel(enemy.id, enemy.position.x + 24, enemy.position.y - 8);
+  }
+
+  const localRender = getLocalRenderPosition();
+  if (localPlayer) {
+    worldDebugGfx.rect(localPlayer.position.x, localPlayer.position.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0x5dff9c, alpha: 0.95, width: 1 });
+    addLabel("local/server", localPlayer.position.x + PLAYER_WIDTH + 2, localPlayer.position.y - 8);
+  }
+  if (localPlayer && localRender) {
+    worldDebugGfx.rect(localRender.x, localRender.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0xffffff, alpha: 0.55, width: 1 });
+    if (Math.hypot(localRender.x - localPlayer.position.x, localRender.y - localPlayer.position.y) > 1) {
+      worldDebugGfx.moveTo(localPlayer.position.x + PLAYER_WIDTH / 2, localPlayer.position.y + PLAYER_HEIGHT / 2)
+        .lineTo(localRender.x + PLAYER_WIDTH / 2, localRender.y + PLAYER_HEIGHT / 2)
+        .stroke({ color: 0xffffff, alpha: 0.5, width: 1 });
+    }
+  }
+  for (const [id, remote] of remotePlayers) {
+    const p = remote.current;
+    worldDebugGfx.rect(p.position.x, p.position.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0x7db7ff, alpha: 0.85, width: 1 });
+    addLabel(id, p.position.x + PLAYER_WIDTH + 2, p.position.y - 8);
+  }
+
+  hideWorldDebugLabels(labelIndex);
+}
+
 function updateDebug(): void {
+  drawWorldDebugOverlay();
   dbgGfx.clear();
   dbgText.visible = showDebug;
   if (!showDebug) return;
@@ -6144,7 +6276,7 @@ function updateDebug(): void {
     `fps ${perfMetrics.fpsAvg.toFixed(1)}  frame ${perfMetrics.frameTimeAvgMs.toFixed(1)}ms\n` +
     `update ${perfMetrics.updateMsAvg.toFixed(1)}ms  sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
     `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms  particles ${perfMetrics.particleCount}\n` +
-    `objects ${perfMetrics.displayObjectCount}  chunks ${pendingChunkRenders.size}\n` +
+    `objects ${perfMetrics.displayObjectCount}  chunks ${authoritativeChunks.size}/${loadedChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
     `net in ${netMetrics.messagesReceivedPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesReceivedPerSecond)}B/s\n` +
     `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s\n` +
     `snap delay ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms\n` +
@@ -6317,9 +6449,11 @@ function connectRoom(name: string): void {
         break;
       case "chunk": {
         const chunkY = parsed.chunk.chunkY;
+        pendingAuthoritativeChunks.delete(chunkY);
         if (!isChunkInCurrentWindow(chunkY)) {
           destroyChunkVisuals(chunkY);
           loadedChunks.delete(chunkY);
+          authoritativeChunks.delete(chunkY);
           break;
         }
 
@@ -6327,6 +6461,7 @@ function connectRoom(name: string): void {
         // keeping late responses from expanding the scene graph off-screen.
         destroyChunkVisuals(chunkY);
         loadedChunks.set(chunkY, parsed.chunk);
+        authoritativeChunks.add(chunkY);
         enqueueChunkRender(chunkY, isChunkActive(chunkY, 0));
         syncChunkVisibility();
         break;
@@ -6433,7 +6568,10 @@ function reqChunks(): void {
   const window = currentChunkWindow();
   if (!window) return;
   for (let cy = window.min; cy <= window.max; cy++) {
-    if (!loadedChunks.has(cy)) sendWsMessage({ type: "requestChunk", chunkY: cy });
+    if (!authoritativeChunks.has(cy) && !pendingAuthoritativeChunks.has(cy)) {
+      pendingAuthoritativeChunks.add(cy);
+      sendWsMessage({ type: "requestChunk", chunkY: cy });
+    }
   }
 }
 
