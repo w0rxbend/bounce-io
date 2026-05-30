@@ -813,28 +813,8 @@ function tickRoom(room: ServerRoom): void {
     }
   }
 
-  // ── Chunk disposal — evict chunks far below every player's checkpoint ────────
-  {
-    const CHUNKS_KEEP_BEHIND_SERVER = 2;
-    let minCheckpoint = Infinity;
-    for (const [pid, s] of room.sessions) {
-      if (s.disconnectedAt !== null) continue;
-      const p = room.players.get(pid);
-      if (p) minCheckpoint = Math.min(minCheckpoint, p.checkpointChunkY);
-    }
-    if (minCheckpoint !== Infinity && minCheckpoint > CHUNKS_KEEP_BEHIND_SERVER) {
-      const disposeBelow = minCheckpoint - CHUNKS_KEEP_BEHIND_SERVER;
-      for (const cy of [...room.chunks.keys()]) {
-        if (cy < disposeBelow) {
-          for (const [enemyId, enemy] of room.enemies) {
-            if (enemy.chunkY === cy) room.enemies.delete(enemyId);
-          }
-          room.chunks.delete(cy);
-          room.tileMapDirty = true;
-        }
-      }
-    }
-  }
+  // ── Chunk streaming — keep a bounded authoritative window per active room ──
+  disposeServerChunksOutsideActiveWindow(room);
 
   // ── Snapshot broadcast (every N ticks = 20 Hz) ────────────────────────────
 
