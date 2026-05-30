@@ -2,6 +2,7 @@ import { createNodeWebSocket } from "@hono/node-ws";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import type { WSContext } from "hono/ws";
+import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -49,11 +50,13 @@ const SNAPSHOT_EVERY_N_TICKS = Math.round(SERVER_TICK_RATE / SNAPSHOT_RATE);
 const MAX_INPUTS_PER_TICK = 3;
 const MAX_QUEUED_INPUTS = 24;
 const MAX_MESSAGE_BYTES = 1024;
+const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
 const SPAWN_X_BASE = Math.floor(CHUNK_WIDTH_TILES / 2) * TILE_SIZE;
 const SERVER_CHUNKS_PRELOAD_BEHIND = 3;
 const SERVER_CHUNKS_PRELOAD_AHEAD = 4;
 const SERVER_CHUNK_REQUEST_AHEAD_LIMIT = SERVER_CHUNKS_PRELOAD_AHEAD + 2;
 const MAX_SERVER_CHUNK_Y = 200;
+const EVENT_LOOP_DELAY_RESOLUTION_MS = 20;
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,37 @@ interface Session {
   lastProcessedSeq: number;
   lastInput: PlayerInput;
   inputQueue: PlayerInput[];
+  metrics: SessionMetrics;
+}
+
+interface SessionMetrics {
+  messagesReceived: number;
+  bytesReceived: number;
+  messagesSent: number;
+  bytesSent: number;
+  skippedSends: number;
+}
+
+interface RoomMetrics {
+  ticks: number;
+  tickDurationAvgMs: number;
+  tickDurationMaxMs: number;
+  tickIntervalAvgMs: number;
+  tickIntervalMaxMs: number;
+  tickOverruns: number;
+  broadcasts: number;
+  broadcastDurationAvgMs: number;
+  broadcastDurationMaxMs: number;
+  serializationAvgMs: number;
+  serializationMaxMs: number;
+  socketSendAvgMs: number;
+  socketSendMaxMs: number;
+  messagesReceived: number;
+  bytesReceived: number;
+  messagesSent: number;
+  bytesSent: number;
+  skippedBackpressureSends: number;
+  lastSnapshotBytes: number;
 }
 
 // ── Room ──────────────────────────────────────────────────────────────────────
@@ -83,6 +117,7 @@ interface ServerRoom {
   chunks: Map<number, GeneratedChunk>;
   enemies: Map<string, EnemyState>;
   tick: number;
+  snapshotSeq: number;
   matchStartTick: number;
   countdownEndMs: number;
   pendingEvents: MatchEvent[];
@@ -91,6 +126,7 @@ interface ServerRoom {
   lastTickTime: number;
   tileMapDirty: boolean;
   tileMapCache: TileMap | null;
+  metrics: RoomMetrics;
 }
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -99,6 +135,17 @@ const app = new Hono();
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 const rooms = new Map<string, ServerRoom>();
 const tokenToRoom = new Map<SessionToken, string>(); // token → roomId
+const eventLoopDelay = monitorEventLoopDelay({ resolution: EVENT_LOOP_DELAY_RESOLUTION_MS });
+eventLoopDelay.enable();
+const processStartCpu = process.cpuUsage();
+const serverMetrics = {
+  startedAt: Date.now(),
+  messagesReceived: 0,
+  bytesReceived: 0,
+  messagesSent: 0,
+  bytesSent: 0,
+  skippedBackpressureSends: 0,
+};
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
 
@@ -111,6 +158,8 @@ app.get("/", (c) =>
     websocket: "/ws?room=demo&name=Explorer"
   })
 );
+
+app.get("/metrics", (c) => c.json(buildMetricsSnapshot()));
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 
@@ -134,27 +183,28 @@ app.get(
       onMessage: (event, ws) => {
         const raw = event.data;
         if (typeof raw !== "string" || raw.length > MAX_MESSAGE_BYTES) {
-          ws.send(JSON.stringify({ type: "error", code: "TOO_LARGE", message: "message too large" }));
+          sendJson(ws, { type: "error", code: "TOO_LARGE", message: "message too large" }, room, session);
           return;
         }
+        recordMessageReceived(room, session, Buffer.byteLength(raw));
 
         let parsed: unknown;
         try {
           parsed = JSON.parse(raw);
         } catch {
-          ws.send(JSON.stringify({ type: "error", code: "PARSE_ERROR", message: "invalid JSON" }));
+          sendJson(ws, { type: "error", code: "PARSE_ERROR", message: "invalid JSON" }, room, session);
           return;
         }
 
         if (!isClientMessage(parsed)) {
-          ws.send(JSON.stringify({ type: "error", code: "UNKNOWN_TYPE", message: "unknown or malformed message" }));
+          sendJson(ws, { type: "error", code: "UNKNOWN_TYPE", message: "unknown or malformed message" }, room, session);
           return;
         }
 
         // ── hello ────────────────────────────────────────────────────────────
         if (parsed.type === "hello") {
           if (session) {
-            ws.send(JSON.stringify({ type: "error", code: "ALREADY_JOINED", message: "session already joined" }));
+            sendJson(ws, { type: "error", code: "ALREADY_JOINED", message: "session already joined" }, room, session);
             return;
           }
 
@@ -170,7 +220,7 @@ app.get(
                   (s) => s.token === existingToken
                 );
                 if (existingSession && existingSession.disconnectedAt === null) {
-                  ws.send(JSON.stringify({ type: "error", code: "ALREADY_CONNECTED", message: "session already active" }));
+                  sendJson(ws, { type: "error", code: "ALREADY_CONNECTED", message: "session already active" }, existingRoom, existingSession);
                   ws.close();
                   return;
                 }
@@ -183,13 +233,13 @@ app.get(
                     session = existingSession;
 
                     const playerState = existingRoom.players.get(existingSession.playerId);
-                    ws.send(JSON.stringify({
+                    sendJson(ws, {
                       type: "resumed",
                       playerId: existingSession.playerId,
                       serverTime: Date.now(),
                       matchPhase: existingRoom.phase,
                       playerState: playerState ?? createPlayerState(existingSession.playerId, SPAWN_X_BASE, 0)
-                    }));
+                    }, existingRoom, existingSession);
 
                     existingRoom.pendingEvents.push({
                       type: "PLAYER_RECONNECTED",
@@ -206,12 +256,12 @@ app.get(
           room = getOrCreateRoom(roomId);
 
           if (room.phase === "finished" || room.phase === "closed") {
-            ws.send(JSON.stringify({ type: "error", code: "MATCH_OVER", message: "match already finished" }));
+            sendJson(ws, { type: "error", code: "MATCH_OVER", message: "match already finished" }, room, session);
             return;
           }
 
           if (room.sessions.size >= 8) {
-            ws.send(JSON.stringify({ type: "error", code: "ROOM_FULL", message: "room is full" }));
+            sendJson(ws, { type: "error", code: "ROOM_FULL", message: "room is full" }, room, session);
             ws.close();
             return;
           }
@@ -231,7 +281,8 @@ app.get(
             lastReceivedSeq: -1,
             lastProcessedSeq: -1,
             lastInput: idleInput(-1),
-            inputQueue: []
+            inputQueue: [],
+            metrics: createSessionMetrics()
           };
 
           room.sessions.set(playerId, session);
@@ -242,7 +293,7 @@ app.get(
           const playerState = createPlayerState(playerId, SPAWN_X_BASE, spawnY);
           room.players.set(playerId, playerState);
 
-          ws.send(JSON.stringify({
+          sendJson(ws, {
             type: "welcome",
             playerId,
             sessionToken: token,
@@ -251,12 +302,12 @@ app.get(
             matchPhase: room.phase,
             seed: room.seed,
             name: session.name,
-          }));
+          }, room, session);
 
           // Send chunk 0 to new player
           const chunk0 = room.chunks.get(0);
           if (chunk0) {
-            ws.send(JSON.stringify({ type: "chunk", chunk: chunk0 }));
+            sendJson(ws, { type: "chunk", chunk: chunk0 }, room, session);
           }
 
           // Send existing players to the new joiner so they see correct names immediately
@@ -264,7 +315,7 @@ app.get(
             if (existingId === playerId || existingSess.disconnectedAt !== null) continue;
             const existingPlayer = room.players.get(existingId);
             if (existingPlayer) {
-              ws.send(JSON.stringify({ type: "playerJoined", player: existingPlayer, name: existingSess.name }));
+              sendJson(ws, { type: "playerJoined", player: existingPlayer, name: existingSess.name }, room, session);
             }
           }
 
@@ -284,7 +335,7 @@ app.get(
           // Late join during active match: send current chunks so player can render
           if (room.phase === "countdown" || room.phase === "playing") {
             for (const [, chunk] of room.chunks) {
-              ws.send(JSON.stringify({ type: "chunk", chunk }));
+              sendJson(ws, { type: "chunk", chunk }, room, session);
             }
           }
 
@@ -293,13 +344,13 @@ app.get(
 
         // All messages below require an active session
         if (!session || !room) {
-          ws.send(JSON.stringify({ type: "error", code: "NOT_JOINED", message: "send hello first" }));
+          sendJson(ws, { type: "error", code: "NOT_JOINED", message: "send hello first" }, room, session);
           return;
         }
 
         // ── ping ─────────────────────────────────────────────────────────────
         if (parsed.type === "ping") {
-          ws.send(JSON.stringify({ type: "pong", clientTime: parsed.clientTime, serverTime: Date.now() }));
+          sendJson(ws, { type: "pong", clientTime: parsed.clientTime, serverTime: Date.now() }, room, session);
           return;
         }
 
@@ -310,13 +361,13 @@ app.get(
           const player = room.players.get(session.playerId);
           const currentChunkY = player ? chunkYForWorldY(player.position.y) : 0;
           if (chunkY > currentChunkY + SERVER_CHUNK_REQUEST_AHEAD_LIMIT) {
-            ws.send(JSON.stringify({ type: "error", code: "CHUNK_TOO_FAR", message: "chunk request too far ahead" }));
+            sendJson(ws, { type: "error", code: "CHUNK_TOO_FAR", message: "chunk request too far ahead" }, room, session);
             return;
           }
           ensureChunkLoaded(room, chunkY);
           const chunk = room.chunks.get(chunkY);
           if (chunk) {
-            ws.send(JSON.stringify({ type: "chunk", chunk }));
+            sendJson(ws, { type: "chunk", chunk }, room, session);
           }
           return;
         }
@@ -399,6 +450,7 @@ function getOrCreateRoom(id: string): ServerRoom {
     chunks: new Map(),
     enemies: new Map(),
     tick: 0,
+    snapshotSeq: 0,
     matchStartTick: 0,
     countdownEndMs: 0,
     pendingEvents: [],
@@ -406,7 +458,8 @@ function getOrCreateRoom(id: string): ServerRoom {
     accumulatedMs: 0,
     lastTickTime: Date.now(),
     tileMapDirty: true,
-    tileMapCache: null
+    tileMapCache: null,
+    metrics: createRoomMetrics()
   };
 
   ensureChunksLoaded(room, 0);
@@ -704,7 +757,10 @@ function applyJumpPads(room: ServerRoom, player: PlayerState): void {
 function tickRoom(room: ServerRoom): void {
   if (room.phase === "closed") return;
 
+  const tickStartMs = performance.now();
   const now = Date.now();
+  const tickIntervalMs = room.lastTickTime > 0 ? now - room.lastTickTime : 1000 / SERVER_TICK_RATE;
+  room.lastTickTime = now;
   room.tick++;
 
   // Reset per-tick input counters
@@ -821,6 +877,7 @@ function tickRoom(room: ServerRoom): void {
   // ── Snapshot broadcast (every N ticks = 20 Hz) ────────────────────────────
 
   if (room.tick % SNAPSHOT_EVERY_N_TICKS === 0) {
+    room.snapshotSeq++;
     const players = [...room.players.entries()]
       .filter(([pid]) => room.sessions.get(pid)?.disconnectedAt === null)
       .map(([, p]) => p);
@@ -832,6 +889,7 @@ function tickRoom(room: ServerRoom): void {
     broadcastToAll(room, {
       type: "snapshot",
       tick: room.tick,
+      snapshotSeq: room.snapshotSeq,
       serverTime: now,
       matchPhase: room.phase,
       players,
@@ -841,6 +899,8 @@ function tickRoom(room: ServerRoom): void {
       lastProcessedSeq
     });
   }
+
+  recordTickMetrics(room, performance.now() - tickStartMs, tickIntervalMs);
 }
 
 function respawnPlayer(room: ServerRoom, playerId: string, player: PlayerState): void {
@@ -925,21 +985,231 @@ function closeRoom(room: ServerRoom): void {
 // ── Broadcast helpers ─────────────────────────────────────────────────────────
 
 function broadcastToAll(room: ServerRoom, payload: unknown): void {
+  const started = performance.now();
+  const serializationStarted = performance.now();
   const encoded = JSON.stringify(payload);
+  recordSerializationMetrics(room, performance.now() - serializationStarted);
+  if (isSnapshotPayload(payload)) room.metrics.lastSnapshotBytes = Buffer.byteLength(encoded);
   for (const s of room.sessions.values()) {
     if (s.ws && s.disconnectedAt === null) {
-      try { s.ws.send(encoded); } catch { /* connection closed */ }
+      sendEncoded(room, s, encoded);
     }
   }
+  recordBroadcastMetrics(room, performance.now() - started);
 }
 
 function broadcastToOthers(room: ServerRoom, excludeId: string, payload: unknown): void {
+  const started = performance.now();
+  const serializationStarted = performance.now();
   const encoded = JSON.stringify(payload);
+  recordSerializationMetrics(room, performance.now() - serializationStarted);
   for (const [pid, s] of room.sessions) {
     if (pid !== excludeId && s.ws && s.disconnectedAt === null) {
-      try { s.ws.send(encoded); } catch { /* connection closed */ }
+      sendEncoded(room, s, encoded);
     }
   }
+  recordBroadcastMetrics(room, performance.now() - started);
+}
+
+function createSessionMetrics(): SessionMetrics {
+  return {
+    messagesReceived: 0,
+    bytesReceived: 0,
+    messagesSent: 0,
+    bytesSent: 0,
+    skippedSends: 0
+  };
+}
+
+function createRoomMetrics(): RoomMetrics {
+  return {
+    ticks: 0,
+    tickDurationAvgMs: 0,
+    tickDurationMaxMs: 0,
+    tickIntervalAvgMs: 1000 / SERVER_TICK_RATE,
+    tickIntervalMaxMs: 0,
+    tickOverruns: 0,
+    broadcasts: 0,
+    broadcastDurationAvgMs: 0,
+    broadcastDurationMaxMs: 0,
+    serializationAvgMs: 0,
+    serializationMaxMs: 0,
+    socketSendAvgMs: 0,
+    socketSendMaxMs: 0,
+    messagesReceived: 0,
+    bytesReceived: 0,
+    messagesSent: 0,
+    bytesSent: 0,
+    skippedBackpressureSends: 0,
+    lastSnapshotBytes: 0
+  };
+}
+
+function ema(previous: number, next: number, alpha = 0.08): number {
+  return previous === 0 ? next : previous + (next - previous) * alpha;
+}
+
+function recordMessageReceived(room: ServerRoom | undefined, session: Session | undefined, bytes: number): void {
+  serverMetrics.messagesReceived++;
+  serverMetrics.bytesReceived += bytes;
+  if (room) {
+    room.metrics.messagesReceived++;
+    room.metrics.bytesReceived += bytes;
+  }
+  if (session) {
+    session.metrics.messagesReceived++;
+    session.metrics.bytesReceived += bytes;
+  }
+}
+
+function socketBufferedAmount(ws: WSContext): number {
+  const raw = ws.raw as { bufferedAmount?: number } | undefined;
+  return typeof raw?.bufferedAmount === "number" ? raw.bufferedAmount : 0;
+}
+
+function sendJson(ws: WSContext, payload: unknown, room?: ServerRoom, session?: Session): void {
+  const encoded = JSON.stringify(payload);
+  if (room && session && session.ws === ws) {
+    sendEncoded(room, session, encoded);
+    return;
+  }
+
+  if (socketBufferedAmount(ws) > MAX_SOCKET_BUFFERED_BYTES) {
+    serverMetrics.skippedBackpressureSends++;
+    return;
+  }
+
+  try {
+    ws.send(encoded);
+  } catch {
+    return;
+  }
+
+  const bytes = Buffer.byteLength(encoded);
+  serverMetrics.messagesSent++;
+  serverMetrics.bytesSent += bytes;
+  if (room) {
+    room.metrics.messagesSent++;
+    room.metrics.bytesSent += bytes;
+  }
+}
+
+function sendEncoded(room: ServerRoom, session: Session, encoded: string): void {
+  const ws = session.ws;
+  if (!ws || session.disconnectedAt !== null) return;
+  if (socketBufferedAmount(ws) > MAX_SOCKET_BUFFERED_BYTES) {
+    room.metrics.skippedBackpressureSends++;
+    session.metrics.skippedSends++;
+    serverMetrics.skippedBackpressureSends++;
+    return;
+  }
+
+  const started = performance.now();
+  try {
+    ws.send(encoded);
+  } catch {
+    return;
+  }
+
+  const durationMs = performance.now() - started;
+  recordSocketSendMetrics(room, durationMs);
+  const bytes = Buffer.byteLength(encoded);
+  room.metrics.messagesSent++;
+  room.metrics.bytesSent += bytes;
+  session.metrics.messagesSent++;
+  session.metrics.bytesSent += bytes;
+  serverMetrics.messagesSent++;
+  serverMetrics.bytesSent += bytes;
+}
+
+function recordTickMetrics(room: ServerRoom, durationMs: number, intervalMs: number): void {
+  const m = room.metrics;
+  m.ticks++;
+  m.tickDurationAvgMs = ema(m.tickDurationAvgMs, durationMs);
+  m.tickDurationMaxMs = Math.max(m.tickDurationMaxMs, durationMs);
+  m.tickIntervalAvgMs = ema(m.tickIntervalAvgMs, intervalMs);
+  m.tickIntervalMaxMs = Math.max(m.tickIntervalMaxMs, intervalMs);
+  if (durationMs > 1000 / SERVER_TICK_RATE) m.tickOverruns++;
+}
+
+function recordBroadcastMetrics(room: ServerRoom, durationMs: number): void {
+  const m = room.metrics;
+  m.broadcasts++;
+  m.broadcastDurationAvgMs = ema(m.broadcastDurationAvgMs, durationMs);
+  m.broadcastDurationMaxMs = Math.max(m.broadcastDurationMaxMs, durationMs);
+}
+
+function recordSerializationMetrics(room: ServerRoom, durationMs: number): void {
+  const m = room.metrics;
+  m.serializationAvgMs = ema(m.serializationAvgMs, durationMs);
+  m.serializationMaxMs = Math.max(m.serializationMaxMs, durationMs);
+}
+
+function recordSocketSendMetrics(room: ServerRoom, durationMs: number): void {
+  const m = room.metrics;
+  m.socketSendAvgMs = ema(m.socketSendAvgMs, durationMs);
+  m.socketSendMaxMs = Math.max(m.socketSendMaxMs, durationMs);
+}
+
+function isSnapshotPayload(payload: unknown): payload is { type: "snapshot" } {
+  return typeof payload === "object" && payload !== null && (payload as { type?: unknown }).type === "snapshot";
+}
+
+function buildMetricsSnapshot() {
+  const memory = process.memoryUsage();
+  const cpu = process.cpuUsage(processStartCpu);
+  const uptimeSeconds = Math.max(1, (Date.now() - serverMetrics.startedAt) / 1000);
+  return {
+    uptimeSeconds,
+    process: {
+      cpuUserMs: cpu.user / 1000,
+      cpuSystemMs: cpu.system / 1000,
+      rssBytes: memory.rss,
+      heapUsedBytes: memory.heapUsed,
+      heapTotalBytes: memory.heapTotal,
+      externalBytes: memory.external
+    },
+    eventLoop: {
+      resolutionMs: EVENT_LOOP_DELAY_RESOLUTION_MS,
+      delayMeanMs: eventLoopDelay.mean / 1_000_000,
+      delayMaxMs: eventLoopDelay.max / 1_000_000,
+      delayP95Ms: eventLoopDelay.percentile(95) / 1_000_000,
+      delayP99Ms: eventLoopDelay.percentile(99) / 1_000_000,
+      delayP99OverResolutionMs: Math.max(0, eventLoopDelay.percentile(99) / 1_000_000 - EVENT_LOOP_DELAY_RESOLUTION_MS)
+    },
+    websocket: {
+      messagesReceived: serverMetrics.messagesReceived,
+      messagesSent: serverMetrics.messagesSent,
+      bytesReceived: serverMetrics.bytesReceived,
+      bytesSent: serverMetrics.bytesSent,
+      messagesReceivedPerSecond: serverMetrics.messagesReceived / uptimeSeconds,
+      messagesSentPerSecond: serverMetrics.messagesSent / uptimeSeconds,
+      bytesReceivedPerSecond: serverMetrics.bytesReceived / uptimeSeconds,
+      bytesSentPerSecond: serverMetrics.bytesSent / uptimeSeconds,
+      skippedBackpressureSends: serverMetrics.skippedBackpressureSends
+    },
+    rooms: [...rooms.values()].map((room) => ({
+      id: room.id,
+      phase: room.phase,
+      tick: room.tick,
+      snapshotSeq: room.snapshotSeq,
+      activeClients: [...room.sessions.values()].filter((s) => s.disconnectedAt === null).length,
+      players: room.players.size,
+      chunks: room.chunks.size,
+      enemies: room.enemies.size,
+      metrics: room.metrics,
+      clients: [...room.sessions.values()].map((s) => ({
+        playerId: s.playerId,
+        name: s.name,
+        connected: s.disconnectedAt === null,
+        queuedInputs: s.inputQueue.length,
+        lastReceivedSeq: s.lastReceivedSeq,
+        lastProcessedSeq: s.lastProcessedSeq,
+        bufferedAmount: s.ws ? socketBufferedAmount(s.ws) : 0,
+        metrics: s.metrics
+      }))
+    }))
+  };
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

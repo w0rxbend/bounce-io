@@ -2343,7 +2343,7 @@ interface EnemyEntry {
 const enemyEntries = new Map<string, EnemyEntry>();
 
 interface RemoteEntry {
-  states: Array<{ state: PlayerState; t: number }>;
+  states: Array<{ state: PlayerState; t: number; tick: number }>;
   current: PlayerState;
   colorIndex: number;
   sprite: Sprite;
@@ -2375,9 +2375,51 @@ let hasServerClock = false;
 const pingSamples: number[] = [];
 let   pingJitterMs = 0;
 let serverTick    = 0;
+let lastSnapshotSeq = -1;
 let matchPhase    = "waiting";
 let reconnDelay   = 1000;
 let reconnTimeout: ReturnType<typeof setTimeout> | null = null;
+
+interface NetworkMetrics {
+  messagesReceived: number;
+  messagesSent: number;
+  bytesReceived: number;
+  bytesSent: number;
+  messagesReceivedPerSecond: number;
+  messagesSentPerSecond: number;
+  bytesReceivedPerSecond: number;
+  bytesSentPerSecond: number;
+  droppedOutOfOrderSnapshots: number;
+  snapshotDelayMs: number;
+  snapshotJitterMs: number;
+  lastSnapshotDelayMs: number;
+  lastRateSampleMs: number;
+  rateWindowMessagesReceived: number;
+  rateWindowMessagesSent: number;
+  rateWindowBytesReceived: number;
+  rateWindowBytesSent: number;
+}
+
+const netMetrics: NetworkMetrics = {
+  messagesReceived: 0,
+  messagesSent: 0,
+  bytesReceived: 0,
+  bytesSent: 0,
+  messagesReceivedPerSecond: 0,
+  messagesSentPerSecond: 0,
+  bytesReceivedPerSecond: 0,
+  bytesSentPerSecond: 0,
+  droppedOutOfOrderSnapshots: 0,
+  snapshotDelayMs: 0,
+  snapshotJitterMs: 0,
+  lastSnapshotDelayMs: 0,
+  lastRateSampleMs: Date.now(),
+  rateWindowMessagesReceived: 0,
+  rateWindowMessagesSent: 0,
+  rateWindowBytesReceived: 0,
+  rateWindowBytesSent: 0,
+};
+const netTextEncoder = new TextEncoder();
 
 let cameraY   = 0;
 let cameraSnap = true;
@@ -5282,7 +5324,7 @@ function makeLabel(name: string): Text {
   });
 }
 
-function createRemoteEntry(player: PlayerState, name: string, serverTime: number): RemoteEntry {
+function createRemoteEntry(player: PlayerState, name: string, serverTime: number, tick = 0): RemoteEntry {
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
   const sprite = makeCharacterSprite(characterForRemote(ci));
   const crownSprite = makeSprite("crown");
@@ -5295,7 +5337,7 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
   gfx.alpha = hasPlayerAnimationAssets() ? 0.16 : 1;
   const label = makeLabel(name);
   remoteLayer.addChild(sprite, gfx, crownSprite, label);
-  return { states: [{ state: player, t: serverTime }], current: player, colorIndex: ci, sprite, crownSprite, gfx, label };
+  return { states: [{ state: clonePlayerState(player), t: serverTime, tick }], current: clonePlayerState(player), colorIndex: ci, sprite, crownSprite, gfx, label };
 }
 
 // ── Particle system ───────────────────────────────────────────────────────────
@@ -6054,7 +6096,7 @@ function updateDebug(): void {
   dbgText.visible = showDebug;
   if (!showDebug) return;
 
-  drawHudPanel(dbgGfx, 4, 58, 220, 158);
+  drawHudPanel(dbgGfx, 4, 58, 244, 188);
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
@@ -6086,10 +6128,65 @@ function updateDebug(): void {
     `fps ${perfMetrics.fpsAvg.toFixed(1)}  frame ${perfMetrics.frameTimeAvgMs.toFixed(1)}ms\n` +
     `update ${perfMetrics.updateMsAvg.toFixed(1)}ms  sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
     `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms  particles ${perfMetrics.particleCount}\n` +
-    `objects ${perfMetrics.displayObjectCount}  chunks ${pendingChunkRenders.size}`;
+    `objects ${perfMetrics.displayObjectCount}  chunks ${pendingChunkRenders.size}\n` +
+    `net in ${netMetrics.messagesReceivedPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesReceivedPerSecond)}B/s\n` +
+    `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s\n` +
+    `snap delay ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms\n` +
+    `dropped snapshots ${netMetrics.droppedOutOfOrderSnapshots}`;
 }
 
 // ── Networking ────────────────────────────────────────────────────────────────
+
+function byteLength(value: string): number {
+  return netTextEncoder.encode(value).length;
+}
+
+function recordIncomingNetworkMessage(raw: string): void {
+  const bytes = byteLength(raw);
+  netMetrics.messagesReceived++;
+  netMetrics.bytesReceived += bytes;
+  netMetrics.rateWindowMessagesReceived++;
+  netMetrics.rateWindowBytesReceived += bytes;
+}
+
+function sendWsMessage(payload: unknown): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  const raw = JSON.stringify(payload);
+  ws.send(raw);
+  const bytes = byteLength(raw);
+  netMetrics.messagesSent++;
+  netMetrics.bytesSent += bytes;
+  netMetrics.rateWindowMessagesSent++;
+  netMetrics.rateWindowBytesSent += bytes;
+}
+
+function updateNetworkRates(): void {
+  const now = Date.now();
+  const elapsedSeconds = (now - netMetrics.lastRateSampleMs) / 1000;
+  if (elapsedSeconds < 1) return;
+
+  netMetrics.messagesReceivedPerSecond = netMetrics.rateWindowMessagesReceived / elapsedSeconds;
+  netMetrics.messagesSentPerSecond = netMetrics.rateWindowMessagesSent / elapsedSeconds;
+  netMetrics.bytesReceivedPerSecond = netMetrics.rateWindowBytesReceived / elapsedSeconds;
+  netMetrics.bytesSentPerSecond = netMetrics.rateWindowBytesSent / elapsedSeconds;
+  netMetrics.rateWindowMessagesReceived = 0;
+  netMetrics.rateWindowMessagesSent = 0;
+  netMetrics.rateWindowBytesReceived = 0;
+  netMetrics.rateWindowBytesSent = 0;
+  netMetrics.lastRateSampleMs = now;
+}
+
+function recordSnapshotDelay(serverTime: number): void {
+  const delay = Math.max(0, estimatedServerTime() - serverTime);
+  const alpha = delay > netMetrics.snapshotDelayMs ? 0.25 : 0.08;
+  if (netMetrics.snapshotDelayMs === 0) netMetrics.snapshotDelayMs = delay;
+  else netMetrics.snapshotDelayMs += (delay - netMetrics.snapshotDelayMs) * alpha;
+  const jitter = Math.abs(delay - netMetrics.lastSnapshotDelayMs);
+  if (netMetrics.lastSnapshotDelayMs > 0) {
+    netMetrics.snapshotJitterMs += (jitter - netMetrics.snapshotJitterMs) * 0.12;
+  }
+  netMetrics.lastSnapshotDelayMs = delay;
+}
 
 function connectRoom(name: string): void {
   if (ws && ws.readyState === WebSocket.CONNECTING) return;
@@ -6103,13 +6200,14 @@ function connectRoom(name: string): void {
   ws.addEventListener("open", () => {
     reconnDelay = 1000;
     netStatus.textContent = "Connecting…";
-    ws!.send(JSON.stringify({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", token: sessionToken ?? undefined }));
+    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", token: sessionToken ?? undefined });
     lastPingTime = Date.now();
-    ws!.send(JSON.stringify({ type: "ping", clientTime: lastPingTime }));
+    sendWsMessage({ type: "ping", clientTime: lastPingTime });
   });
 
   ws.addEventListener("message", (ev) => {
     if (typeof ev.data !== "string") return;
+    recordIncomingNetworkMessage(ev.data);
     let parsed: unknown;
     try { parsed = JSON.parse(ev.data); } catch { return; }
     if (!isServerMessage(parsed)) return;
@@ -6128,6 +6226,7 @@ function connectRoom(name: string): void {
         }
         netStatus.textContent = `Room: demo | ${localPlayerId.slice(0, 6)}`;
         { const { x, y } = getSpawnPos(); localPlayer = createPlayerState(localPlayerId, x, y); }
+        serverTick = 0; lastSnapshotSeq = -1;
         snapLocalVisualToSimulation();
         resetLocalPrediction(); cameraSnap = true;
         break;
@@ -6135,9 +6234,16 @@ function connectRoom(name: string): void {
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
         netStatus.textContent = "Reconnected.";
+        serverTick = 0; lastSnapshotSeq = -1;
         localPlayer = clonePlayerState(parsed.playerState); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         break;
       case "snapshot":
+        if (parsed.snapshotSeq <= lastSnapshotSeq || parsed.tick <= serverTick) {
+          netMetrics.droppedOutOfOrderSnapshots++;
+          break;
+        }
+        lastSnapshotSeq = parsed.snapshotSeq;
+        recordSnapshotDelay(parsed.serverTime);
         serverTick = parsed.tick; matchPhase = parsed.matchPhase;
         // Reconcile full collected set so late-joiners see correct coin state
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
@@ -6184,7 +6290,7 @@ function connectRoom(name: string): void {
         }
         for (const sp of parsed.players) {
           if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.lastProcessedSeq[sp.id] ?? -1);
-          else updateRemotePlayer(sp, parsed.serverTime);
+          else updateRemotePlayer(sp, parsed.serverTime, parsed.tick);
         }
         updateEnemyEntries(parsed.enemies ?? [], elapsedMs / 1000);
         { const ids = new Set(parsed.players.map((p) => p.id));
@@ -6253,7 +6359,7 @@ function schedReconn(name: string): void {
 
 function sendInput(inp: PlayerInput): void {
   if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayerId) return;
-  ws.send(JSON.stringify({ type: "input", playerId: localPlayerId, input: inp }));
+  sendWsMessage({ type: "input", playerId: localPlayerId, input: inp });
 }
 
 function shouldPredictLocalMovement(): boolean {
@@ -6262,7 +6368,7 @@ function shouldPredictLocalMovement(): boolean {
 
 function maybePing(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  if (Date.now() - lastPingTime > 1000) { lastPingTime = Date.now(); ws.send(JSON.stringify({ type: "ping", clientTime: lastPingTime })); }
+  if (Date.now() - lastPingTime > 1000) { lastPingTime = Date.now(); sendWsMessage({ type: "ping", clientTime: lastPingTime }); }
 }
 
 function addPingSample(rtt: number): void {
@@ -6311,7 +6417,7 @@ function reqChunks(): void {
   const window = currentChunkWindow();
   if (!window) return;
   for (let cy = window.min; cy <= window.max; cy++) {
-    if (!loadedChunks.has(cy)) ws.send(JSON.stringify({ type: "requestChunk", chunkY: cy }));
+    if (!loadedChunks.has(cy)) sendWsMessage({ type: "requestChunk", chunkY: cy });
   }
 }
 
@@ -6347,14 +6453,19 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
   predBuf.splice(0, idx + 1);
 }
 
-function updateRemotePlayer(s: PlayerState, serverTime: number): void {
+function updateRemotePlayer(s: PlayerState, serverTime: number, tick: number): void {
   let e = remotePlayers.get(s.id);
   if (!e) {
-    e = createRemoteEntry(s, playerNames.get(s.id) ?? "?", serverTime);
+    e = createRemoteEntry(s, playerNames.get(s.id) ?? "?", serverTime, tick);
     e.states.length = 0;
     remotePlayers.set(s.id, e);
   }
-  e.states.push({ state: s, t: serverTime });
+  const last = e.states[e.states.length - 1];
+  if (last && tick <= last.tick) {
+    netMetrics.droppedOutOfOrderSnapshots++;
+    return;
+  }
+  e.states.push({ state: clonePlayerState(s), t: serverTime, tick });
   if (e.states.length > 20) e.states.shift();
 }
 
@@ -6377,7 +6488,7 @@ function interpRemotes(): void {
       // This correctly applies gravity and collisions instead of naive linear drift.
       const extrapolateMs = Math.min(rt - last.t, extrapCapMs);
       const steps = Math.round((extrapolateMs / 1000) / PHYSICS_STEP_SECONDS);
-      let extState = last.state;
+      let extState = clonePlayerState(last.state);
       const dri: PlayerInput = {
         left:         last.state.velocity.x < -10,
         right:        last.state.velocity.x >  10,
@@ -6503,6 +6614,7 @@ pixi.ticker.add((ticker) => {
   ensureChunksAhead();
   reqChunks();
   maybePing();
+  updateNetworkRates();
   updateAdaptiveInterpDelay();
   updateParticles(dt);
   const updateEnvironmentAnimations = elapsedMs - lastEnvironmentAnimMs >= environmentAnimationIntervalMs();

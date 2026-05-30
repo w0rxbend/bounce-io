@@ -44,6 +44,7 @@ export type ServerMessage =
   | {
       type: "snapshot";
       tick: number;
+      snapshotSeq: number;
       serverTime: number;
       matchPhase: RoomPhase;
       players: PlayerState[];

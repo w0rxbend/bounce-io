@@ -238,6 +238,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         isPlayerState(value.playerState);
     case "snapshot":
       return isInteger(value.tick) &&
+        isInteger(value.snapshotSeq) &&
         isFiniteNumber(value.serverTime) &&
         isString(value.matchPhase) &&
         Array.isArray(value.players) &&

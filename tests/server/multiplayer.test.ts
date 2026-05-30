@@ -248,6 +248,7 @@ test("snapshot message validates correctly including coins in player state", () 
   assert.equal(isServerMessage({
     type: "snapshot",
     tick: 60,
+    snapshotSeq: 1,
     serverTime: Date.now(),
     matchPhase: "playing",
     players: [playerState],
@@ -298,7 +299,7 @@ test("snapshot with negative coins fails validation", () => {
   const badState = { ...createPlayerState("p1", 0, 0), coins: -1 };
   assert.equal(isServerMessage({
     type: "snapshot",
-    tick: 1, serverTime: Date.now(), matchPhase: "playing",
+    tick: 1, snapshotSeq: 1, serverTime: Date.now(), matchPhase: "playing",
     players: [badState], collectedRelics: [], events: [], lastProcessedSeq: {}
   }), false);
 });
