@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -118,6 +118,8 @@ const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing for
 const INITIAL_CHUNKS_TO_LOAD = 4;
 const CHUNK_PIXEL_HEIGHT = CHUNK_HEIGHT_TILES * TILE_SIZE;
 const ACTIVE_VIEW_MARGIN_PX = 120;
+const BIOME_FLUTTER_VISIBLE_TARGET = 20;
+const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 
 const ASSET_URLS = {
   aiForestRuinsPanorama: "/assets/environment/backgrounds/forest_ruins_panorama.png",
@@ -490,6 +492,7 @@ const scoreboard = appRoot.querySelector<HTMLElement>("#scoreboard")!;
 // ── PixiJS init ───────────────────────────────────────────────────────────────
 
 TextureStyle.defaultOptions.scaleMode = "nearest";
+const PIXEL_CACHE_OPTIONS = { antialias: false, resolution: 1, scaleMode: "nearest" as const };
 
 const pixi = new Application();
 await pixi.init({
@@ -1240,6 +1243,13 @@ function midMountainParticleColor(palette: MidMountainPalette, density: number, 
   return palette.core;
 }
 
+function midMountainBorderPixelColor(palette: MidMountainPalette, noise: number, upwardEdge: boolean): number {
+  if (upwardEdge && noise % 5 === 0) return palette.highlight;
+  if (upwardEdge && noise % 2 === 0) return palette.ridge;
+  if (noise % 4 === 0) return palette.dust;
+  return noise % 3 === 0 ? palette.deep : palette.edge;
+}
+
 function clearMidMountainCrumbleChunk(chunkY: number): void {
   midMountainCrumbleEmitters.delete(chunkY);
   for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
@@ -1432,9 +1442,9 @@ function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: B
   const flutters: BiomeFlutter[] = [];
 
   for (const platform of chunk.platforms) {
-    if (platform.width < 3) continue;
+    if (platform.width < 2) continue;
     const baseSeed = platformSeed(chunk, platform, 1379);
-    const count = Math.min(4, Math.max(1, Math.floor(platform.width / 4) + (baseSeed % 2)));
+    const count = Math.min(4, Math.max(1, Math.ceil(platform.width / 4)));
     for (let i = 0; i < count; i++) {
       const n = midMountainNoise(chunk.chunkY, platform.x * 41 + i * 97, platform.y * 53, 863);
       const { kind, palette } = biomeFlutterPalette(biome, baseSeed + i * 31 + n);
@@ -1459,6 +1469,7 @@ function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: B
       drawBiomeFlutter(flutter, 0);
       gfx.x = flutter.baseX;
       gfx.y = flutter.baseY;
+      gfx.visible = false;
       target.addChild(gfx);
       flutters.push(flutter);
     }
@@ -1468,22 +1479,39 @@ function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: B
 }
 
 function updateBiomeFlutters(tSec: number): void {
+  const bounds = activeWorldBounds(BIOME_FLUTTER_VIEW_MARGIN_PX);
+  const centerY = (bounds.top + bounds.bottom) * 0.5;
+  const candidates: BiomeFlutter[] = [];
+
   for (const [chunkY, flutters] of biomeFlutters) {
-    const active = isChunkActive(chunkY);
+    const active = isChunkActive(chunkY, BIOME_FLUTTER_VIEW_MARGIN_PX);
     for (let i = flutters.length - 1; i >= 0; i--) {
       const flutter = flutters[i]!;
       if (flutter.gfx.destroyed) {
         flutters.splice(i, 1);
         continue;
       }
-      flutter.gfx.visible = active;
-      if (!active) continue;
-      const drift = Math.sin(tSec * 0.42 + flutter.phase + flutter.seed * 0.001) * 3;
-      flutter.gfx.x = Math.round(flutter.baseX + Math.sin(tSec * 0.85 + flutter.phase) * flutter.orbitX + drift);
-      flutter.gfx.y = Math.round(flutter.baseY + Math.cos(tSec * 1.1 + flutter.phase) * flutter.orbitY);
-      drawBiomeFlutter(flutter, tSec);
+      flutter.gfx.visible = false;
+      if (!active || flutter.baseY < bounds.top || flutter.baseY > bounds.bottom) continue;
+      candidates.push(flutter);
     }
     if (flutters.length === 0) biomeFlutters.delete(chunkY);
+  }
+
+  candidates.sort((a, b) => {
+    const aDistance = Math.abs(a.baseY - centerY) + (a.seed & 15) * 0.01;
+    const bDistance = Math.abs(b.baseY - centerY) + (b.seed & 15) * 0.01;
+    return aDistance - bDistance;
+  });
+
+  const visibleCount = Math.min(BIOME_FLUTTER_VISIBLE_TARGET, candidates.length);
+  for (let i = 0; i < visibleCount; i++) {
+    const flutter = candidates[i]!;
+    flutter.gfx.visible = true;
+    const drift = Math.sin(tSec * 0.42 + flutter.phase + flutter.seed * 0.001) * 3;
+    flutter.gfx.x = Math.round(flutter.baseX + Math.sin(tSec * 0.85 + flutter.phase) * flutter.orbitX + drift);
+    flutter.gfx.y = Math.round(flutter.baseY + Math.cos(tSec * 1.1 + flutter.phase) * flutter.orbitY);
+    drawBiomeFlutter(flutter, tSec);
   }
 }
 
@@ -1974,6 +2002,7 @@ function addProceduralPlatform(
   }
 
   g.zIndex = 2;
+  g.cacheAsTexture(PIXEL_CACHE_OPTIONS);
   target.addChild(g);
 }
 
@@ -1992,7 +2021,7 @@ function addProceduralPlatform(
 // hudLayer              — ui
 
 const skyLayer    = new Container();
-const worldLayer  = new Container();
+const worldLayer  = new Container({ isRenderGroup: true });
 const backDecorationLayer = new Container();
 const chunkLayer  = new Container();
 const decorationLayer = new Container();
@@ -2006,14 +2035,14 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
   texture: Texture.WHITE,
   roundPixels: true,
   dynamicProperties: {
-    vertex: true,
+    vertex: false,
     position: true,
     rotation: false,
     uvs: false,
     color: true,
   },
 });
-const hudLayer    = new Container();
+const hudLayer    = new Container({ isRenderGroup: true });
 
 enemyLayer.sortableChildren = true;
 effectLayer.addChild(effectParticleLayer);
@@ -2134,6 +2163,7 @@ let cameraY   = 0;
 let cameraSnap = true;
 let showDebug  = false;
 let elapsedMs  = 0;
+let lastEnvironmentAnimMs = 0;
 let lastLocalJumpPadFxMs = -Infinity;
 
 // Camera shake
@@ -2815,6 +2845,7 @@ function renderChunk(chunk: GeneratedChunk): void {
     }
   }
 
+  g.cacheAsTexture(PIXEL_CACHE_OPTIONS);
   chunkLayer.addChild(g);
   chunkGraphics.set(chunk.chunkY, g);
   decorateChunk(chunk);
@@ -2879,12 +2910,50 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
         tint: midMountainParticleColor(palette, density, noise),
         alpha: 1,
       }));
+
+      if (density < 0.64) {
+        const edgeChecks = [
+          { dx: -step, dy: 0, ox: -1, oy: 1, upward: false },
+          { dx: step, dy: 0, ox: step - 1, oy: 1, upward: false },
+          { dx: 0, dy: -step, ox: 1, oy: -1, upward: true },
+          { dx: 0, dy: step, ox: 1, oy: step - 1, upward: false },
+        ] as const;
+        for (let i = 0; i < edgeChecks.length; i++) {
+          const side = edgeChecks[i]!;
+          const sideNoise = midMountainNoise(chunk.chunkY, sampleX + side.dx, sampleY + side.dy, 991 + i * 17);
+          if (sideNoise % 4 === 0) continue;
+          const neighborDensity = midMountainDensity(chunk, connections, sampleX + side.dx, sampleY + side.dy);
+          if (neighborDensity > threshold + 0.08) continue;
+          const speckNoise = midMountainNoise(chunk.chunkY, sampleX + side.ox, sampleY + side.oy, 1409 + i * 29);
+          mountainParticles.push(new PixiParticle({
+            texture: Texture.WHITE,
+            x: x + side.ox + ((speckNoise >> 3) % 2),
+            y: topY + localY + side.oy + ((speckNoise >> 6) % 2),
+            scaleX: 2,
+            scaleY: 2,
+            tint: midMountainBorderPixelColor(palette, speckNoise, side.upward),
+            alpha: side.upward ? 0.92 : 0.78,
+          }));
+          if (speckNoise % 5 === 0 && density < 0.48) {
+            mountainParticles.push(new PixiParticle({
+              texture: Texture.WHITE,
+              x: x + side.ox + ((speckNoise >> 10) % 3) - 1,
+              y: topY + localY + side.oy + ((speckNoise >> 13) % 3) - 1,
+              scaleX: 1.5,
+              scaleY: 1.5,
+              tint: midMountainBorderPixelColor(palette, speckNoise >>> 1, side.upward),
+              alpha: 0.68,
+            }));
+          }
+        }
+      }
     }
   }
 
   const mountain = new ParticleContainer<PixiParticle>({
     texture: Texture.WHITE,
     roundPixels: true,
+    boundsArea: new Rectangle(-8, topY - 8, WORLD_WIDTH + 16, chunkPixelHeight + 16),
     dynamicProperties: {
       vertex: false,
       position: false,
@@ -2896,6 +2965,7 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
   mountain.zIndex = -6;
   mountain.particleChildren.push(...mountainParticles);
   mountain.update();
+  mountain.cacheAsTexture(PIXEL_CACHE_OPTIONS);
   target.addChild(mountain);
   clearMidMountainCrumbleChunk(chunk.chunkY);
   registerMidMountainCrumbleEmitters(chunk, target, palette, connections);
@@ -3361,6 +3431,7 @@ function makeProceduralTree(biome: BiomeId, seed: number, chunkY: number): Conta
     }
   }
 
+  trunkGfx.cacheAsTexture(PIXEL_CACHE_OPTIONS);
   tree.addChild(trunkGfx, leavesGfx);
   const scale = SCENE_ASSET_SCALE * (isGiant ? 1.14 : isLarge ? 1.02 : 0.84 + (seed % 5) * 0.04);
   tree.scale.set(scale);
@@ -4852,6 +4923,7 @@ const partPool:    PixiParticle[] = [];
 const worldPulses: WorldPulse[] = [];
 const floatingTexts: FloatingText[] = [];
 let fallStreakTimer = 0;
+let effectParticleLayerDirty = false;
 
 function currentPixelParticleCap(): number {
   const fps = pixi.ticker.FPS;
@@ -4871,6 +4943,7 @@ function releasePixelParticle(index: number): void {
   }
   particles.pop();
   children.pop();
+  effectParticleLayerDirty = true;
   entry.particle.alpha = 0;
   if (partPool.length < MAX_PIXEL_PARTICLES) partPool.push(entry.particle);
 }
@@ -4882,6 +4955,7 @@ function resetEffectParticles(): void {
   }
   particles.length = 0;
   effectParticleLayer.particleChildren.length = 0;
+  effectParticleLayerDirty = true;
 
   for (const pulse of worldPulses) {
     if (!pulse.gfx.destroyed) pulse.gfx.destroy();
@@ -4905,6 +4979,7 @@ function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number,
   particle.tint = color;
   particle.alpha = 1;
   effectParticleLayer.particleChildren.push(particle);
+  effectParticleLayerDirty = true;
   particles.push({ particle, vx, vy, life, max: life, gravity });
 }
 
@@ -4956,6 +5031,10 @@ function updateParticles(dt: number): void {
     p.particle.y += p.vy * dt;
     p.vy    += p.gravity * dt;
     p.particle.alpha = p.life / p.max;
+  }
+  if (effectParticleLayerDirty) {
+    effectParticleLayer.update();
+    effectParticleLayerDirty = false;
   }
 
   for (let i = worldPulses.length - 1; i >= 0; i--) {
@@ -5220,6 +5299,12 @@ function updateCamera(dt: number, scale: number): void {
 function triggerShake(sx: number, sy: number): void {
   shakeX = sx * (Math.random() > 0.5 ? 1 : -1);
   shakeY = sy;
+}
+
+function environmentAnimationIntervalMs(): number {
+  const fps = pixi.ticker.FPS;
+  if (fps > 0 && fps < 42) return 1000 / 20;
+  return 1000 / 30;
 }
 
 // ── HUD ───────────────────────────────────────────────────────────────────────
@@ -5923,18 +6008,23 @@ pixi.ticker.add((ticker) => {
   maybePing();
   updateAdaptiveInterpDelay();
   updateParticles(dt);
-  updateMidMountainCrumble(dt);
-  updateBiomeFlutters(tSec);
-  updateProceduralTrees(tSec);
-  updateProceduralLianas(tSec);
-  updateProceduralFlora(tSec);
+  const updateEnvironmentAnimations = elapsedMs - lastEnvironmentAnimMs >= environmentAnimationIntervalMs();
+  const envDt = Math.min(Math.max(0, elapsedMs - lastEnvironmentAnimMs) / 1000, 1 / 15);
+  if (updateEnvironmentAnimations) {
+    lastEnvironmentAnimMs = elapsedMs;
+    updateMidMountainCrumble(envDt);
+    updateBiomeFlutters(tSec);
+    updateProceduralTrees(tSec);
+    updateProceduralLianas(tSec);
+    updateProceduralFlora(tSec);
+    updateHazardTelegraphs(tSec);
+    updateWindZoneFxs(tSec);
+    updateJumpPadAnims(tSec);
+    updateRelicAnims(tSec);
+    updatePortals(tSec);
+  }
   spawnAmbientParticles(dt);
   spawnFallStreaks(dt);
-  updateHazardTelegraphs(tSec);
-  updateWindZoneFxs(tSec);
-  updateJumpPadAnims(tSec);
-  updateRelicAnims(tSec);
-  updatePortals(tSec);
   updateNotifications(dt);
 
   // Slow horizontal cloud drift — rebuild when offset exceeds screen width
