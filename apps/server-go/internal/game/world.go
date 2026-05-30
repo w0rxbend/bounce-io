@@ -345,6 +345,32 @@ type worldRegionProfile struct {
 	CollectibleAdd int
 }
 
+type levelDesignConfig struct {
+	TargetPlatformDensity     float64
+	RoutesPerBandMin          int
+	RoutesPerBandMax          int
+	RestPlatformEveryBands    int
+	RiskyShortcutChance        float64
+	JumpPadChance             float64
+	MaxNormalJumpHeight       float64
+	MaxNormalJumpHorizontal   float64
+	JumpPadBoostHeight        float64
+	JumpPadMultiplier         float64
+}
+
+var LevelDesign = levelDesignConfig{
+	TargetPlatformDensity:   0.64,
+	RoutesPerBandMin:        2,
+	RoutesPerBandMax:        3,
+	RestPlatformEveryBands:  3,
+	RiskyShortcutChance:     0.35,
+	JumpPadChance:           0.35,
+	MaxNormalJumpHeight:     (JumpSpeed * JumpSpeed) / (2 * Gravity),
+	MaxNormalJumpHorizontal: float64(MaxReachableHorizontalGapTiles * TileSize),
+	JumpPadBoostHeight:     (JumpSpeed * 2.35 * JumpSpeed * 2.35) / (2 * Gravity),
+	JumpPadMultiplier:       2.35,
+}
+
 var worldRegionProfiles = []worldRegionProfile{
 	{ID: "floating-garden", Name: "Floating Garden", Landmark: "giant tree", PortalStyle: "living-tree-gate", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 8, ContestWidth: 11, CollectibleAdd: 1},
 	{ID: "ancient-ruins", Name: "Ancient Ruins", Landmark: "broken ruin gate", PortalStyle: "ruin-arch", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 6, ContestWidth: 10, CollectibleAdd: 2},
@@ -446,7 +472,7 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 			if spec.Kind == "safe" {
 				entryWidth := profile.ContestWidth
 				if chunkY == 0 {
-					entryWidth = ChunkWidthTiles
+					entryWidth = max(profile.ContestWidth, 14)
 				}
 				plan.addPlatform(chunkY, platformFromCenter(entryCenter, entryY, entryWidth), spec.ID, "portal-entry")
 			}
@@ -494,16 +520,15 @@ func buildRouteSpecs(profile worldRegionProfile) []routeSpec {
 		{ID: "safe", Kind: "safe", Label: "safe long route", Offset: 0, Width: profile.SafeWidth, Reward: 1},
 		{ID: "risk", Kind: "risk", Label: "risky shortcut", Offset: -8, Width: max(3, profile.SafeWidth-3), Reward: 3},
 		{ID: "relic", Kind: "relic", Label: "relic detour", Offset: 8, Width: max(4, profile.SafeWidth-2), Reward: 4},
-		{ID: "hidden", Kind: "hidden", Label: "hidden advanced route", Offset: alternatingOffset(profile.LengthChunks, 10), Width: 3, Reward: 5, Hidden: true},
 	}
 }
 
 func routeRowsForSpec(spec routeSpec) []int {
 	switch spec.Kind {
 	case "risk":
-		return []int{13, 10, 7, 4, 1}
-	case "hidden":
-		return []int{13, 10, 7, 4, 1}
+		return []int{10, 4}
+	case "relic":
+		return []int{13, 7}
 	default:
 		return []int{13, 10, 7, 4, 1}
 	}
@@ -688,7 +713,7 @@ func (p *RegionPlan) placeLandmarks(seed uint32) {
 
 func (p *RegionPlan) placeCollectibles() {
 	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
-		target := 4 + p.Profile.CollectibleAdd
+		target := 3 + min(2, p.Profile.CollectibleAdd)
 		if chunkY == p.StartChunkY || chunkY == p.EndChunkY {
 			target++
 		}
@@ -703,9 +728,6 @@ func (p *RegionPlan) placeCollectibles() {
 			addRelicOnPlatform(&relics, chunkY, platform, platform.Span.Width/2)
 			if len(relics) < target && platform.Kind == "relic" && platform.Span.Width >= 4 {
 				addRelicOnPlatform(&relics, chunkY, platform, max(1, platform.Span.Width-2))
-			}
-			if len(relics) < target && platform.Kind == "hidden" {
-				addRelicOnPlatform(&relics, chunkY, platform, 1)
 			}
 		}
 		p.Relics[chunkY] = relics
@@ -724,10 +746,10 @@ func addRelicOnPlatform(relics *[]RelicSpawn, chunkY int, platform plannedPlatfo
 		}
 	}
 	prefix := "relic"
-	if platform.Kind == "hidden" {
-		prefix = "cache"
-	} else if platform.Kind == "risk" {
+	if platform.Kind == "risk" {
 		prefix = "riskRelic"
+	} else if platform.Kind == "relic" {
+		prefix = "cache"
 	}
 	*relics = append(*relics, RelicSpawn{ID: prefix + ":" + itoa(chunkY) + ":" + itoa(len(*relics)), X: x, Y: y})
 }
@@ -739,7 +761,7 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 	}
 	candidates := []plannedPlatform{}
 	for _, platform := range p.Platforms[jumpChunk] {
-		if (platform.Kind == "risk" || platform.Kind == "hidden") && platform.Span.Y >= 7 && platform.Span.Y <= 13 {
+		if (platform.Kind == "risk" || platform.Kind == "relic") && platform.Span.Y >= 7 && platform.Span.Y <= 13 {
 			candidates = append(candidates, platform)
 		}
 	}
@@ -751,7 +773,7 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 		ID:         "jumpPad:" + p.ID + ":shortcut",
 		X:          platform.Span.X + platform.Span.Width/2,
 		Y:          platform.Span.Y - 1,
-		Multiplier: 2.35,
+		Multiplier: LevelDesign.JumpPadMultiplier,
 	}}
 }
 

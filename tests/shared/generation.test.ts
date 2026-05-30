@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateVerticalChunk, getTile, verifyChunkReachability } from "../../packages/shared/src/generation.js";
+import { LEVEL_DESIGN_CONFIG, generateVerticalChunk, getTile, verifyChunkReachability } from "../../packages/shared/src/generation.js";
 import { isClientMessage, isGeneratedChunk } from "../../packages/shared/src/validation.js";
 import { GAME_VERSION, PROTOCOL_VERSION } from "../../packages/shared/src/constants.js";
 
@@ -66,6 +66,33 @@ test("all chunks 0-49 pass reachability check across multiple seeds", () => {
         `seed=${seed} chunk ${chunkY} has reachability issues: ${issues.map(i => i.reason).join(", ")}`);
     }
   }
+});
+
+test("sparse chunks keep readable platform counts and multiple route branches", () => {
+  const seeds = [0, 42, 1234, 0x5eedbabe, 0xdeadbeef];
+  let platformTotal = 0;
+  let routeTotal = 0;
+  let chunkTotal = 0;
+
+  for (const seed of seeds) {
+    for (let chunkY = 0; chunkY < 50; chunkY++) {
+      const chunk = generateVerticalChunk({ seed, chunkY });
+      assert.ok(
+        chunk.platforms.length >= 8 && chunk.platforms.length <= 10,
+        `seed=${seed} chunk=${chunkY} should stay sparse, got ${chunk.platforms.length} platforms`
+      );
+      assert.ok(
+        (chunk.routes?.length ?? 0) >= LEVEL_DESIGN_CONFIG.routesPerBandMin,
+        `seed=${seed} chunk=${chunkY} should expose multiple route branches`
+      );
+      platformTotal += chunk.platforms.length;
+      routeTotal += chunk.routes?.length ?? 0;
+      chunkTotal++;
+    }
+  }
+
+  assert.ok(platformTotal / chunkTotal < 10, `average platform count should stay below 10, got ${platformTotal / chunkTotal}`);
+  assert.ok(routeTotal / chunkTotal >= 2.8, `average route branches should stay near 3, got ${routeTotal / chunkTotal}`);
 });
 
 test("chunk entry and exit platforms are always within world bounds", () => {

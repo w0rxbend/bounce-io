@@ -265,7 +265,7 @@ func TestDeathRespawnEmitsClientCompatibleEvents(t *testing.T) {
 	}
 }
 
-func TestFatalFallOverSixMetersKillsPlayer(t *testing.T) {
+func TestFatalFallOverTwelveMetersKillsPlayer(t *testing.T) {
 	seed := HashString("demo")
 	player := CreatePlayerState("p1", 100, -400)
 	player.Velocity.Y = MaxFallSpeed

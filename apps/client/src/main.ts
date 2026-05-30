@@ -2494,6 +2494,8 @@ interface JumpPadAnim {
   worldY: number;
 }
 const jumpPadAnims = new Map<string, JumpPadAnim>();
+const localJumpPadCooldowns = new Map<string, number>();
+const JUMP_PAD_COOLDOWN_MS = 280;
 
 interface WindZoneFx {
   gfx: Graphics;
@@ -3232,6 +3234,7 @@ function clearWorldChunks(): void {
   portalAnims.clear();
   for (const a of jumpPadAnims.values()) a.container.destroy({ children: true });
   jumpPadAnims.clear();
+  localJumpPadCooldowns.clear();
   for (const e of enemyEntries.values()) {
     e.sprite.destroy();
     e.hp.destroy();
@@ -5478,11 +5481,14 @@ function applyLocalJumpPads(player: PlayerState): boolean {
   const playerBottom = player.position.y + PLAYER_HEIGHT;
   for (const chunk of loadedChunks.values()) {
     for (const pad of chunk.jumpPads) {
+      const cooldownKey = `${pad.id}:${localPlayerId ?? "local"}`;
+      if ((localJumpPadCooldowns.get(cooldownKey) ?? -Infinity) > elapsedMs) continue;
       const padX = pad.x * TILE_SIZE + TILE_SIZE / 2;
       const padY = (chunk.worldTileY + pad.y) * TILE_SIZE + TILE_SIZE / 2;
       const nearX = Math.abs(playerCenterX - padX) <= TILE_SIZE * 0.85;
       const nearY = playerBottom >= padY - TILE_SIZE * 0.9 && playerBottom <= padY + TILE_SIZE * 0.9;
       if (!nearX || !nearY) continue;
+      localJumpPadCooldowns.set(cooldownKey, elapsedMs + JUMP_PAD_COOLDOWN_MS);
       player.velocity.y = -JUMP_SPEED * Math.max(1, pad.multiplier);
       player.grounded = false;
       player.coyoteTimer = 0;

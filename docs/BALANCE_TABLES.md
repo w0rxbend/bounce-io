@@ -33,6 +33,7 @@ All values are taken directly from `packages/shared/src/constants.ts`. The serve
 | Max fall speed | 420 px/s | Terminal velocity cap; keeps recovery readable. |
 | Jump impulse | 315 px/s upward | Applied instantaneously; negative Y = upward. |
 | Short-hop cutoff | 0.45 | Releasing jump early clamps vertical speed to `315 × 0.45 ≈ 142 px/s`. |
+| Fatal fall distance | 12 m (384 px) | Player dies after falling beyond this threshold without landing; target band is 10–15 m. |
 | Respawn invulnerability | 1.25 s | Visual blink required during this window. |
 
 ### Derived Jump Geometry

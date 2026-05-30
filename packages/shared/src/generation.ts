@@ -1,13 +1,15 @@
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
+  GRAVITY,
+  JUMP_SPEED,
   MAX_PLATFORM_WIDTH_TILES,
   MAX_REACHABLE_HORIZONTAL_GAP_TILES,
   MAX_REACHABLE_VERTICAL_GAP_TILES,
   MIN_PLATFORM_WIDTH_TILES,
   TILE_SIZE
 } from "./constants.js";
-import type { EnemyKind, EnemySpawn, GeneratedChunk, JumpPadSpawn, PlatformSpan, TileKind, TileMap, WindZoneSpawn } from "./types.js";
+import type { EnemyKind, EnemySpawn, GeneratedChunk, JumpPadSpawn, PlatformSpan, RouteBranch, TileKind, TileMap, WindZoneSpawn } from "./types.js";
 import { createRng, hashSeed } from "./rng.js";
 
 export interface GenerateChunkOptions {
@@ -22,6 +24,36 @@ export interface ReachabilityIssue {
   to: PlatformSpan;
   reason: "vertical-gap" | "horizontal-gap" | "unreachable";
 }
+
+type RouteKind = "safe" | "risk" | "relic" | "rest";
+
+interface PlannedPlatform {
+  span: PlatformSpan;
+  route: RouteKind;
+}
+
+export const LEVEL_DESIGN_CONFIG = {
+  targetPlatformDensity: 0.64,
+  minVerticalGap: MAX_REACHABLE_VERTICAL_GAP_TILES * TILE_SIZE,
+  maxVerticalGap: MAX_REACHABLE_VERTICAL_GAP_TILES * TILE_SIZE * 2,
+  minHorizontalGap: 4 * TILE_SIZE,
+  maxHorizontalGap: MAX_REACHABLE_HORIZONTAL_GAP_TILES * TILE_SIZE,
+  routesPerBandMin: 2,
+  routesPerBandMax: 3,
+  safeRouteChance: 0.72,
+  riskyShortcutChance: 0.35,
+  jumpPadChance: 0.35,
+  maxNormalJumpHeight: Math.floor((JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)),
+  maxNormalJumpHorizontal: MAX_REACHABLE_HORIZONTAL_GAP_TILES * TILE_SIZE,
+  jumpPadBoostHeight: Math.floor(((JUMP_SPEED * 2.35) * (JUMP_SPEED * 2.35)) / (2 * GRAVITY)),
+  jumpPadMultiplier: 2.35,
+  restPlatformEveryBands: 3
+} as const;
+
+const SPARSE_BAND_ROWS = [13, 10, 7, 4] as const;
+const REST_BAND_ROW = 7;
+const MAX_ASSISTED_VERTICAL_GAP_TILES = MAX_REACHABLE_VERTICAL_GAP_TILES * 2;
+const MAX_ASSISTED_HORIZONTAL_GAP_TILES = MAX_REACHABLE_HORIZONTAL_GAP_TILES * 2;
 
 function emptyTiles(width: number, height: number): TileKind[] {
   return new Array<TileKind>(width * height).fill("empty");
@@ -43,12 +75,101 @@ function overlapOrGap(a: PlatformSpan, b: PlatformSpan): number {
   return 0;
 }
 
+export function estimateMaxNormalJumpHeight(): number {
+  return LEVEL_DESIGN_CONFIG.maxNormalJumpHeight;
+}
+
+export function estimateMaxHorizontalJumpDistance(): number {
+  return LEVEL_DESIGN_CONFIG.maxNormalJumpHorizontal;
+}
+
+export function canReachPlatform(
+  from: PlatformSpan,
+  to: PlatformSpan,
+  assisted = false
+): boolean {
+  if (to.y >= from.y) return false;
+  const verticalGap = from.y - to.y;
+  const horizontalGap = overlapOrGap(from, to);
+  const maxVertical = assisted ? MAX_ASSISTED_VERTICAL_GAP_TILES : MAX_REACHABLE_VERTICAL_GAP_TILES;
+  const maxHorizontal = assisted ? MAX_ASSISTED_HORIZONTAL_GAP_TILES : MAX_REACHABLE_HORIZONTAL_GAP_TILES;
+  return verticalGap <= maxVertical && horizontalGap <= maxHorizontal;
+}
+
 function makePlatform(x: number, y: number, width: number, chunkWidth: number): PlatformSpan {
   const w = clamp(width, MIN_PLATFORM_WIDTH_TILES, Math.min(MAX_PLATFORM_WIDTH_TILES, chunkWidth - 2));
   return {
     x: clamp(x, 1, chunkWidth - w - 1),
     y,
     width: w
+  };
+}
+
+function platformCenter(platform: PlatformSpan): number {
+  return platform.x + platform.width / 2;
+}
+
+function platformCenterPx(platform: PlatformSpan, worldTileY: number): { x: number; y: number } {
+  return {
+    x: platformCenter(platform) * TILE_SIZE,
+    y: (worldTileY + platform.y) * TILE_SIZE
+  };
+}
+
+function routeCenter(route: RouteKind, row: number, width: number, rng: ReturnType<typeof createRng>): number {
+  const mid = Math.floor(width / 2);
+  switch (route) {
+    case "safe":
+      return clamp(mid + rng.int(-2, 1), 7, width - 8);
+    case "risk":
+      return clamp(width - 10 + rng.int(-2, 2), 8, width - 5);
+    case "relic":
+      return row >= REST_BAND_ROW
+        ? clamp(9 + rng.int(-2, 2), 4, width - 9)
+        : clamp(width - 11 + rng.int(-2, 2), 8, width - 5);
+    case "rest":
+    default:
+      return clamp(mid + rng.int(-1, 1), 7, width - 8);
+  }
+}
+
+function routeWidth(route: RouteKind, row: number, rng: ReturnType<typeof createRng>): number {
+  if (route === "rest") return rng.int(8, 10);
+  if (route === "safe") return row <= 4 ? rng.int(5, 7) : rng.int(6, 7);
+  if (route === "relic") return rng.int(4, 5);
+  return rng.int(3, 4);
+}
+
+function findNormalLaunchPlatform(target: PlatformSpan, lower: PlatformSpan[]): PlatformSpan | null {
+  for (const platform of lower) {
+    if (canReachPlatform(platform, target)) return platform;
+  }
+  return null;
+}
+
+function findAssistedLaunchPlatform(target: PlatformSpan, lower: PlatformSpan[]): PlatformSpan | null {
+  let best: PlatformSpan | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const platform of lower) {
+    if (canReachPlatform(platform, target)) continue;
+    if (!canReachPlatform(platform, target, true)) continue;
+    const verticalGap = platform.y - target.y;
+    const horizontalGap = overlapOrGap(platform, target);
+    const score = verticalGap * 2 + horizontalGap;
+    if (score < bestScore) {
+      best = platform;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+function placeJumpPadOnPlatform(platform: PlatformSpan, chunkY: number, index: number): JumpPadSpawn {
+  return {
+    id: `jumpPad:${chunkY}:${index}`,
+    x: platform.x + Math.floor(platform.width / 2),
+    y: platform.y - 1,
+    multiplier: LEVEL_DESIGN_CONFIG.jumpPadMultiplier
   };
 }
 
@@ -66,15 +187,11 @@ function separatePlatforms(spans: PlatformSpan[], minGap: number, chunkWidth: nu
   return sorted;
 }
 
-// Multi-path chunk generator.
-// Each chunk has:
-//   - Entry platform: center-bottom, 6 tiles wide
-//   - 4 intermediate layers at 3-tile vertical gaps (matching MAX_REACHABLE_VERTICAL_GAP_TILES)
-//   - Per layer: LEFT (recovery) + CENTER (main) + RIGHT (risk) platforms
-//     OR a convergence platform (25% chance) spanning the center
-//   - Exit platform: center-top, 6 tiles wide
-//   - Coins (relics) on RIGHT lane platforms
-//   - Hazard tiles on RIGHT lane at layers 2+ (progressive difficulty)
+// Sparse multi-path chunk generator.
+// Each chunk keeps the normal 3-tile vertical cadence for casual climbing, but
+// most bands now expose two route nodes instead of three dense same-row islands.
+// The middle band is a readable rest/convergence platform, and occasional jump
+// pads create faster high-gap shortcuts without becoming mandatory.
 export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedChunk {
   const width = options.width ?? CHUNK_WIDTH_TILES;
   const height = options.height ?? CHUNK_HEIGHT_TILES;
@@ -85,85 +202,54 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
 
   const rng = createRng(hashSeed(options.seed, options.chunkY));
   const tiles = emptyTiles(width, height);
-  const allPlatforms: PlatformSpan[] = [];
+  const plannedPlatforms: PlannedPlatform[] = [];
 
   const difficulty = Math.min(1.0, options.chunkY / 20);
 
-  // Entry: center bottom. Chunk 0 gets a full-width starting ground so the
-  // first screen reads as a stable launch pad instead of a floating island.
+  // Entry: center bottom. Chunk 0 gets a wider starting island, but not a
+  // full-width row; keeping side air gaps prevents the first screen from
+  // reading as a ceiling-like band.
   const isStartChunk = options.chunkY === 0;
-  const entryWidth = isStartChunk ? width : clamp(6, MIN_PLATFORM_WIDTH_TILES, width - 4);
+  const entryWidth = isStartChunk ? clamp(14, MIN_PLATFORM_WIDTH_TILES, width - 4) : clamp(6, MIN_PLATFORM_WIDTH_TILES, width - 4);
   const entry: PlatformSpan = {
-    x: isStartChunk ? 0 : Math.floor(width / 2) - Math.floor(entryWidth / 2),
+    x: Math.floor(width / 2) - Math.floor(entryWidth / 2),
     y: height - 2,
     width: entryWidth
   };
-  allPlatforms.push(entry);
+  plannedPlatforms.push({ span: entry, route: "safe" });
 
-  // Vertical layer positions: spaced exactly MAX_REACHABLE_VERTICAL_GAP_TILES apart
-  // entry.y=16, layers at 13,10,7,4, exit at 1  (for height=18, gap=3)
-  const gap = MAX_REACHABLE_VERTICAL_GAP_TILES;
-  const numLayers = Math.floor((height - 3) / gap) - 1;
+  for (const row of SPARSE_BAND_ROWS) {
+    if (row < 2 || row >= height - 1) continue;
 
-  // Track the highest reachable end-x from the previous layer so each layer's
-  // rightmost platform stays within MAX_REACHABLE_HORIZONTAL_GAP_TILES of it.
-  // A convergence layer can shift this significantly leftward; using entry-based
-  // cap alone would still allow unreachable platforms after convergence layers.
-  let prevLayerMaxEndX = entry.x + entry.width - 1;
-
-  for (let layer = 1; layer <= numLayers; layer++) {
-    const layerY = entry.y - layer * gap;
-    if (layerY < 2) break;
-
-    const convergenceChance = 0.15 + difficulty * 0.25;
-
-    if (rng.nextFloat() < convergenceChance) {
-      // Convergence: single wide platform — PvP zone
-      const convWidth = clamp(rng.int(7, 11), MIN_PLATFORM_WIDTH_TILES, width - 4);
-      const convX = Math.floor(width / 2) - Math.floor(convWidth / 2) + rng.int(-1, 1);
-      const conv = makePlatform(convX, layerY, convWidth, width);
-      allPlatforms.push(conv);
-      prevLayerMaxEndX = conv.x + conv.width - 1;
+    const rowPlans: PlannedPlatform[] = [];
+    if (row === REST_BAND_ROW) {
+      const platformWidth = routeWidth("rest", row, rng);
+      const center = routeCenter("rest", row, width, rng);
+      rowPlans.push({
+        span: makePlatform(center - Math.floor(platformWidth / 2), row, platformWidth, width),
+        route: "rest"
+      });
     } else {
-      // Left lane (recovery): centered around x≈5, wider platforms, small gaps
-      const leftWidth = rng.int(3, 5);
-      const leftCenter = rng.int(3, 7);
-      const left = makePlatform(leftCenter - Math.floor(leftWidth / 2), layerY, leftWidth, width);
+      const sideRoute: RouteKind = row === 10 || (row === 4 && rng.nextFloat() < 0.5) ? "risk" : "relic";
+      const routes: RouteKind[] = ["safe", sideRoute];
+      if (row === 4 && options.chunkY > 1 && rng.nextFloat() < 0.18) routes.push(sideRoute === "risk" ? "relic" : "risk");
 
-      // Center lane (main): centered, medium width
-      const centerWidth = rng.int(3, MAX_PLATFORM_WIDTH_TILES);
-      const centerCenter = Math.floor(width / 2) + rng.int(-2, 2);
-      const center = makePlatform(centerCenter - Math.floor(centerWidth / 2), layerY, centerWidth, width);
-
-      // Right lane (risk): centered around x≈19, narrower, high reward
-      const rightWidth = rng.int(MIN_PLATFORM_WIDTH_TILES, 4);
-      const rightCenter = rng.int(width - 8, width - 4);
-      const right = makePlatform(rightCenter - Math.floor(rightWidth / 2), layerY, rightWidth, width);
-
-      // Enforce minimum 2-tile gap between same-row platforms so player can pass between them
-      const layerPlatforms = separatePlatforms([left, center, right], 2, width);
-
-      // Cap rightmost to stay within reach of previous layer's rightmost platform.
-      // prevLayerMaxEndX shrinks when a narrow convergence layer precedes this one.
-      const reachCapX = prevLayerMaxEndX + MAX_REACHABLE_HORIZONTAL_GAP_TILES;
-      const lastIdx = layerPlatforms.length - 1;
-      const lastP = layerPlatforms[lastIdx]!;
-      if (lastP.x > reachCapX) {
-        layerPlatforms[lastIdx] = { ...lastP, x: Math.min(reachCapX, width - lastP.width - 1) };
+      for (const route of routes) {
+        const platformWidth = routeWidth(route, row, rng);
+        const center = routeCenter(route, row, width, rng);
+        rowPlans.push({
+          span: makePlatform(center - Math.floor(platformWidth / 2), row, platformWidth, width),
+          route
+        });
       }
+    }
 
-      for (const p of layerPlatforms) allPlatforms.push(p);
-      const rightmostP = layerPlatforms[lastIdx]!;
-      prevLayerMaxEndX = rightmostP.x + rightmostP.width - 1;
-
-      // Hazard on right lane at layers 2+ (difficulty-scaled probability)
-      if (layer >= 2 && rng.nextFloat() < difficulty * 0.55) {
-        const hazardX = rightmostP.x + Math.floor(rightmostP.width / 2);
-        const hazardY = layerY - 1;
-        if (hazardY >= 0 && hazardY < height && tiles[tileIndex(width, hazardX, hazardY)] === "empty") {
-          tiles[tileIndex(width, hazardX, hazardY)] = "hazard";
-        }
-      }
+    const separated = separatePlatforms(rowPlans.map((plan) => plan.span), 4, width);
+    for (let i = 0; i < rowPlans.length; i++) {
+      const span = separated[i];
+      const plan = rowPlans[i];
+      if (!span || !plan) continue;
+      plannedPlatforms.push({ ...plan, span });
     }
   }
 
@@ -174,7 +260,39 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     y: 1,
     width: exitWidth
   };
-  allPlatforms.push(exit);
+  plannedPlatforms.push({ span: exit, route: "safe" });
+  const allPlatforms = plannedPlatforms.map((platform) => platform.span);
+
+  const jumpPads: JumpPadSpawn[] = [];
+  const sortedByHeight = [...allPlatforms].sort((a, b) => b.y - a.y);
+  for (const target of sortedByHeight) {
+    if (target === entry) continue;
+    const lower = allPlatforms.filter((platform) => platform.y > target.y);
+    if (findNormalLaunchPlatform(target, lower)) continue;
+    const launch = findAssistedLaunchPlatform(target, lower);
+    if (launch && launch.y > 0 && !jumpPads.some((pad) => pad.x === launch.x + Math.floor(launch.width / 2) && pad.y === launch.y - 1)) {
+      jumpPads.push(placeJumpPadOnPlatform(launch, options.chunkY, jumpPads.length));
+    }
+  }
+
+  if (options.chunkY > 0 && rng.nextFloat() < LEVEL_DESIGN_CONFIG.riskyShortcutChance) {
+    const shortcutLaunch = plannedPlatforms.find((platform) => platform.route === "risk" && platform.span.y === 10)?.span;
+    const shortcutTarget = plannedPlatforms.find((platform) => platform.span.y === 4 && platform.route !== "safe")?.span;
+    if (shortcutLaunch && shortcutTarget && canReachPlatform(shortcutLaunch, shortcutTarget, true)) {
+      const pad = placeJumpPadOnPlatform(shortcutLaunch, options.chunkY, jumpPads.length);
+      if (!jumpPads.some((existing) => existing.x === pad.x && existing.y === pad.y)) jumpPads.push(pad);
+    }
+  }
+
+  // Hazard on sparse risk platforms only, so the main route remains readable.
+  for (const platform of plannedPlatforms) {
+    if (platform.route !== "risk" || platform.span.y > 10 || rng.nextFloat() >= difficulty * 0.35) continue;
+    const hazardX = platform.span.x + Math.floor(platform.span.width / 2);
+    const hazardY = platform.span.y - 1;
+    if (hazardY >= 0 && hazardY < height && tiles[tileIndex(width, hazardX, hazardY)] === "empty") {
+      tiles[tileIndex(width, hazardX, hazardY)] = "hazard";
+    }
+  }
 
   // Write oneWay tiles for all platforms — players can jump through from below,
   // land from above, and drop through with the drop input. Only the floor is solid.
@@ -199,17 +317,14 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   // Pattern: entry, [left, center, right] per 3-platform layer, exit
   const relics: Array<{ id: string; x: number; y: number }> = [];
   const enemies: EnemySpawn[] = [];
-  const jumpPads: JumpPadSpawn[] = [];
   const windZones: WindZoneSpawn[] = [];
   let relicIndex = 0;
 
-  for (let i = 1; i < allPlatforms.length - 1; i++) {
-    const platform = allPlatforms[i];
-    if (!platform) continue;
+  for (const planned of plannedPlatforms) {
+    const platform = planned.span;
+    if (platform === entry || platform === exit) continue;
 
-    // Identify right-lane platforms: those with x center > width * 0.6
-    const center = platform.x + platform.width / 2;
-    if (center > width * 0.6 && relicIndex < 5) {
+    if ((planned.route === "relic" || planned.route === "risk") && relicIndex < 4) {
       const coinY = platform.y - 1;
       const coinX = platform.x + Math.floor(platform.width / 2);
       if (coinY >= 0 && coinY < height && tiles[tileIndex(width, coinX, coinY)] === "empty") {
@@ -221,23 +336,6 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   }
 
   if (options.chunkY > 0) {
-    const padCandidates = allPlatforms
-      .slice(1, -1)
-      .filter((platform) => platform.width >= 3 && platform.x + platform.width / 2 < width * 0.72);
-    if (padCandidates.length > 0 && (options.chunkY <= 2 || rng.nextFloat() < 0.65)) {
-      const platform = padCandidates[rng.int(0, padCandidates.length - 1)]!;
-      const padX = platform.x + Math.floor(platform.width / 2);
-      const padY = platform.y - 1;
-      if (padY >= 0 && tiles[tileIndex(width, padX, padY)] === "empty") {
-        jumpPads.push({
-          id: `jumpPad:${options.chunkY}:0`,
-          x: padX,
-          y: padY,
-          multiplier: 5
-        });
-      }
-    }
-
     if (options.chunkY >= 8 && options.chunkY < 16) {
       const windCandidates = allPlatforms
         .slice(1, -1)
@@ -302,16 +400,32 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     }
   }
 
+  const worldTileY = -options.chunkY * height;
+  const routeNodes = (route: RouteKind): Array<{ x: number; y: number }> => {
+    const nodes = plannedPlatforms
+      .filter((platform) => platform.route === route || platform.route === "rest" || (route === "safe" && platform.span === exit))
+      .map((platform) => platformCenterPx(platform.span, worldTileY));
+    if (route !== "safe") nodes.unshift(platformCenterPx(entry, worldTileY));
+    if (route !== "safe") nodes.push(platformCenterPx(exit, worldTileY));
+    return nodes.sort((a, b) => b.y - a.y);
+  };
+  const routes: RouteBranch[] = [
+    { id: `route:${options.chunkY}:safe`, kind: "safe", label: "safe route", hidden: false, reward: 1, nodes: routeNodes("safe") },
+    { id: `route:${options.chunkY}:risk`, kind: "risk", label: "risky shortcut", hidden: false, reward: 3, nodes: routeNodes("risk") },
+    { id: `route:${options.chunkY}:relic`, kind: "relic", label: "relic side route", hidden: false, reward: 2, nodes: routeNodes("relic") }
+  ].filter((route) => route.nodes.length >= 3);
+
   return {
     seed: options.seed,
     chunkY: options.chunkY,
     width,
     height,
-    worldTileY: -options.chunkY * height,
+    worldTileY,
     tiles,
     platforms: allPlatforms,
     entry,
     exit,
+    routes,
     relics,
     enemies,
     jumpPads,
@@ -372,6 +486,9 @@ export function verifyChunkReachability(chunk: GeneratedChunk): ReachabilityIssu
   if (platforms.length === 0) return [];
 
   const reachable = new Set<number>([0]); // entry is index 0
+  const padLaunches = new Set(
+    chunk.jumpPads.map((pad) => `${pad.x}:${pad.y + 1}`)
+  );
 
   // Process platforms sorted by descending y (bottom-first)
   const indexed = platforms.map((p, i) => ({ p, i }));
@@ -385,15 +502,8 @@ export function verifyChunkReachability(chunk: GeneratedChunk): ReachabilityIssu
       for (const fromIdx of reachable) {
         const from = platforms[fromIdx];
         if (!from) continue;
-        if (to.y >= from.y) continue; // must be above (lower tile y)
-
-        const verticalGap = from.y - to.y;
-        const horizontalGap = overlapOrGap(from, to);
-
-        if (
-          verticalGap <= MAX_REACHABLE_VERTICAL_GAP_TILES &&
-          horizontalGap <= MAX_REACHABLE_HORIZONTAL_GAP_TILES
-        ) {
+        const hasLaunchPad = padLaunches.has(`${from.x + Math.floor(from.width / 2)}:${from.y}`);
+        if (canReachPlatform(from, to) || (hasLaunchPad && canReachPlatform(from, to, true))) {
           reachable.add(toIdx);
           changed = true;
           break;

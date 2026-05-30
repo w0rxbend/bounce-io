@@ -15,7 +15,7 @@
 - Objective: race upward through procedurally-generated forest-ruin chunks and be the first to exit chunk 5.
 - Win condition: the first player whose position reaches the exit platform of chunk index 5 (or above) ends the match. Remaining placements are assigned by vertical height, then coin count.
 - Match timeout: 180 seconds. If no player has finished, the match ends and rank is determined by vertical progress.
-- Respawn: falling below the lower boundary of the player's current chunk returns the player to the entry platform of the highest chunk reached by that player.
+- Respawn: falling more than 12 m without landing kills the player and returns them to the entry platform of the highest chunk reached by that player.
 
 ## World Structure
 

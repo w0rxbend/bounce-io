@@ -51,7 +51,7 @@ const (
 	PlayerMaxPushVelocity      = 120.0
 	AirPushFactor              = 0.35
 	RelicsPerLevel             = 5
-	FatalFallDistancePX        = 6 * 32.0
+	FatalFallDistancePX        = 12 * 32.0
 )
 
 type MessageEnvelope struct {

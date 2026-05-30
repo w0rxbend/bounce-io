@@ -46,6 +46,7 @@ type roomState struct {
 	collectedRelics   map[string]struct{}
 	defeatedEnemies   map[string]struct{}
 	enemies           map[string]EnemyState
+	jumpPadCooldowns  map[string]uint64
 	pendingEvents     []MatchEvent
 	metrics           RoomMetrics
 	lastTickWallClock time.Time
@@ -371,6 +372,7 @@ func (r *Room) loop() {
 		collectedRelics:   map[string]struct{}{},
 		defeatedEnemies:   map[string]struct{}{},
 		enemies:           map[string]EnemyState{},
+		jumpPadCooldowns:  map[string]uint64{},
 		pendingEvents:     make([]MatchEvent, 0, 32),
 		lastTickWallClock: time.Now(),
 	}
@@ -400,6 +402,28 @@ func (s *roomState) drainCommands() {
 			return
 		}
 	}
+}
+
+func (s *roomState) jumpPadCooldownKey(playerID, padID string) string {
+	return playerID + ":" + padID
+}
+
+func (s *roomState) canTriggerJumpPad(playerID, padID string) bool {
+	if s.jumpPadCooldowns == nil {
+		s.jumpPadCooldowns = map[string]uint64{}
+	}
+	return s.jumpPadCooldowns[s.jumpPadCooldownKey(playerID, padID)] <= s.tick
+}
+
+func (s *roomState) markJumpPadTriggered(playerID, padID string) {
+	if s.jumpPadCooldowns == nil {
+		s.jumpPadCooldowns = map[string]uint64{}
+	}
+	cooldownTicks := uint64(math.Ceil(0.28 * float64(s.room.cfg.TickRate)))
+	if cooldownTicks < 1 {
+		cooldownTicks = 1
+	}
+	s.jumpPadCooldowns[s.jumpPadCooldownKey(playerID, padID)] = s.tick + cooldownTicks
 }
 
 func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
@@ -434,8 +458,9 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 			if previousKickPhase == "idle" && sess.player.KickPhase == "windup" {
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_KICK_STARTED", "playerId": sess.playerID})
 			}
-			if next, hit, pad, x, y := ApplyJumpPads(s.room.seed, sess.player); hit {
+			if next, hit, pad, x, y := ApplyJumpPads(s.room.seed, sess.player); hit && s.canTriggerJumpPad(sess.playerID, pad.ID) {
 				sess.player = next
+				s.markJumpPadTriggered(sess.playerID, pad.ID)
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{
 					"type":       "JUMP_PAD_TRIGGERED",
 					"playerId":   sess.playerID,
