@@ -926,6 +926,22 @@ function midMountainTileAsset(biome: BiomeId, role: MidMountainTileRole): AssetK
   return keysByBiome[biome][role];
 }
 
+function midMountainTint(biome: BiomeId): number {
+  if (biome === "pineValley") return 0x5a6a64;
+  if (biome === "cloudRidge") return 0x526879;
+  if (biome === "snowfallCliffs") return 0x546b80;
+  if (biome === "frozenSpires") return 0x4d6684;
+  return 0x626878;
+}
+
+function midMountainAlpha(biome: BiomeId): number {
+  if (biome === "pineValley") return 0.48;
+  if (biome === "cloudRidge") return 0.5;
+  if (biome === "snowfallCliffs") return 0.52;
+  if (biome === "frozenSpires") return 0.54;
+  return 0.5;
+}
+
 function platformPartAsset(biome: BiomeId, role: PlatformPartRole, seed = 0): AssetKey {
   const theme: "moss" | "stone" | "snow" | "ice" | "summit" | "crumble" =
     biome === "pineValley" ? "moss" :
@@ -1679,54 +1695,64 @@ function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, w
 
 function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
   const baseTileY = chunk.worldTileY;
-  const placed = new Set<string>();
+  const placed = new Map<string, { sprite: Sprite; priority: number }>();
 
-  const placeTile = (lx: number, ly: number, role: MidMountainTileRole): void => {
+  const roleForMass = (offset: number, half: number, isTop: boolean, isBottom: boolean): MidMountainTileRole => {
+    if (offset === -half) return "left";
+    if (offset === half) return "right";
+    if (isTop) return "cap";
+    if (isBottom) return "bottom";
+    return "body";
+  };
+
+  const placeTile = (lx: number, ly: number, role: MidMountainTileRole, priority = 0): void => {
     if (lx < 0 || lx >= chunk.width || ly < 0 || ly >= chunk.height) return;
     const key = midMountainTileAsset(biome, role);
     if (!hasAsset(key)) return;
     const placedKey = `${lx}:${ly}`;
-    if (placed.has(placedKey)) return;
-    placed.add(placedKey);
+    const existing = placed.get(placedKey);
+    if (existing && existing.priority >= priority) return;
+    if (existing) {
+      target.removeChild(existing.sprite);
+      existing.sprite.destroy();
+    }
     const tile = makeSprite(key);
     tile.x = lx * TILE_SIZE;
     tile.y = (baseTileY + ly) * TILE_SIZE;
-    tile.alpha = 1;
-    tile.zIndex = -3;
+    tile.alpha = midMountainAlpha(biome);
+    tile.tint = midMountainTint(biome);
+    tile.zIndex = -6 + priority;
     target.addChild(tile);
+    placed.set(placedKey, { sprite: tile, priority });
   };
 
-  // A continuous second-layer ridge behind the whole chunk keeps platforms
-  // visually attached to one mountain mass without changing collision.
+  // A quiet second-layer spine gives depth without reading as playable terrain.
+  // Keep it narrower and lower-contrast than the foreground tile platforms.
+  const phase = chunk.chunkY * 0.83;
   for (let ly = 0; ly < chunk.height; ly++) {
-    const sway = Math.round(Math.sin((chunk.chunkY * 1.7 + ly) * 0.48) * 2);
+    const sway = Math.round(Math.sin(phase + ly * 0.42) * 2.2 + Math.sin(phase * 1.7 + ly * 0.19) * 1.1);
     const center = Math.round(chunk.width * 0.5) + sway;
-    const half = 2 + ((chunk.chunkY + ly) % 2);
+    const half = 2 + ((chunk.chunkY + Math.floor(ly / 3)) % 3 === 0 ? 1 : 0);
     for (let ox = -half; ox <= half; ox++) {
-      const role: MidMountainTileRole = ox === -half ? "left" : ox === half ? "right" : "body";
-      placeTile(center + ox, ly, role);
+      placeTile(center + ox, ly, roleForMass(ox, half, ly === 0, ly === chunk.height - 1), 0);
     }
   }
 
-  for (let ly = 0; ly < chunk.height; ly++) {
-    for (let lx = 0; lx < chunk.width; lx++) {
-      const kind = chunk.tiles[ly * chunk.width + lx] as TileKind;
-      const above = ly > 0 ? chunk.tiles[(ly - 1) * chunk.width + lx] as TileKind : "empty";
-      if (kind !== "oneWay" || (above !== "empty" && above !== "relic" && above !== "hazard")) continue;
-
-      const seed = (chunk.chunkY * 193 + lx * 37 + ly * 17) >>> 0;
-      const depth = 4 + (seed % 5);
-      for (let dy = 0; dy < depth; dy++) {
-        const half = Math.max(0, Math.floor((depth - dy + 1) / 3));
-        for (let ox = -half; ox <= half; ox++) {
-          const role: MidMountainTileRole =
-            dy === 0 ? "cap" :
-            dy === depth - 1 ? "bottom" :
-            ox === -half ? "left" :
-            ox === half ? "right" :
-            "body";
-          placeTile(lx + ox, ly + dy, role);
-        }
+  // Sparse buttresses under major platforms imply support. They start below
+  // the gameplay surface so landing edges stay visually dominant.
+  for (const platform of chunk.platforms) {
+    if (platform.width < 5) continue;
+    const seed = platformSeed(chunk, platform, 601);
+    if (seed % 3 === 0) continue;
+    const center = Math.round(platform.x + platform.width / 2);
+    const depth = Math.min(6, Math.max(3, 2 + (seed % 5)));
+    const half = platform.width >= 8 ? 2 : 1;
+    for (let dy = 1; dy <= depth; dy++) {
+      const ly = platform.y + dy;
+      if (ly >= chunk.height) break;
+      const rowHalf = Math.max(1, half - Math.floor(dy / 4));
+      for (let ox = -rowHalf; ox <= rowHalf; ox++) {
+        placeTile(center + ox, ly, roleForMass(ox, rowHalf, false, dy === depth), 1);
       }
     }
   }

@@ -83,11 +83,27 @@ def noita_polish(img: Image.Image, rel: str) -> Image.Image:
     out = img.copy()
     px = out.load()
     seed = stable_hash(rel)
+    is_mid_mountain = "/midMountains/" in rel
     is_reward = "/collectibles/" in rel or "/ui/" in rel
     is_effect = "/effects/" in rel or "/particleEffects/" in rel
     is_background = "/backgrounds/" in rel or "/mountainBackgrounds/" in rel or "/clouds/" in rel
-    brightness = 0.74 if is_background else 0.88 if not (is_reward or is_effect) else 1.0
-    grain_scale = 1.35 if not is_reward else 0.55
+    if is_mid_mountain:
+        # The back mountain layer must read as one quiet mass. Avoid the
+        # crunchy high-contrast speckle pass used by foreground props.
+        for y in range(out.height):
+            for x in range(out.width):
+                r, g, b, a = px[x, y]
+                if a == 0:
+                    continue
+                avg = (r + g + b) // 3
+                r = clamp_channel(int(avg * 0.35 + r * 0.65))
+                g = clamp_channel(int(avg * 0.35 + g * 0.65))
+                b = clamp_channel(int(avg * 0.35 + b * 0.65))
+                step = 9
+                px[x, y] = ((r // step) * step, (g // step) * step, (b // step) * step, a)
+        return out
+    brightness = 0.78 if is_mid_mountain else 0.74 if is_background else 0.88 if not (is_reward or is_effect) else 1.0
+    grain_scale = 0.85 if is_mid_mountain else 1.35 if not is_reward else 0.55
     for y in range(out.height):
         for x in range(out.width):
             r, g, b, a = px[x, y]
@@ -1107,77 +1123,77 @@ def mid_mountain_tile(biome: str, role: str) -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
     palettes = {
-        "pine": (rgba("#151c20"), rgba("#2d393b"), rgba("#576052"), rgba("#8aa65b"), rgba("#0f1418"), rgba("#334f2f")),
-        "cloud": (rgba("#121a26"), rgba("#2f465b"), rgba("#637d8b"), PAL["cyan"], rgba("#0b111a"), rgba("#465a69")),
-        "snow": (rgba("#101824"), rgba("#293a4b"), rgba("#6f8ca0"), PAL["snow"], rgba("#080e17"), rgba("#455d72")),
-        "frozen": (rgba("#09111d"), rgba("#1e2f45"), rgba("#5894bd"), PAL["cyan_light"], rgba("#050912"), rgba("#314d68")),
-        "summit": (rgba("#28303c"), rgba("#7e8584"), rgba("#c0b07b"), PAL["white"], rgba("#171c25"), rgba("#a16f2c")),
+        "pine": (rgba("#070d12"), rgba("#22313d"), rgba("#31444a"), rgba("#4d6647"), rgba("#05080c"), rgba("#182822")),
+        "cloud": (rgba("#07101b"), rgba("#213145"), rgba("#32465a"), rgba("#48677a"), rgba("#050913"), rgba("#1b2c3e")),
+        "snow": (rgba("#07101b"), rgba("#1f3042"), rgba("#334b60"), rgba("#5d7890"), rgba("#040812"), rgba("#23374b")),
+        "frozen": (rgba("#06101c"), rgba("#1b2f45"), rgba("#2d5470"), rgba("#4f86a7"), rgba("#030711"), rgba("#18304a")),
+        "summit": (rgba("#0b111c"), rgba("#283241"), rgba("#4c5363"), rgba("#7f7f74"), rgba("#060a13"), rgba("#4b3c22")),
     }
     outline, body, accent, highlight, shadow, vein = palettes[biome]
-    d.rectangle((0, 0, 15, 15), fill=(0, 0, 0, 0))
+    # Mid-mountain tiles are an opaque second-layer mass, not floating props.
+    # Edge silhouettes are drawn with darker shadow pixels instead of alpha
+    # so the rear mountain never shows pinholes behind gameplay platforms.
+    d.rectangle((0, 0, 15, 15), fill=shadow)
+
+    def stone_noise(mask_left: int = 0, mask_right: int = 15, top: int = 0, bottom: int = 15) -> None:
+        marks = [
+            (3, 4, 6, 4, accent),
+            (10, 7, 12, 7, vein),
+            (4, 12, 8, 12, shadow),
+        ]
+        for x1, y1, x2, y2, color in marks:
+            if x1 < mask_left or x2 > mask_right or y1 < top or y2 > bottom:
+                continue
+            d.rectangle((x1, y1, x2, y2), fill=color)
 
     if role == "cap":
-        d.rectangle((0, 5, 15, 15), fill=body)
+        d.rectangle((0, 4, 15, 15), fill=body)
         d.rectangle((0, 13, 15, 15), fill=shadow)
-        d.rectangle((0, 5, 15, 6), fill=outline)
+        d.rectangle((0, 4, 15, 4), fill=outline)
         if biome == "pine":
-            d.rectangle((0, 2, 15, 6), fill=vein)
-            d.rectangle((1, 0, 7, 2), fill=accent)
-            d.rectangle((9, 0, 14, 2), fill=accent)
-            for x in (2, 6, 11, 14):
-                d.rectangle((x, 0, x, 4), fill=highlight)
+            d.rectangle((0, 1, 15, 4), fill=vein)
+            d.rectangle((2, 0, 6, 1), fill=accent)
+            d.rectangle((10, 0, 13, 1), fill=accent)
         else:
-            d.rectangle((0, 2, 15, 6), fill=accent)
-            d.rectangle((2, 0, 12, 2), fill=highlight)
-            d.rectangle((13, 1, 15, 3), fill=highlight)
-        d.rectangle((2, 9, 5, 10), fill=highlight if biome == "summit" else vein)
-        d.rectangle((8, 11, 12, 12), fill=shadow)
-        d.point((14, 8), fill=highlight)
+            d.rectangle((0, 1, 15, 4), fill=accent)
+            d.rectangle((3, 0, 11, 1), fill=highlight)
+        stone_noise(top=7, bottom=13)
     elif role == "left":
-        d.polygon([(4, 0), (15, 0), (15, 15), (1, 15), (0, 6)], fill=body)
-        d.line((1, 6, 3, 0), fill=outline, width=2)
-        d.line((0, 7, 1, 15), fill=outline, width=1)
-        d.line((4, 2, 2, 10), fill=highlight, width=1)
-        d.rectangle((10, 3, 15, 4), fill=vein)
-        d.rectangle((6, 9, 13, 10), fill=shadow)
+        d.polygon([(5, 0), (15, 0), (15, 15), (2, 15), (0, 9)], fill=body)
+        d.line((2, 8, 5, 0), fill=outline, width=1)
+        d.line((0, 9, 2, 15), fill=outline, width=1)
+        d.line((6, 4, 4, 12), fill=accent, width=1)
+        stone_noise(mask_left=3)
         if biome in {"snow", "frozen", "summit"}:
-            d.rectangle((5, 0, 15, 2), fill=highlight)
-            d.point((3, 3), fill=highlight)
+            d.rectangle((7, 0, 15, 1), fill=highlight)
     elif role == "right":
-        d.polygon([(0, 0), (11, 0), (15, 6), (14, 15), (0, 15)], fill=body)
-        d.line((12, 0, 15, 6), fill=outline, width=2)
-        d.line((15, 7, 14, 15), fill=outline, width=1)
-        d.line((11, 2, 14, 10), fill=shadow, width=1)
-        d.rectangle((1, 4, 6, 5), fill=highlight)
-        d.rectangle((3, 10, 10, 11), fill=vein)
+        d.polygon([(0, 0), (10, 0), (15, 9), (13, 15), (0, 15)], fill=body)
+        d.line((10, 0, 14, 8), fill=outline, width=1)
+        d.line((15, 9, 13, 15), fill=outline, width=1)
+        d.line((10, 4, 12, 12), fill=shadow, width=1)
+        stone_noise(mask_right=12)
         if biome in {"snow", "frozen", "summit"}:
-            d.rectangle((0, 0, 10, 2), fill=highlight)
-            d.point((12, 3), fill=highlight)
+            d.rectangle((0, 0, 8, 1), fill=highlight)
     elif role == "bottom":
-        d.polygon([(0, 0), (15, 0), (12, 9), (8, 15), (4, 9)], fill=body)
-        d.line((4, 9, 8, 15, 12, 9), fill=outline, width=1)
+        d.polygon([(0, 0), (15, 0), (12, 10), (8, 15), (4, 10)], fill=body)
+        d.line((4, 10, 8, 15, 12, 10), fill=shadow, width=1)
         d.rectangle((0, 0, 15, 1), fill=body)
-        d.line((6, 2, 8, 12), fill=highlight, width=1)
+        d.line((6, 2, 8, 12), fill=accent, width=1)
         d.line((10, 2, 8, 12), fill=shadow, width=1)
-        d.rectangle((3, 4, 6, 5), fill=vein)
-        d.rectangle((10, 6, 12, 7), fill=shadow)
+        stone_noise(mask_left=3, mask_right=12, bottom=10)
         if biome == "frozen":
             d.rectangle((7, 3, 9, 11), fill=PAL["cyan_dark"])
             d.rectangle((8, 3, 8, 9), fill=PAL["cyan_light"])
     else:
+        # Interior fill tile: deliberately opaque and borderless so repeated
+        # mountain bodies do not create grid seams behind gameplay platforms.
         d.rectangle((0, 0, 15, 15), fill=body)
-        d.rectangle((2, 2, 6, 3), fill=highlight)
-        d.rectangle((9, 4, 13, 5), fill=vein)
-        d.rectangle((3, 10, 8, 11), fill=shadow)
-        d.point((13, 12), fill=highlight)
-        d.point((2, 6), fill=shadow)
+        d.rectangle((3, 5, 5, 5), fill=accent)
+        d.rectangle((11, 9, 12, 9), fill=vein)
         if biome == "pine":
-            d.rectangle((1, 1, 4, 2), fill=accent)
-            d.rectangle((11, 0, 14, 1), fill=accent)
-            d.rectangle((6, 7, 7, 9), fill=rgba("#1b2f1e"))
+            d.rectangle((6, 7, 7, 9), fill=rgba("#142318"))
         if biome == "summit":
-            d.rectangle((6, 7, 10, 8), fill=PAL["gold_light"])
-            d.rectangle((8, 4, 8, 11), fill=PAL["cyan_light"])
+            d.rectangle((7, 7, 9, 7), fill=rgba("#5a4d2a"))
     return img
 
 
