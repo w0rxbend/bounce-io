@@ -8,6 +8,7 @@ export * from "./protocol/events.js";
 export * from "./protocol/messages.js";
 export * from "./protocol/schemas.js";
 export * from "./rng.js";
+export * from "./skills.js";
 export * from "./types.js";
 export * from "./types/collectibles.js";
 export * from "./types/player.js";

@@ -185,6 +185,7 @@ export interface PlayerInput {
   jumpHeld: boolean;
   drop: boolean;
   kick: boolean;
+  dash?: boolean;
   sequence: number;
 }
 
@@ -222,6 +223,28 @@ export interface PlayerState {
   relics: number;
   crystals: number;
   relicFragments: number;
+  hitRange: number;
+  attackCooldownMs: number;
+  damageReduction: number;
+  shield: number;
+  maxShield: number;
+  shieldRegenPerSecond: number;
+  shieldRegenDelayMs: number;
+  lastDamageAt: number;
+  shieldRegenCooldownMs: number;
+  jumpPowerMultiplier: number;
+  airControlMultiplier: number;
+  extraJumps: number;
+  extraJumpsUsed: number;
+  dashUnlocked: boolean;
+  dashCooldownMs: number;
+  dashCooldownRemainingMs: number;
+  dashTimerMs: number;
+  pickupRadius: number;
+  xpGainMultiplier: number;
+  killXpMultiplier: number;
+  selectedSkills: Record<string, number>;
+  shockwaveCounter: number;
   fallStartY: number | null;
 }
 
@@ -261,6 +284,7 @@ export type MatchEventType =
   | "JUMP_PAD_TRIGGERED"
   | "PLAYER_FINISHED"
   | "MATCH_COUNTDOWN_STARTED"
+  | "SKILL_APPLIED"
   | "MATCH_STARTED"
   | "MATCH_ENDED";
 
@@ -287,7 +311,8 @@ export type MatchEventPayload =
   | { type: "COIN_COLLECTED";       playerId: PlayerId; coinId: RelicId; value: number; x: number; y: number; pickupType?: CollectibleKind; xpGranted?: number; level?: number }
   | { type: "COLLECTIBLE_SPAWNED";  collectible: CollectibleState }
   | { type: "COLLECTIBLE_PICKED";   playerId: PlayerId; collectibleId: EntityId; xpGranted: number }
-  | { type: "PLAYER_STATS";         playerId: PlayerId; xp: number; level: number; hp: number; atk: number }
+  | { type: "PLAYER_STATS";         playerId: PlayerId; xp: number; level: number; hp: number; atk: number; maxHp?: number; shield?: number; maxShield?: number; hitRange?: number; selectedSkills?: Record<string, number> }
+  | { type: "SKILL_APPLIED";        playerId: PlayerId; skillId: string; newStats: Partial<PlayerState> }
   | { type: "MATCH_COUNTDOWN_STARTED"; countdownMs: number }
   | { type: "MATCH_STARTED" }
   | { type: "MATCH_ENDED" };

@@ -1,4 +1,5 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
+import type { SkillCardOffer } from "./skills.js";
 import type { CollectibleState, EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
 
 export type SnapshotEntity = {
@@ -15,6 +16,11 @@ export type SnapshotEntity = {
   invulnerable?: number;
   health?: number;
   coins?: number;
+  maxHealth?: number;
+  shield?: number;
+  maxShield?: number;
+  hitRange?: number;
+  selectedSkills?: Record<string, number>;
 };
 
 export type PlayerEntityFrame = {
@@ -31,6 +37,11 @@ export type PlayerEntityFrame = {
   iv?: number;
   h: number;
   c: number;
+  mh?: number;
+  sh?: number;
+  ms?: number;
+  hr?: number;
+  sk?: Record<string, number>;
 };
 
 export type ClientMessage =
@@ -60,6 +71,11 @@ export type ClientMessage =
   | {
       type: "pickup_collectible";
       collectibleId: string;
+    }
+  | {
+      type: "select_skill_card";
+      offerId: string;
+      cardId: string;
     };
 
 export type ServerMessage =
@@ -126,6 +142,21 @@ export type ServerMessage =
   | {
       type: "playerLeft";
       playerId: PlayerId;
+    }
+  | {
+      type: "skill_card_offer";
+      offer: SkillCardOffer;
+    }
+  | {
+      type: "skill_applied";
+      playerId: PlayerId;
+      skillId: string;
+      newStats: Partial<PlayerState>;
+    }
+  | {
+      type: "player_stats";
+      playerId: PlayerId;
+      stats: Partial<PlayerState>;
     }
   | {
       type: "pong";

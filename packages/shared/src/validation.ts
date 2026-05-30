@@ -1,4 +1,5 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
+import type { SkillCard, SkillCardOffer } from "./skills.js";
 import type { ClientMessage, NetworkMessage, ServerMessage } from "./protocol.js";
 import type { CollectibleState, EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
 
@@ -26,6 +27,11 @@ function isBoolean(value: unknown): value is boolean {
 
 function isString(value: unknown): value is string {
   return typeof value === "string";
+}
+
+function isStringNumberRecord(value: unknown): value is Record<string, number> {
+  return isRecord(value) &&
+    Object.keys(value).every((key) => isString(key) && isFiniteNumber(value[key]));
 }
 
 function isTileKind(value: unknown): value is TileKind {
@@ -151,7 +157,12 @@ function isPlayerEntityFrame(value: unknown): boolean {
     (value.kt === undefined || isFiniteNumber(value.kt)) &&
     (value.iv === undefined || isFiniteNumber(value.iv)) &&
     isFiniteNumber(value.h) &&
-    isInteger(value.c);
+    isInteger(value.c) &&
+    (value.mh === undefined || isFiniteNumber(value.mh)) &&
+    (value.sh === undefined || isFiniteNumber(value.sh)) &&
+    (value.ms === undefined || isFiniteNumber(value.ms)) &&
+    (value.hr === undefined || isFiniteNumber(value.hr)) &&
+    (value.sk === undefined || isStringNumberRecord(value.sk));
 }
 
 export function isPlayerInput(value: unknown): value is PlayerInput {
@@ -162,6 +173,7 @@ export function isPlayerInput(value: unknown): value is PlayerInput {
     isBoolean(value.jumpHeld) &&
     isBoolean(value.drop) &&
     isBoolean(value.kick) &&
+    (value.dash === undefined || isBoolean(value.dash)) &&
     isInteger(value.sequence) &&
     (value.sequence as number) >= 0;
 }
@@ -200,6 +212,28 @@ export function isPlayerState(value: unknown): value is PlayerState {
     isInteger(value.relics) &&
     isInteger(value.crystals) &&
     isInteger(value.relicFragments) &&
+    isFiniteNumber(value.hitRange) &&
+    isFiniteNumber(value.attackCooldownMs) &&
+    isFiniteNumber(value.damageReduction) &&
+    isFiniteNumber(value.shield) &&
+    isFiniteNumber(value.maxShield) &&
+    isFiniteNumber(value.shieldRegenPerSecond) &&
+    isFiniteNumber(value.shieldRegenDelayMs) &&
+    isFiniteNumber(value.lastDamageAt) &&
+    isFiniteNumber(value.shieldRegenCooldownMs) &&
+    isFiniteNumber(value.jumpPowerMultiplier) &&
+    isFiniteNumber(value.airControlMultiplier) &&
+    isInteger(value.extraJumps) &&
+    isInteger(value.extraJumpsUsed) &&
+    isBoolean(value.dashUnlocked) &&
+    isFiniteNumber(value.dashCooldownMs) &&
+    isFiniteNumber(value.dashCooldownRemainingMs) &&
+    isFiniteNumber(value.dashTimerMs) &&
+    isFiniteNumber(value.pickupRadius) &&
+    isFiniteNumber(value.xpGainMultiplier) &&
+    isFiniteNumber(value.killXpMultiplier) &&
+    isStringNumberRecord(value.selectedSkills) &&
+    isInteger(value.shockwaveCounter) &&
     isFiniteNumberOrNull(value.fallStartY) &&
     (value.health as number) >= 0 &&
     (value.maxHealth as number) > 0 &&
@@ -212,7 +246,37 @@ export function isPlayerState(value: unknown): value is PlayerState {
     (value.level as number) >= 1 &&
     (value.relics as number) >= 0 &&
     (value.crystals as number) >= 0 &&
-    (value.relicFragments as number) >= 0;
+    (value.relicFragments as number) >= 0 &&
+    (value.hitRange as number) > 0 &&
+    (value.attackCooldownMs as number) > 0 &&
+    (value.damageReduction as number) >= 0 &&
+    (value.shield as number) >= 0 &&
+    (value.maxShield as number) >= 0 &&
+    (value.extraJumps as number) >= 0 &&
+    (value.extraJumpsUsed as number) >= 0 &&
+    (value.pickupRadius as number) > 0 &&
+    (value.xpGainMultiplier as number) > 0 &&
+    (value.killXpMultiplier as number) > 0;
+}
+
+function isSkillCard(value: unknown): value is SkillCard {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isString(value.name) &&
+    (value.category === "attack" || value.category === "defense" || value.category === "mobility" || value.category === "utility") &&
+    (value.rarity === "common" || value.rarity === "rare" || value.rarity === "epic") &&
+    isString(value.description) &&
+    isString(value.icon) &&
+    isInteger(value.maxStacks) &&
+    isInteger(value.currentStacks);
+}
+
+function isSkillCardOffer(value: unknown): value is SkillCardOffer {
+  return isRecord(value) &&
+    isString(value.offerId) &&
+    isString(value.playerId) &&
+    Array.isArray(value.cards) &&
+    (value.cards as unknown[]).every(isSkillCard);
 }
 
 export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
@@ -270,6 +334,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return isFiniteNumber(value.clientTime);
     case "pickup_collectible":
       return isString(value.collectibleId);
+    case "select_skill_card":
+      return isString(value.offerId) && isString(value.cardId);
     default:
       return false;
   }
@@ -328,6 +394,12 @@ export function isServerMessage(value: unknown): value is ServerMessage {
       return isPlayerState(value.player) && isString(value.name);
     case "playerLeft":
       return isString(value.playerId);
+    case "skill_card_offer":
+      return isSkillCardOffer(value.offer);
+    case "skill_applied":
+      return isString(value.playerId) && isString(value.skillId) && isRecord(value.newStats);
+    case "player_stats":
+      return isString(value.playerId) && isRecord(value.stats);
     case "pong":
       return isFiniteNumber(value.clientTime) && isFiniteNumber(value.serverTime);
     case "error":

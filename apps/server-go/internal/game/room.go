@@ -67,6 +67,8 @@ type session struct {
 	lastReceivedSeq  int64
 	lastProcessedSeq int64
 	lastInput        PlayerInput
+	currentSkillOffer *SkillCardOffer
+	pendingLevelChoices int
 }
 
 type joinCommand struct {
@@ -100,6 +102,9 @@ func (cmd joinCommand) apply(s *roomState) {
 					"matchPhase":  s.phase,
 					"playerState": existing.player,
 				})
+				if existing.currentSkillOffer != nil {
+					_ = cmd.client.EnqueueJSON(SkillCardOfferMessage{Type: "skill_card_offer", Offer: *existing.currentSkillOffer})
+				}
 				_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RECONNECTED", "playerId": existing.playerID})
 				cmd.reply <- joinReply{playerID: existing.playerID, token: existing.token}
@@ -226,12 +231,45 @@ type pickupCollectibleCommand struct {
 	collectibleID string
 }
 
+type selectSkillCardCommand struct {
+	playerID string
+	offerID  string
+	cardID   string
+}
+
 func (cmd pickupCollectibleCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
 	if sess == nil || !sess.connected {
 		return
 	}
 	s.tryPickupCollectible(sess, cmd.collectibleID)
+}
+
+func (cmd selectSkillCardCommand) apply(s *roomState) {
+	sess := s.sessions[cmd.playerID]
+	if sess == nil || !sess.connected || sess.currentSkillOffer == nil {
+		return
+	}
+	if sess.currentSkillOffer.OfferID != cmd.offerID {
+		return
+	}
+	valid := false
+	for _, card := range sess.currentSkillOffer.Cards {
+		if card.ID == cmd.cardID {
+			valid = true
+			break
+		}
+	}
+	if !valid || !applySkillToPlayer(&sess.player, cmd.cardID) {
+		return
+	}
+	sess.currentSkillOffer = nil
+	stats := skillStatsPayload(sess.player)
+	s.broadcastJSON(SkillAppliedMessage{Type: "skill_applied", PlayerID: sess.playerID, SkillID: cmd.cardID, NewStats: stats})
+	s.broadcastJSON(PlayerStatsMessage{Type: "player_stats", PlayerID: sess.playerID, Stats: stats})
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "SKILL_APPLIED", "playerId": sess.playerID, "skillId": cmd.cardID, "newStats": stats})
+	s.emitPlayerStats(sess)
+	s.maybeSendNextSkillOffer(sess)
 }
 
 func (cmd chunkCommand) apply(s *roomState) {
@@ -358,6 +396,13 @@ func (r *Room) PickupCollectible(playerID, collectibleID string) {
 	}
 }
 
+func (r *Room) SelectSkillCard(playerID, offerID, cardID string) {
+	select {
+	case r.commands <- selectSkillCardCommand{playerID: playerID, offerID: offerID, cardID: cardID}:
+	default:
+	}
+}
+
 func (r *Room) Snapshot(timeout time.Duration) (RoomSnapshot, bool) {
 	reply := make(chan RoomSnapshot, 1)
 	select {
@@ -475,6 +520,9 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 			}
 			s.ensureEnemiesAround(sess.player)
 			input := sess.consumeInput()
+			if sess.currentSkillOffer != nil {
+				input = IdleInput(sess.lastProcessedSeq)
+			}
 			previousKickPhase := sess.player.KickPhase
 			sess.player = StepPlayer(s.room.seed, sess.player, input, PhysicsStepSeconds)
 			if previousKickPhase == "idle" && sess.player.KickPhase == "windup" {
@@ -560,6 +608,11 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 			Invulnerable: quantize2(sess.player.Invulnerable),
 			Health:       sess.player.Health,
 			Coins:        sess.player.Coins,
+			MaxHealth:    sess.player.MaxHealth,
+			Shield:       quantize2(sess.player.Shield),
+			MaxShield:    quantize2(sess.player.MaxShield),
+			HitRange:     quantize2(sess.player.HitRange),
+			SelectedSkills: sess.player.SelectedSkills,
 		})
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
@@ -682,12 +735,14 @@ func (s *roomState) checkRelicCollection(sess *session) {
 			}
 			worldX := float64(relic.X*TileSize) + float64(TileSize)/2
 			worldY := float64((chunk.WorldTileY+relic.Y)*TileSize) + float64(TileSize)/2
-			if math.Hypot(px-worldX, py-worldY) > PickupRadius {
+			if math.Hypot(px-worldX, py-worldY) > math.Max(PickupRadius, player.PickupRadius) {
 				continue
 			}
 			s.collectedRelics[relic.ID] = struct{}{}
 			pickupType := collectibleKindForRelicID(relic.ID)
+			beforeLevel := player.Level
 			applyCollectible(player, pickupType)
+			s.queueLevelUpChoices(sess, beforeLevel)
 			player.Coins++
 			s.emitPlayerStats(sess)
 			s.pendingEvents = append(s.pendingEvents, MatchEvent{
@@ -707,13 +762,42 @@ func (s *roomState) checkRelicCollection(sess *session) {
 
 func (s *roomState) emitPlayerStats(sess *session) {
 	s.pendingEvents = append(s.pendingEvents, MatchEvent{
-		"type":     "PLAYER_STATS",
-		"playerId": sess.playerID,
-		"xp":       sess.player.Relics,
-		"level":    sess.player.Level,
-		"hp":       sess.player.Health,
-		"atk":      sess.player.Damage,
+		"type":           "PLAYER_STATS",
+		"playerId":       sess.playerID,
+		"xp":             sess.player.Relics,
+		"level":          sess.player.Level,
+		"hp":             sess.player.Health,
+		"maxHp":          sess.player.MaxHealth,
+		"atk":            sess.player.Damage,
+		"shield":         sess.player.Shield,
+		"maxShield":      sess.player.MaxShield,
+		"hitRange":       sess.player.HitRange,
+		"selectedSkills": sess.player.SelectedSkills,
 	})
+}
+
+func (s *roomState) queueLevelUpChoices(sess *session, beforeLevel int) {
+	gainedLevels := sess.player.Level - beforeLevel
+	if gainedLevels <= 0 {
+		return
+	}
+	sess.pendingLevelChoices += gainedLevels
+	s.maybeSendNextSkillOffer(sess)
+}
+
+func (s *roomState) maybeSendNextSkillOffer(sess *session) {
+	if sess == nil || !sess.connected || sess.currentSkillOffer != nil || sess.pendingLevelChoices <= 0 {
+		return
+	}
+	offerID := fmt.Sprintf("%s:%d:%d:%d", sess.playerID, sess.player.Level, s.tick, sess.pendingLevelChoices)
+	offer, ok := generateSkillCardOffer(sess.player, offerID, s.room.seed^uint32(s.tick)^HashString(offerID))
+	if !ok {
+		sess.pendingLevelChoices = 0
+		return
+	}
+	sess.pendingLevelChoices--
+	sess.currentSkillOffer = &offer
+	_ = sess.client.EnqueueJSON(SkillCardOfferMessage{Type: "skill_card_offer", Offer: offer})
 }
 
 func (s *roomState) collectedRelicList() []string {
@@ -754,13 +838,19 @@ func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bo
 	player := &sess.player
 	px := player.Position.X + float64(PlayerWidth)/2
 	py := player.Position.Y + float64(PlayerHeight)/2
-	if math.Hypot(px-collectible.X, py-collectible.Y) > PickupRadius {
+	if math.Hypot(px-collectible.X, py-collectible.Y) > math.Max(PickupRadius, player.PickupRadius) {
 		return false
 	}
 
 	collectible.Picked = true
 	s.collectibles[collectibleID] = collectible
-	xpGranted := addPlayerXP(player, collectible.XPValue)
+	xpValue := collectible.XPValue
+	if collectible.Type == "xp" {
+		xpValue = int(math.Round(float64(xpValue) * player.XPGainMultiplier))
+	}
+	beforeLevel := player.Level
+	xpGranted := addPlayerXP(player, xpValue)
+	s.queueLevelUpChoices(sess, beforeLevel)
 	if collectible.Type == "coin" {
 		player.Coins++
 	}
@@ -846,6 +936,7 @@ func (s *roomState) simulateEnemies(dt float64) {
 				enemy.Health = max(0, enemy.Health-damage)
 				enemy.HurtCooldown = 0.28
 				enemy.Velocity.X = float64(sess.player.Facing) * 22
+				s.maybeTriggerShockwave(sess, enemy)
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{
 					"type":     "ENEMY_HIT",
 					"playerId": sess.playerID,
@@ -857,7 +948,9 @@ func (s *roomState) simulateEnemies(dt float64) {
 				if enemy.Health <= 0 {
 					s.defeatedEnemies[enemy.ID] = struct{}{}
 					drops := s.makeEnemyDrops(enemy)
-					xpGranted := addPlayerXP(&sess.player, EnemyKillXP)
+					beforeLevel := sess.player.Level
+					xpGranted := addPlayerXP(&sess.player, int(math.Round(float64(EnemyKillXP)*sess.player.KillXPMultiplier)))
+					s.queueLevelUpChoices(sess, beforeLevel)
 					s.emitPlayerStats(sess)
 					for _, drop := range drops {
 						if s.collectibles == nil {
@@ -888,7 +981,7 @@ func (s *roomState) simulateEnemies(dt float64) {
 				if sess.player.Position.X+float64(PlayerWidth)/2 < enemy.Position.X+11 {
 					dir = -1
 				}
-				applyDamage(&sess.player, 1, dir*125, -70, HitStunSeconds)
+				applyDamage(&sess.player, enemyDamageForChunk(enemy.ChunkY), dir*125, -70, HitStunSeconds)
 				enemy.AttackCooldown = 0.9
 			}
 		}
@@ -896,6 +989,48 @@ func (s *roomState) simulateEnemies(dt float64) {
 		s.enemies[id] = enemy
 	nextEnemy:
 	}
+}
+
+func (s *roomState) maybeTriggerShockwave(sess *session, source EnemyState) {
+	stacks := skillStacks(sess.player, "shockwave_hit")
+	if stacks <= 0 {
+		return
+	}
+	sess.player.ShockwaveCounter++
+	interval := max(3, 7-stacks)
+	if sess.player.ShockwaveCounter%interval != 0 {
+		return
+	}
+	radius := 44.0 + float64(stacks)*12
+	originX := source.Position.X + 11
+	originY := source.Position.Y + 12
+	for id, enemy := range s.enemies {
+		if id == source.ID || enemy.Health <= 0 {
+			continue
+		}
+		ex := enemy.Position.X + 11
+		ey := enemy.Position.Y + 12
+		if math.Hypot(ex-originX, ey-originY) > radius {
+			continue
+		}
+		damage := max(1, sess.player.Damage/2)
+		enemy.Health = max(1, enemy.Health-damage)
+		enemy.HurtCooldown = 0.22
+		s.enemies[id] = enemy
+		s.pendingEvents = append(s.pendingEvents, MatchEvent{
+			"type":      "ENEMY_HIT",
+			"playerId":  sess.playerID,
+			"enemyId":   enemy.ID,
+			"x":         ex,
+			"y":         ey,
+			"damage":    damage,
+			"shockwave": true,
+		})
+	}
+}
+
+func enemyDamageForChunk(chunkY int) int {
+	return 1 + min(3, max(0, chunkY)/10)
 }
 
 func (s *roomState) handleDeaths() {

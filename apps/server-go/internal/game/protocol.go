@@ -119,6 +119,12 @@ type ClientPickupCollectible struct {
 	CollectibleID string `json:"collectibleId"`
 }
 
+type ClientSelectSkillCard struct {
+	Type    string `json:"type"`
+	OfferID string `json:"offerId"`
+	CardID  string `json:"cardId"`
+}
+
 type InputState struct {
 	Left        bool `json:"left"`
 	Right       bool `json:"right"`
@@ -143,6 +149,7 @@ type PlayerInput struct {
 	JumpHeld    bool  `json:"jumpHeld"`
 	Drop        bool  `json:"drop"`
 	Kick        bool  `json:"kick"`
+	Dash        bool  `json:"dash,omitempty"`
 	Sequence    int64 `json:"sequence"`
 	ClientTime  int64 `json:"clientTime,omitempty"`
 }
@@ -181,6 +188,28 @@ type PlayerState struct {
 	Relics              int      `json:"relics"`
 	Crystals            int      `json:"crystals"`
 	RelicFragments      int      `json:"relicFragments"`
+	HitRange            float64  `json:"hitRange"`
+	AttackCooldownMs    float64  `json:"attackCooldownMs"`
+	DamageReduction     float64  `json:"damageReduction"`
+	Shield              float64  `json:"shield"`
+	MaxShield           float64  `json:"maxShield"`
+	ShieldRegenPerSec   float64  `json:"shieldRegenPerSecond"`
+	ShieldRegenDelayMs  float64  `json:"shieldRegenDelayMs"`
+	LastDamageAt        int64    `json:"lastDamageAt"`
+	ShieldRegenCooldown float64  `json:"shieldRegenCooldownMs"`
+	JumpPowerMultiplier float64  `json:"jumpPowerMultiplier"`
+	AirControlMultiplier float64 `json:"airControlMultiplier"`
+	ExtraJumps          int      `json:"extraJumps"`
+	ExtraJumpsUsed      int      `json:"extraJumpsUsed"`
+	DashUnlocked        bool     `json:"dashUnlocked"`
+	DashCooldownMs      float64  `json:"dashCooldownMs"`
+	DashCooldownRemainingMs float64 `json:"dashCooldownRemainingMs"`
+	DashTimerMs         float64  `json:"dashTimerMs"`
+	PickupRadius        float64  `json:"pickupRadius"`
+	XPGainMultiplier    float64  `json:"xpGainMultiplier"`
+	KillXPMultiplier    float64  `json:"killXpMultiplier"`
+	SelectedSkills      map[string]int `json:"selectedSkills"`
+	ShockwaveCounter    int      `json:"shockwaveCounter"`
 	FallStartY          *float64 `json:"fallStartY"`
 }
 
@@ -198,6 +227,11 @@ type EntityState struct {
 	Invulnerable float64 `json:"invulnerable,omitempty"`
 	Health       int     `json:"health"`
 	Coins        int     `json:"coins"`
+	MaxHealth    int     `json:"maxHealth,omitempty"`
+	Shield       float64 `json:"shield,omitempty"`
+	MaxShield    float64 `json:"maxShield,omitempty"`
+	HitRange     float64 `json:"hitRange,omitempty"`
+	SelectedSkills map[string]int `json:"selectedSkills,omitempty"`
 }
 
 type PlayerEntityFrame struct {
@@ -214,6 +248,11 @@ type PlayerEntityFrame struct {
 	Invulnerable float64 `json:"iv,omitempty"`
 	Health       int     `json:"h"`
 	Coins        int     `json:"c"`
+	MaxHealth    int     `json:"mh,omitempty"`
+	Shield       float64 `json:"sh,omitempty"`
+	MaxShield    float64 `json:"ms,omitempty"`
+	HitRange     float64 `json:"hr,omitempty"`
+	SelectedSkills map[string]int `json:"sk,omitempty"`
 }
 
 type EnemySpawn struct {
@@ -250,6 +289,41 @@ type CollectibleState struct {
 }
 
 type MatchEvent map[string]any
+
+type SkillCard struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Category      string `json:"category"`
+	Rarity        string `json:"rarity"`
+	Description   string `json:"description"`
+	Icon          string `json:"icon"`
+	MaxStacks     int    `json:"maxStacks"`
+	CurrentStacks int   `json:"currentStacks"`
+}
+
+type SkillCardOffer struct {
+	OfferID  string      `json:"offerId"`
+	PlayerID string      `json:"playerId"`
+	Cards    []SkillCard `json:"cards"`
+}
+
+type SkillCardOfferMessage struct {
+	Type  string         `json:"type"`
+	Offer SkillCardOffer `json:"offer"`
+}
+
+type SkillAppliedMessage struct {
+	Type     string         `json:"type"`
+	PlayerID string         `json:"playerId"`
+	SkillID  string         `json:"skillId"`
+	NewStats map[string]any `json:"newStats"`
+}
+
+type PlayerStatsMessage struct {
+	Type     string         `json:"type"`
+	PlayerID string         `json:"playerId"`
+	Stats    map[string]any `json:"stats"`
+}
 
 type WelcomeMessage struct {
 	Type         string `json:"type"`
@@ -348,7 +422,7 @@ type GeneratedChunk struct {
 	Relics      []RelicSpawn    `json:"relics"`
 	Enemies     []EnemySpawn    `json:"enemies"`
 	JumpPads    []JumpPadSpawn  `json:"jumpPads"`
-	WindZones   []any           `json:"windZones"`
+	WindZones   []WindZoneSpawn `json:"windZones"`
 }
 
 type PlatformSpan struct {
@@ -368,6 +442,16 @@ type JumpPadSpawn struct {
 	X          int     `json:"x"`
 	Y          int     `json:"y"`
 	Multiplier float64 `json:"multiplier"`
+}
+
+type WindZoneSpawn struct {
+	ID        string  `json:"id"`
+	X         int     `json:"x"`
+	Y         int     `json:"y"`
+	Width     int     `json:"width"`
+	Height    int     `json:"height"`
+	Direction int     `json:"direction"`
+	Strength  float64 `json:"strength"`
 }
 
 type TriggerBox struct {

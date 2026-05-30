@@ -16,7 +16,7 @@ The project now treats gameplay art as individual transparent PNG files. Do not 
   - `shooting_frame1.png` through `shooting_frame4.png`
   - `lying_dead_frame1.png` through `lying_dead_frame2.png`
 
-The generated multiplayer roster currently uses `character1` through `character8`: warrior, rogue, mage, hunter, then alternate palettes for the same four class silhouettes.
+The generated multiplayer roster currently uses `character1` through `character10`: eight armored silhouettes, `character9` as a casual glasses runner, and `character10` as a bearded runner with dark hair, navy shirt, jeans, and light sneakers.
 - `apps/client/public/assets/environment/`
   - `backgrounds/`
   - `mountainBackgrounds/`

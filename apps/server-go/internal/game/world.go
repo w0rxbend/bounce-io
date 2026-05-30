@@ -34,6 +34,28 @@ func CreatePlayerState(id string, x, y float64) PlayerState {
 		Relics:              0,
 		Crystals:            0,
 		RelicFragments:      0,
+		HitRange:            KickRangePX,
+		AttackCooldownMs:    KickCooldownSeconds * 1000,
+		DamageReduction:     0,
+		Shield:              0,
+		MaxShield:           0,
+		ShieldRegenPerSec:   0,
+		ShieldRegenDelayMs:  skillShieldRegenDelayMs,
+		LastDamageAt:        0,
+		ShieldRegenCooldown: 0,
+		JumpPowerMultiplier: 1,
+		AirControlMultiplier: 1,
+		ExtraJumps:          0,
+		ExtraJumpsUsed:      0,
+		DashUnlocked:        false,
+		DashCooldownMs:      skillDashBaseCooldownMs,
+		DashCooldownRemainingMs: 0,
+		DashTimerMs:         0,
+		PickupRadius:        PickupRadius,
+		XPGainMultiplier:    1,
+		KillXPMultiplier:    1,
+		SelectedSkills:      map[string]int{},
+		ShockwaveCounter:    0,
 	}
 }
 
@@ -67,6 +89,7 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	if dt > MaxDeltaSeconds {
 		dt = MaxDeltaSeconds
 	}
+	ensurePlayerSkillState(&player)
 
 	player.KickPhase, player.KickTimer, player.KickCooldown = stepKick(player.KickPhase, player.KickTimer, player.KickCooldown, input.Kick, dt, KickCooldownSeconds/math.Max(0.25, math.Min(3, player.AttackSpeed)))
 	player.CoyoteTimer = math.Max(0, player.CoyoteTimer-dt)
@@ -78,8 +101,15 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	player.Invulnerable = math.Max(0, player.Invulnerable-dt)
 	player.StunTimer = math.Max(0, player.StunTimer-dt)
 	player.KickInvulnerable = math.Max(0, player.KickInvulnerable-dt)
+	player.ShieldRegenCooldown = math.Max(0, player.ShieldRegenCooldown-dt*1000)
+	player.DashCooldownRemainingMs = math.Max(0, player.DashCooldownRemainingMs-dt*1000)
+	player.DashTimerMs = math.Max(0, player.DashTimerMs-dt*1000)
+	if player.MaxShield > 0 && player.ShieldRegenCooldown <= 0 && player.Shield < player.MaxShield {
+		player.Shield = math.Min(player.MaxShield, player.Shield+player.ShieldRegenPerSec*dt)
+	}
 	if player.Grounded {
 		player.CoyoteTimer = CoyoteTimeSeconds
+		player.ExtraJumpsUsed = 0
 	}
 	previousY := player.Position.Y
 
@@ -118,11 +148,28 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 			player.Velocity.X += friction
 		}
 	}
+	applyWorldWindZones(seed, &player, dt)
+
+	if !locked && input.Dash && player.DashUnlocked && player.DashCooldownRemainingMs <= 0 {
+		dashDir := targetDir
+		if dashDir == 0 {
+			dashDir = float64(player.Facing)
+		}
+		player.Velocity.X = dashDir * math.Max(maxSpeed*1.8, 260)
+		player.DashCooldownRemainingMs = player.DashCooldownMs
+		player.DashTimerMs = 120
+	}
 
 	if player.JumpBufferTimer > 0 && (player.Grounded || player.CoyoteTimer > 0) {
 		player.Velocity.Y = -JumpSpeed * player.JumpPower
 		player.Grounded = false
 		player.CoyoteTimer = 0
+		player.JumpBufferTimer = 0
+		player.ExtraJumpsUsed = 0
+	} else if player.JumpBufferTimer > 0 && !player.Grounded && player.ExtraJumpsUsed < player.ExtraJumps {
+		bonus := 1 + float64(max(0, skillStacks(player, "double_jump")-1))*0.08
+		player.Velocity.Y = -JumpSpeed * player.JumpPower * bonus
+		player.ExtraJumpsUsed++
 		player.JumpBufferTimer = 0
 	}
 	if !input.JumpHeld && player.Velocity.Y < 0 {
@@ -160,7 +207,85 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	}
 
 	updateFatalFall(&player, previousY)
+	applyWorldHazards(seed, &player)
 	return player
+}
+
+func applyWorldWindZones(seed uint32, player *PlayerState, dt float64) {
+	if player.Health <= 0 {
+		return
+	}
+	centerChunkY := ChunkYForWorldY(player.Position.Y)
+	bounds := playerRect(*player)
+	for chunkY := max(0, centerChunkY-1); chunkY <= centerChunkY+1; chunkY++ {
+		chunk := GenerateChunk(seed, chunkY)
+		for _, zone := range chunk.WindZones {
+			zoneRect := playerBounds{
+				x:      float64(zone.X * TileSize),
+				y:      float64((chunk.WorldTileY + zone.Y) * TileSize),
+				width:  float64(zone.Width * TileSize),
+				height: float64(zone.Height * TileSize),
+			}
+			if !rectsOverlap(bounds, zoneRect) {
+				continue
+			}
+			target := float64(zone.Direction) * math.Min(MaxRunSpeed*1.55, zone.Strength*0.55)
+			player.Velocity.X = moveTowardFloat(player.Velocity.X, target, zone.Strength*3.4*dt)
+			player.Velocity.X = math.Max(-MaxRunSpeed*1.55, math.Min(MaxRunSpeed*1.55, player.Velocity.X))
+		}
+	}
+}
+
+func moveTowardFloat(value, target, maxDelta float64) float64 {
+	if value < target {
+		return math.Min(value+maxDelta, target)
+	}
+	if value > target {
+		return math.Max(value-maxDelta, target)
+	}
+	return target
+}
+
+func applyWorldHazards(seed uint32, player *PlayerState) {
+	if player.Health <= 0 || player.Invulnerable > 0 {
+		return
+	}
+	left := int(math.Floor(player.Position.X / TileSize))
+	right := int(math.Floor((player.Position.X + float64(PlayerWidth) - 0.001) / TileSize))
+	top := int(math.Floor(player.Position.Y / TileSize))
+	bottom := int(math.Floor((player.Position.Y + float64(PlayerHeight) - 0.001) / TileSize))
+	for ty := top; ty <= bottom; ty++ {
+		for tx := left; tx <= right; tx++ {
+			if worldTileKind(seed, tx, ty) != "hazard" {
+				continue
+			}
+			chunkY := max(0, -int(math.Floor(float64(ty)/ChunkHeightTiles)))
+			damage := 1 + min(3, chunkY/10)
+			dir := -1.0
+			if player.Velocity.X < 0 {
+				dir = 1
+			}
+			applyDamage(player, damage, dir*130, -85, 0.18)
+			player.Invulnerable = math.Max(player.Invulnerable, 0.85)
+			return
+		}
+	}
+}
+
+func worldTileKind(seed uint32, tileX, tileY int) string {
+	if tileX < 0 || tileX >= ChunkWidthTiles {
+		return "solid"
+	}
+	if tileY >= ChunkHeightTiles {
+		return "solid"
+	}
+	chunkY := max(0, -int(math.Floor(float64(tileY)/ChunkHeightTiles)))
+	chunk := GenerateChunk(seed, chunkY)
+	localY := tileY + chunkY*ChunkHeightTiles
+	if localY < 0 || localY >= ChunkHeightTiles {
+		return "empty"
+	}
+	return chunk.Tiles[localY*ChunkWidthTiles+tileX]
 }
 
 func updateFatalFall(player *PlayerState, previousY float64) {
@@ -281,6 +406,21 @@ func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
 			tiles[(ChunkHeightTiles-1)*ChunkWidthTiles+x] = "solid"
 		}
 	}
+	for _, platform := range platformRecords {
+		if chunkY < 2 || platform.Kind != "risk" || platform.Span.Y <= 1 {
+			continue
+		}
+		hazardChance := min(72, 14+chunkY*4)
+		roll := int(HashString("hazard:"+itoa(seedAsInt(seed))+":"+itoa(chunkY)+":"+itoa(platform.Span.X)+":"+itoa(platform.Span.Y)) % 100)
+		if roll >= hazardChance {
+			continue
+		}
+		hazardX := platform.Span.X + platform.Span.Width/2
+		hazardY := platform.Span.Y - 1
+		if hazardX >= 0 && hazardX < ChunkWidthTiles && hazardY >= 0 && hazardY < ChunkHeightTiles && tiles[hazardY*ChunkWidthTiles+hazardX] == "empty" {
+			tiles[hazardY*ChunkWidthTiles+hazardX] = "hazard"
+		}
+	}
 
 	relics := plan.Relics[chunkY]
 	if relics == nil {
@@ -307,6 +447,7 @@ func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
 	if jumpPads == nil {
 		jumpPads = []JumpPadSpawn{}
 	}
+	windZones := windZonesForChunk(seed, chunkY, platformRecords)
 	portal := plan.PortalForChunk(chunkY)
 
 	return GeneratedChunk{
@@ -329,8 +470,12 @@ func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
 		Relics:      relics,
 		Enemies:     enemies,
 		JumpPads:    jumpPads,
-		WindZones:   []any{},
+		WindZones:   windZones,
 	}
+}
+
+func seedAsInt(seed uint32) int {
+	return int(seed & 0x7fffffff)
 }
 
 type worldRegionProfile struct {
@@ -783,22 +928,87 @@ func (p *RegionPlan) placeEnemies() {
 			continue
 		}
 		enemies := []EnemySpawn{}
+		maxEnemies := 1 + min(2, chunkY/8)
 		for _, platform := range p.Platforms[chunkY] {
-			if len(enemies) >= 2 || platform.Span.Width < 4 || platform.Span.Y <= 1 {
+			if len(enemies) >= maxEnemies || platform.Span.Width < 4 || platform.Span.Y <= 1 {
 				continue
 			}
 			if platform.Kind != "safe" && platform.Kind != "risk" {
 				continue
 			}
+			chance := 42 + min(38, chunkY*3)
+			roll := int(HashString("enemy:"+itoa(chunkY)+":"+itoa(platform.Span.X)+":"+itoa(platform.Span.Y)+":"+platform.Kind) % 100)
+			if roll >= chance && platform.Kind != "risk" {
+				continue
+			}
 			enemies = append(enemies, EnemySpawn{
 				ID:   "enemy:" + itoa(chunkY) + ":" + itoa(len(enemies)),
-				Kind: p.Profile.EnemyKind,
+				Kind: enemyKindForProgression(p.Profile.EnemyKind, chunkY, len(enemies)),
 				X:    platform.Span.X + platform.Span.Width/2,
 				Y:    platform.Span.Y - 1,
 			})
 		}
 		p.Enemies[chunkY] = enemies
 	}
+}
+
+func enemyKindForProgression(profileKind string, chunkY, index int) string {
+	if chunkY < 4 {
+		if index == 1 {
+			return "goblinScout"
+		}
+		return profileKind
+	}
+	pools := [][]string{
+		{"goblin", "goblinScout", "archer"},
+		{"goblinScout", "goblinChief", "archer", "skeleton"},
+		{"skeleton", "archer", "iceBat"},
+		{"skeletonArmored", "iceBat", "windSpirit", "iceGolem"},
+		{"skeletonArmored", "iceGolem", "windSpirit", "yeti"},
+	}
+	band := min(len(pools)-1, chunkY/5)
+	pool := pools[band]
+	return pool[(chunkY+index)%len(pool)]
+}
+
+func windZonesForChunk(seed uint32, chunkY int, platforms []plannedPlatform) []WindZoneSpawn {
+	if chunkY < 8 {
+		return []WindZoneSpawn{}
+	}
+	maxZones := 1
+	if chunkY >= 16 {
+		maxZones = 2
+	}
+	zones := []WindZoneSpawn{}
+	for _, platform := range platforms {
+		if len(zones) >= maxZones || platform.Span.Width < 4 || platform.Span.Y < 5 {
+			continue
+		}
+		roll := int(HashString("wind:"+itoa(seedAsInt(seed))+":"+itoa(chunkY)+":"+itoa(platform.Span.X)+":"+itoa(platform.Span.Y)) % 100)
+		chance := 24 + min(34, chunkY*2)
+		if roll >= chance {
+			continue
+		}
+		width := clampInt(platform.Span.Width+1, 3, 5)
+		height := 4
+		x := clampInt(platform.Span.X+platform.Span.Width/2-width/2, 0, ChunkWidthTiles-width)
+		y := clampInt(platform.Span.Y-height, 0, ChunkHeightTiles-height-1)
+		direction := 1
+		if roll%2 == 1 {
+			direction = -1
+		}
+		strength := 480.0 + float64(min(260, chunkY*18))
+		zones = append(zones, WindZoneSpawn{
+			ID:        "wind:" + itoa(chunkY) + ":" + itoa(len(zones)),
+			X:         x,
+			Y:         y,
+			Width:     width,
+			Height:    height,
+			Direction: direction,
+			Strength:  strength,
+		})
+	}
+	return zones
 }
 
 func platformFromCenter(center, y, width int) PlatformSpan {
@@ -903,20 +1113,41 @@ func EnemyStateFromSpawn(chunk GeneratedChunk, spawn EnemySpawn) EnemyState {
 		facing = -1
 		speed = -speed
 	}
+	level := 1 + max(0, chunk.ChunkY)/3
+	baseHealth := enemyBaseHealth(spawn.Kind)
+	maxHealth := baseHealth + max(0, level-1)
+	speedMultiplier := 1 + math.Min(0.65, float64(chunk.ChunkY)*0.025)
 	return EnemyState{
 		ID:             spawn.ID,
 		Kind:           spawn.Kind,
 		Position:       Vec2{X: float64(spawn.X*TileSize - 10), Y: platformY - 24},
-		Velocity:       Vec2{X: speed, Y: 0},
+		Velocity:       Vec2{X: speed * speedMultiplier, Y: 0},
 		Facing:         facing,
-		Health:         2,
-		MaxHealth:      2,
+		Health:         maxHealth,
+		MaxHealth:      maxHealth,
 		ChunkY:         chunk.ChunkY,
 		PatrolMinX:     minX,
 		PatrolMaxX:     maxX,
 		PlatformY:      platformY,
 		AttackCooldown: 0.35,
 		HurtCooldown:   0,
+	}
+}
+
+func enemyBaseHealth(kind string) int {
+	switch kind {
+	case "goblinChief", "windSpirit":
+		return 4
+	case "skeleton":
+		return 3
+	case "skeletonArmored":
+		return 5
+	case "yeti":
+		return 6
+	case "iceGolem":
+		return 7
+	default:
+		return 2
 	}
 }
 
@@ -1022,16 +1253,18 @@ func rectsOverlap(a, b playerBounds) bool {
 }
 
 func inKickRange(kicker, target PlayerState) bool {
+	ensurePlayerSkillState(&kicker)
 	kr := playerRect(kicker)
 	tr := playerRect(target)
 	rangeX := kr.x
+	hitRange := math.Max(KickRangePX, kicker.HitRange)
 	if kicker.Facing < 0 {
-		rangeX = kr.x - KickRangePX
+		rangeX = kr.x - hitRange
 	}
 	return rectsOverlap(playerBounds{
 		x:      rangeX,
 		y:      kr.y - 4,
-		width:  float64(PlayerWidth + KickRangePX),
+		width:  float64(PlayerWidth) + hitRange,
 		height: float64(PlayerHeight + 8),
 	}, tr)
 }
@@ -1050,14 +1283,31 @@ func applyKickHit(kicker, target *PlayerState) {
 		knockbackY = -60
 	}
 	applyDamage(target, kicker.Damage, dir*force, knockbackY, HitStunSeconds)
+	kicker.ShockwaveCounter++
 	target.KickInvulnerable = KickHitInvulnerableSeconds
 }
 
 func applyDamage(player *PlayerState, damage int, knockbackX, knockbackY, stunSeconds float64) {
+	ensurePlayerSkillState(player)
 	if player.Health <= 0 || player.Invulnerable > 0 {
 		return
 	}
-	player.Health = max(0, player.Health-damage)
+	lastStandStacks := skillStacks(*player, "last_stand")
+	lowHP := float64(player.Health)/math.Max(1, float64(player.MaxHealth)) <= 0.3+float64(lastStandStacks)*0.03
+	lastStandReduction := 0.0
+	if lowHP {
+		lastStandReduction = math.Min(0.35, float64(lastStandStacks)*0.08)
+	}
+	reduction := math.Min(skillMaxDamageReduction, math.Max(0, player.DamageReduction+lastStandReduction))
+	remaining := math.Max(0, float64(damage)) * (1 - reduction)
+	if player.Shield > 0 && remaining > 0 {
+		absorbed := math.Min(player.Shield, remaining)
+		player.Shield -= absorbed
+		remaining -= absorbed
+	}
+	player.Health = max(0, player.Health-int(math.Ceil(remaining)))
+	player.LastDamageAt = nowMillis()
+	player.ShieldRegenCooldown = player.ShieldRegenDelayMs
 	player.Velocity.X = knockbackX * math.Max(0.2, 1-player.KnockbackResistance)
 	if knockbackY != 0 {
 		player.Velocity.Y = knockbackY
@@ -1096,6 +1346,7 @@ func collectibleKindForRelicID(id string) string {
 }
 
 func applyCollectible(player *PlayerState, kind string) {
+	ensurePlayerSkillState(player)
 	switch kind {
 	case "coin", "xp":
 	case "smallHeart":
@@ -1107,13 +1358,18 @@ func applyCollectible(player *PlayerState, kind string) {
 		player.JumpPower = math.Min(1.8, 1+float64(player.Crystals/3)*0.06)
 		player.MovementSpeed = math.Min(2, 1+float64(player.Crystals/3)*0.05)
 		player.AirControl = math.Min(2, 1+float64(player.Crystals/3)*0.05)
+		recalculateSkillDerivedStats(player)
 	case "greenCrystal":
 		player.Health = min(player.MaxHealth, player.Health+1)
 	default:
 		player.RelicFragments++
 		recalculateAttackProgression(player)
 	}
-	addPlayerXP(player, XPCollectibleValue)
+	xp := XPCollectibleValue
+	if kind == "xp" {
+		xp = int(math.Round(float64(xp) * player.XPGainMultiplier))
+	}
+	addPlayerXP(player, xp)
 }
 
 func xpRequiredForLevel(level int) int {
@@ -1133,7 +1389,11 @@ func addPlayerXP(player *PlayerState, amount int) int {
 		player.Relics -= xpRequiredForLevel(player.Level)
 		player.Level++
 		if player.Level%2 == 0 {
-			player.MaxHealth = min(9, player.MaxHealth+1)
+			if player.MaxHealth < 9 {
+				player.MaxHealth = min(9, player.MaxHealth+1)
+			} else {
+				player.MaxHealth++
+			}
 			player.Health = min(player.MaxHealth, player.Health+1)
 		}
 	}
@@ -1144,20 +1404,23 @@ func addPlayerXP(player *PlayerState, amount int) int {
 func recalculateAttackProgression(player *PlayerState) {
 	player.Damage = 1 + player.RelicFragments/8
 	player.AttackSpeed = math.Min(3, 1+float64(player.RelicFragments)*0.014)
+	recalculateSkillDerivedStats(player)
 }
 
 func playerKickHitsEnemy(player PlayerState, enemy EnemyState) bool {
 	if player.KickPhase != "active" || enemy.HurtCooldown > 0 || enemy.Health <= 0 {
 		return false
 	}
+	ensurePlayerSkillState(&player)
 	rangeX := player.Position.X
+	hitRange := math.Max(KickRangePX, player.HitRange)
 	if player.Facing < 0 {
-		rangeX = player.Position.X - KickRangePX
+		rangeX = player.Position.X - hitRange
 	}
 	return rectsOverlap(playerBounds{
 		x:      rangeX,
 		y:      player.Position.Y - 4,
-		width:  float64(PlayerWidth + KickRangePX),
+		width:  float64(PlayerWidth) + hitRange,
 		height: float64(PlayerHeight + 8),
 	}, playerBounds{
 		x:      enemy.Position.X,

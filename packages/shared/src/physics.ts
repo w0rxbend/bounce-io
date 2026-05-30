@@ -37,6 +37,7 @@ import {
   SHORT_HOP_CUTOFF,
   TILE_SIZE
 } from "./constants.js";
+import { ensurePlayerSkillState, recalculateSkillDerivedStats, skillStacks, SKILL_BALANCE } from "./skills.js";
 import type { CollectibleKind, CollisionHit, GeneratedChunk, HazardKind, KickPhase, PlayerId, PlayerInput, PlayerState, Rect, StepResult, TileMap } from "./types.js";
 
 export interface PlayerInteractionEvent {
@@ -74,6 +75,28 @@ export function createPlayerState(id: string, x: number, y: number): PlayerState
     relics: 0,
     crystals: 0,
     relicFragments: 0,
+    hitRange: KICK_RANGE_PX,
+    attackCooldownMs: MELEE_ATTACK_COOLDOWN_SECONDS * 1000,
+    damageReduction: 0,
+    shield: 0,
+    maxShield: 0,
+    shieldRegenPerSecond: 0,
+    shieldRegenDelayMs: SKILL_BALANCE.shieldRegenDelayMs,
+    lastDamageAt: 0,
+    shieldRegenCooldownMs: 0,
+    jumpPowerMultiplier: 1,
+    airControlMultiplier: 1,
+    extraJumps: 0,
+    extraJumpsUsed: 0,
+    dashUnlocked: false,
+    dashCooldownMs: SKILL_BALANCE.dashBaseCooldownMs,
+    dashCooldownRemainingMs: 0,
+    dashTimerMs: 0,
+    pickupRadius: GAME_REWARD_CONFIG.pickupRadius,
+    xpGainMultiplier: 1,
+    killXpMultiplier: 1,
+    selectedSkills: {},
+    shockwaveCounter: 0,
     fallStartY: null
   };
 }
@@ -124,6 +147,7 @@ function recalculateMovementProgression(player: PlayerState): void {
   const airBonus = diminishingBonus(player.crystals, 0.007, 0.5);
   player.jumpPower = Math.min(1.22, PLAYER_BASE_JUMP_POWER + jumpBonus);
   player.airControl = Math.min(1.1, PLAYER_BASE_AIR_CONTROL + airBonus);
+  recalculateSkillDerivedStats(player);
 }
 
 function recalculateAttackProgression(player: PlayerState): void {
@@ -131,6 +155,7 @@ function recalculateAttackProgression(player: PlayerState): void {
   const speedBonus = diminishingBonus(player.relicFragments, 0.014, 0.36);
   player.damage = Math.min(1.45, PLAYER_BASE_DAMAGE + damageBonus);
   player.attackSpeed = Math.min(1.28, PLAYER_BASE_ATTACK_SPEED + speedBonus);
+  recalculateSkillDerivedStats(player);
 }
 
 export function xpRequiredForLevel(level: number): number {
@@ -147,7 +172,7 @@ export function addPlayerXp(player: PlayerState, amount: number): number {
     player.relics -= xpRequiredForLevel(player.level);
     player.level += 1;
     if (player.level % 2 === 0) {
-      player.maxHealth = Math.min(9, player.maxHealth + 1);
+      player.maxHealth = player.maxHealth < 9 ? Math.min(9, player.maxHealth + 1) : player.maxHealth + 1;
       player.health = Math.min(player.maxHealth, player.health + 1);
     }
   }
@@ -290,9 +315,22 @@ export function applyDamage(
   knockbackY = 0,
   stunSeconds = HIT_STUN_SECONDS
 ): void {
+  ensurePlayerSkillState(player);
   if (player.invulnerable > 0 || player.health <= 0) return;
   const resistance = clamp(player.knockbackResistance, 0, 0.75);
-  player.health = Math.max(0, player.health - Math.max(0, amount));
+  const lastStandStacks = skillStacks(player, "last_stand");
+  const lowHp = player.health / Math.max(1, player.maxHealth) <= 0.3 + lastStandStacks * 0.03;
+  const lastStandReduction = lowHp ? Math.min(0.35, lastStandStacks * 0.08) : 0;
+  const reduction = clamp(player.damageReduction + lastStandReduction, 0, SKILL_BALANCE.maxDamageReduction);
+  let remaining = Math.max(0, amount) * (1 - reduction);
+  if (player.shield > 0 && remaining > 0) {
+    const absorbed = Math.min(player.shield, remaining);
+    player.shield -= absorbed;
+    remaining -= absorbed;
+  }
+  player.health = Math.max(0, player.health - remaining);
+  player.lastDamageAt = Date.now();
+  player.shieldRegenCooldownMs = player.shieldRegenDelayMs;
   player.velocity.x += knockbackX * (1 - resistance);
   player.velocity.y += knockbackY * (1 - resistance);
   player.stunTimer = Math.max(player.stunTimer, stunSeconds);
@@ -366,6 +404,7 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
 }
 
 export function applyCollectible(player: PlayerState, kind: CollectibleKind, xpValue: number = GAME_REWARD_CONFIG.xpCollectibleValue): number {
+  ensurePlayerSkillState(player);
   switch (kind) {
     case "coin":
     case "xp":
@@ -394,7 +433,8 @@ export function applyCollectible(player: PlayerState, kind: CollectibleKind, xpV
       break;
     }
   }
-  return addPlayerXp(player, xpValue);
+  const multiplier = kind === "xp" ? player.xpGainMultiplier : 1;
+  return addPlayerXp(player, Math.round(xpValue * multiplier));
 }
 
 export function collectibleKindForRelicId(id: string): CollectibleKind {
@@ -435,6 +475,7 @@ export function respawnPlayerState(player: PlayerState, x: number, y: number, ch
 
 export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap, deltaSeconds: number): StepResult {
   const dt = Math.min(Math.max(deltaSeconds, 0), MAX_DELTA_SECONDS);
+  ensurePlayerSkillState(player);
 
   const kick = stepKick(
     player.kickPhase,
@@ -458,6 +499,13 @@ export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap
     invulnerable: Math.max(0, player.invulnerable - dt),
     stunTimer: Math.max(0, player.stunTimer - dt)
   };
+  next.shieldRegenCooldownMs = Math.max(0, player.shieldRegenCooldownMs - dt * 1000);
+  next.dashCooldownRemainingMs = Math.max(0, player.dashCooldownRemainingMs - dt * 1000);
+  next.dashTimerMs = Math.max(0, player.dashTimerMs - dt * 1000);
+  if (next.maxShield > 0 && next.shieldRegenCooldownMs <= 0 && next.shield < next.maxShield) {
+    next.shield = Math.min(next.maxShield, next.shield + next.shieldRegenPerSecond * dt);
+  }
+  if (next.grounded) next.extraJumpsUsed = 0;
 
   const hits: CollisionHit[] = [];
 
@@ -477,11 +525,24 @@ export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap
     next.velocity.x = moveToward(next.velocity.x, 0, GROUND_FRICTION * dt);
   }
 
+  if (!locked && input.dash && next.dashUnlocked && next.dashCooldownRemainingMs <= 0) {
+    const dashDir = direction !== 0 ? direction : next.facing;
+    next.velocity.x = dashDir * Math.max(maxRunSpeed * 1.8, 260);
+    next.dashCooldownRemainingMs = next.dashCooldownMs;
+    next.dashTimerMs = 120;
+  }
+
   // Jump
   if (next.jumpBufferTimer > 0 && (next.grounded || next.coyoteTimer > 0)) {
     next.velocity.y = -jumpSpeed;
     next.grounded = false;
     next.coyoteTimer = 0;
+    next.jumpBufferTimer = 0;
+    next.extraJumpsUsed = 0;
+  } else if (next.jumpBufferTimer > 0 && next.extraJumpsUsed < next.extraJumps && !next.grounded) {
+    const bonus = 1 + Math.max(0, skillStacks(next, "double_jump") - 1) * 0.08;
+    next.velocity.y = -jumpSpeed * bonus;
+    next.extraJumpsUsed += 1;
     next.jumpBufferTimer = 0;
   }
 
@@ -529,12 +590,14 @@ function getOverlapX(a: Rect, b: Rect): number {
 }
 
 function isInKickRange(kicker: PlayerState, target: PlayerState): boolean {
+  ensurePlayerSkillState(kicker);
   const kr = playerRect(kicker);
   const tr = playerRect(target);
+  const hitRange = Math.max(KICK_RANGE_PX, kicker.hitRange);
   const rangeRect: Rect = {
-    x: kicker.facing > 0 ? kr.x : kr.x - KICK_RANGE_PX,
+    x: kicker.facing > 0 ? kr.x : kr.x - hitRange,
     y: kr.y - 4,
-    width: PLAYER_WIDTH + KICK_RANGE_PX,
+    width: PLAYER_WIDTH + hitRange,
     height: PLAYER_HEIGHT + 8
   };
   return rectsOverlap(rangeRect, tr);
@@ -544,6 +607,7 @@ function applyKickHit(kicker: PlayerState, target: PlayerState): void {
   const force = kicker.grounded ? KICK_FORCE_GROUND : KICK_FORCE_AIR;
   const dir = kicker.facing;
   applyDamage(target, kicker.damage, dir * force, target.velocity.y > -60 ? -60 : 0, HIT_STUN_SECONDS);
+  kicker.shockwaveCounter = (kicker.shockwaveCounter ?? 0) + 1;
   target.kickInvulnerable = KICK_HIT_INVULNERABLE_SECONDS;
 }
 

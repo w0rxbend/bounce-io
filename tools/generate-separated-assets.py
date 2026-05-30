@@ -513,13 +513,389 @@ CHARACTER_SUIT_SPECS: dict[str, dict[str, tuple[int, int, int, int] | str]] = {
         "visor": PAL["gold_light"],
         "glass": rgba("#2f3b36"),
     },
+    "character9": {
+        "kind": "casual_glasses_runner",
+        "skin": rgba("#ffc087"),
+        "skin_shadow": rgba("#c97852"),
+        "hair": rgba("#9a5728"),
+        "hair_dark": rgba("#4a210f"),
+        "shirt": rgba("#7b7d82"),
+        "shirt_dark": rgba("#3f4147"),
+        "pants": rgba("#a6c2dd"),
+        "pants_dark": rgba("#4d6886"),
+        "shoes": rgba("#fff7ec"),
+        "shoe_dark": rgba("#9a6534"),
+        "glasses": rgba("#24140b"),
+        "lens": rgba("#f5c17b", 150),
+        "earring": rgba("#e8dfc8"),
+        "weapon": rgba("#252b30"),
+        "muzzle": rgba("#ff9f24"),
+    },
+    "character10": {
+        "kind": "bearded_runner",
+        "skin": rgba("#f3b17a"),
+        "skin_shadow": rgba("#a76748"),
+        "hair": rgba("#2c1a10"),
+        "hair_dark": rgba("#090604"),
+        "beard": rgba("#241208"),
+        "shirt": rgba("#111a49"),
+        "shirt_dark": rgba("#06102d"),
+        "pants": rgba("#143b68"),
+        "pants_dark": rgba("#071b35"),
+        "shoes": rgba("#cbd5df"),
+        "shoe_dark": rgba("#303844"),
+        "weapon": rgba("#252b30"),
+        "muzzle": rgba("#ff9f24"),
+    },
 }
+
+
+def spec_color(spec: dict[str, tuple[int, int, int, int] | str], key: str) -> tuple[int, int, int, int]:
+    return spec[key]  # type: ignore[return-value]
+
+
+def draw_bearded_runner_character(spec: dict[str, tuple[int, int, int, int] | str], pose: str, frame: int) -> Image.Image:
+    img = canvas(48, 56)
+    d = ImageDraw.Draw(img)
+
+    skin = spec_color(spec, "skin")
+    skin_shadow = spec_color(spec, "skin_shadow")
+    hair = spec_color(spec, "hair")
+    hair_dark = spec_color(spec, "hair_dark")
+    beard = spec_color(spec, "beard")
+    shirt = spec_color(spec, "shirt")
+    shirt_dark = spec_color(spec, "shirt_dark")
+    pants = spec_color(spec, "pants")
+    pants_dark = spec_color(spec, "pants_dark")
+    shoes = spec_color(spec, "shoes")
+    shoe_dark = spec_color(spec, "shoe_dark")
+    weapon = spec_color(spec, "weapon")
+    muzzle = spec_color(spec, "muzzle")
+
+    direction = -1 if pose.endswith("_left") else 1
+    base_pose = pose.removesuffix("_left").removesuffix("_right")
+
+    if base_pose == "lying_dead":
+        draw_shadow(d, 9, 50, 31)
+        body_y = 39 + frame
+        d.rectangle((8, body_y, 30, body_y + 8), fill=PAL["outline"])
+        d.rectangle((10, body_y + 1, 28, body_y + 7), fill=shirt)
+        d.rectangle((23, body_y + 6, 40, body_y + 13), fill=PAL["outline"])
+        d.rectangle((25, body_y + 7, 38, body_y + 12), fill=pants)
+        d.rectangle((34, body_y + 12, 42, body_y + 15), fill=shoe_dark)
+        d.rectangle((36, body_y + 11, 43, body_y + 13), fill=shoes)
+        d.rectangle((4, body_y - 4, 17, body_y + 8), fill=PAL["outline"])
+        d.rectangle((6, body_y - 3, 16, body_y + 5), fill=skin)
+        d.rectangle((4, body_y - 5, 16, body_y - 1), fill=hair_dark)
+        d.rectangle((5, body_y + 4, 16, body_y + 9), fill=beard)
+        d.rectangle((2, body_y - 1, 7, body_y + 5), fill=hair)
+        d.rectangle((12, body_y + 2, 13, body_y + 3), fill=PAL["ink"])
+        if frame % 2 == 1:
+            d.rectangle((20, body_y + 10, 31, body_y + 11), fill=rgba("#7b1118"))
+        return img
+
+    bob = [0, -1, 0, 1][frame % 4] if base_pose == "idle" else 0
+    if base_pose in {"walking", "running"}:
+        bob = [0, -1, 0, 1, 0, -1][frame % 6]
+    if base_pose == "jumping":
+        bob = -4
+    if base_pose == "falling":
+        bob = 3
+    if base_pose == "taking_damage":
+        bob = 1
+
+    x = 15 + (1 if base_pose in {"running", "hitting", "shooting"} else 0)
+    y = 10 + bob
+    swing = [-3, -1, 2, 3, 1, -2][frame % 6] if base_pose in {"walking", "running"} else 0
+    if base_pose == "jumping":
+        swing = -2
+    if base_pose == "falling":
+        swing = 2
+
+    hurt_shift = -2 if base_pose == "taking_damage" and frame % 2 == 0 else 0
+    attack_reach = 9 if base_pose in {"punching", "hitting", "shooting"} else 0
+
+    draw_shadow(d, 10, 50, 27)
+
+    # Hair silhouette behind the face, kept large for readability at menu scale.
+    d.rectangle((x + 2 + hurt_shift, y + 5, x + 24 + hurt_shift, y + 25), fill=PAL["outline"])
+    d.rectangle((x + 3 + hurt_shift, y + 6, x + 23 + hurt_shift, y + 24), fill=hair_dark)
+    for ox, oy, w, h in [(-1, 8, 6, 16), (3, 2, 7, 5), (10, 1, 9, 5), (18, 5, 7, 15), (0, 22, 5, 6), (20, 22, 5, 6)]:
+        d.rectangle((x + ox + hurt_shift, y + oy, x + ox + w + hurt_shift, y + oy + h), fill=PAL["outline"])
+        d.rectangle((x + ox + 1 + hurt_shift, y + oy + 1, x + ox + w - 1 + hurt_shift, y + oy + h - 1), fill=hair)
+
+    # Body.
+    d.rectangle((x + 3 + hurt_shift, y + 22, x + 24 + hurt_shift, y + 40), fill=PAL["outline"])
+    d.rectangle((x + 5 + hurt_shift, y + 23, x + 22 + hurt_shift, y + 39), fill=shirt)
+    d.rectangle((x + 5 + hurt_shift, y + 36, x + 22 + hurt_shift, y + 40), fill=shirt_dark)
+    d.rectangle((x + 7 + hurt_shift, y + 24, x + 11 + hurt_shift, y + 25), fill=rgba("#303c72"))
+
+    # Head, brows, eyes, beard.
+    d.rectangle((x + 5 + hurt_shift, y + 8, x + 21 + hurt_shift, y + 23), fill=PAL["outline"])
+    d.rectangle((x + 7 + hurt_shift, y + 9, x + 20 + hurt_shift, y + 21), fill=skin)
+    d.rectangle((x + 7 + hurt_shift, y + 9, x + 20 + hurt_shift, y + 12), fill=hair)
+    d.rectangle((x + 6 + hurt_shift, y + 13, x + 9 + hurt_shift, y + 20), fill=hair)
+    d.rectangle((x + 18 + hurt_shift, y + 12, x + 22 + hurt_shift, y + 20), fill=hair_dark)
+    d.rectangle((x + 8 + hurt_shift, y + 14, x + 11 + hurt_shift, y + 15), fill=hair_dark)
+    d.rectangle((x + 16 + hurt_shift, y + 14, x + 19 + hurt_shift, y + 15), fill=hair_dark)
+    d.rectangle((x + 10 + hurt_shift, y + 16, x + 11 + hurt_shift, y + 17), fill=PAL["ink"])
+    d.rectangle((x + 17 + hurt_shift, y + 16, x + 18 + hurt_shift, y + 17), fill=PAL["ink"])
+    d.rectangle((x + 13 + hurt_shift, y + 17, x + 15 + hurt_shift, y + 19), fill=skin_shadow)
+    d.rectangle((x + 8 + hurt_shift, y + 19, x + 20 + hurt_shift, y + 24), fill=beard)
+    d.rectangle((x + 11 + hurt_shift, y + 20, x + 17 + hurt_shift, y + 21), fill=hair_dark)
+
+    # Arms.
+    arm_y = y + 27
+    left_swing = max(0, swing)
+    right_swing = max(0, -swing)
+    if base_pose in {"punching", "hitting", "shooting"}:
+        right_swing = 0
+    d.rectangle((x - 2 + hurt_shift, arm_y + left_swing, x + 7 + hurt_shift, arm_y + 6 + left_swing), fill=PAL["outline"])
+    d.rectangle((x - 1 + hurt_shift, arm_y + 1 + left_swing, x + 5 + hurt_shift, arm_y + 5 + left_swing), fill=skin)
+    d.rectangle((x + 20 + hurt_shift, arm_y + right_swing, x + 28 + attack_reach + hurt_shift, arm_y + 6 + right_swing), fill=PAL["outline"])
+    d.rectangle((x + 21 + hurt_shift, arm_y + 1 + right_swing, x + 27 + attack_reach + hurt_shift, arm_y + 5 + right_swing), fill=skin)
+    d.rectangle((x + 1 + hurt_shift, arm_y, x + 5 + hurt_shift, arm_y + 5), fill=shirt_dark)
+    d.rectangle((x + 20 + hurt_shift, arm_y, x + 24 + hurt_shift, arm_y + 5), fill=shirt_dark)
+
+    # Legs and shoes.
+    front = max(0, swing)
+    back = max(0, -swing)
+    if base_pose == "running":
+        front += 2 if frame % 2 == 0 else 0
+        back += 2 if frame % 2 == 1 else 0
+    if base_pose in {"jumping", "falling"}:
+        front, back = 2, 0
+    if base_pose == "kick":
+        front, back = 0, 0
+
+    d.rectangle((x + 5, y + 39 + front, x + 11, y + 50 + front), fill=PAL["outline"])
+    d.rectangle((x + 7, y + 40 + front, x + 10, y + 48 + front), fill=pants)
+    d.rectangle((x + 16, y + 39 + back, x + 22, y + 50 + back), fill=PAL["outline"])
+    d.rectangle((x + 17, y + 40 + back, x + 20, y + 48 + back), fill=pants_dark)
+    d.rectangle((x + 4, y + 49 + front, x + 13, y + 53 + front), fill=PAL["outline"])
+    d.rectangle((x + 5, y + 50 + front, x + 12, y + 52 + front), fill=shoes)
+    d.rectangle((x + 15, y + 49 + back, x + 24, y + 53 + back), fill=PAL["outline"])
+    d.rectangle((x + 16, y + 50 + back, x + 23, y + 52 + back), fill=shoes)
+    d.rectangle((x + 5, y + 52 + front, x + 12, y + 53 + front), fill=shoe_dark)
+    d.rectangle((x + 16, y + 52 + back, x + 23, y + 53 + back), fill=shoe_dark)
+
+    if base_pose == "kick":
+        d.rectangle((x + 18, y + 38, x + 40, y + 44), fill=PAL["outline"])
+        d.rectangle((x + 19, y + 39, x + 35, y + 42), fill=pants)
+        d.rectangle((x + 35, y + 38, x + 43, y + 43), fill=shoes)
+
+    if base_pose == "shooting":
+        gun_x = x + 24 + hurt_shift
+        d.rectangle((gun_x - 1, arm_y, min(47, gun_x + 12), arm_y + 5), fill=PAL["outline"])
+        d.rectangle((gun_x, arm_y + 1, min(47, gun_x + 10), arm_y + 3), fill=weapon)
+        d.rectangle((gun_x + 3, arm_y + 3, min(47, gun_x + 7), arm_y + 7), fill=weapon)
+        if frame == 2:
+            d.rectangle((43, arm_y, 47, arm_y + 3), fill=muzzle)
+            d.rectangle((46, arm_y + 1, 47, arm_y + 2), fill=PAL["gold_light"])
+        elif frame == 3:
+            d.rectangle((44, arm_y + 1, 47, arm_y + 2), fill=muzzle)
+
+    if base_pose in {"hitting", "taking_damage"}:
+        d.rectangle((x - 3, y + 5, x + 0, y + 8), fill=PAL["red"])
+        if frame % 2 == 0:
+            d.rectangle((x + 26, y + 20, x + 29, y + 23), fill=PAL["red"])
+
+    if direction < 0:
+        img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    return img
+
+
+def draw_casual_glasses_runner_character(spec: dict[str, tuple[int, int, int, int] | str], pose: str, frame: int) -> Image.Image:
+    img = canvas(48, 56)
+    d = ImageDraw.Draw(img)
+
+    skin = spec_color(spec, "skin")
+    skin_shadow = spec_color(spec, "skin_shadow")
+    hair = spec_color(spec, "hair")
+    hair_dark = spec_color(spec, "hair_dark")
+    shirt = spec_color(spec, "shirt")
+    shirt_dark = spec_color(spec, "shirt_dark")
+    pants = spec_color(spec, "pants")
+    pants_dark = spec_color(spec, "pants_dark")
+    shoes = spec_color(spec, "shoes")
+    shoe_dark = spec_color(spec, "shoe_dark")
+    glasses = spec_color(spec, "glasses")
+    lens = spec_color(spec, "lens")
+    earring = spec_color(spec, "earring")
+    weapon = spec_color(spec, "weapon")
+    muzzle = spec_color(spec, "muzzle")
+
+    direction = -1 if pose.endswith("_left") else 1
+    base_pose = pose.removesuffix("_left").removesuffix("_right")
+
+    if base_pose == "lying_dead":
+        draw_shadow(d, 8, 50, 34)
+        body_y = 39 + frame
+        d.rectangle((7, body_y, 31, body_y + 9), fill=PAL["outline"])
+        d.rectangle((9, body_y + 1, 29, body_y + 7), fill=shirt)
+        d.rectangle((23, body_y + 6, 41, body_y + 14), fill=PAL["outline"])
+        d.rectangle((25, body_y + 7, 39, body_y + 12), fill=pants)
+        d.rectangle((34, body_y + 12, 43, body_y + 15), fill=shoe_dark)
+        d.rectangle((36, body_y + 11, 44, body_y + 13), fill=shoes)
+        d.rectangle((3, body_y - 6, 18, body_y + 9), fill=PAL["outline"])
+        d.rectangle((4, body_y - 5, 16, body_y + 8), fill=hair_dark)
+        d.rectangle((6, body_y - 3, 17, body_y + 5), fill=skin)
+        d.rectangle((4, body_y - 5, 17, body_y - 1), fill=hair)
+        d.rectangle((3, body_y - 1, 8, body_y + 8), fill=hair)
+        d.rectangle((11, body_y + 1, 16, body_y + 4), fill=glasses)
+        d.rectangle((12, body_y + 2, 15, body_y + 3), fill=lens)
+        d.rectangle((15, body_y + 5, 16, body_y + 6), fill=skin_shadow)
+        if frame % 2 == 1:
+            d.rectangle((20, body_y + 10, 32, body_y + 11), fill=rgba("#7b1118"))
+        return img
+
+    bob = [0, -1, 0, 1][frame % 4] if base_pose == "idle" else 0
+    if base_pose in {"walking", "running"}:
+        bob = [0, -1, 0, 1, 0, -1][frame % 6]
+    if base_pose == "jumping":
+        bob = -4
+    if base_pose == "falling":
+        bob = 3
+    if base_pose == "taking_damage":
+        bob = 1
+
+    x = 15 + (1 if base_pose in {"running", "hitting", "shooting"} else 0)
+    y = 9 + bob
+    swing = [-3, -1, 2, 3, 1, -2][frame % 6] if base_pose in {"walking", "running"} else 0
+    if base_pose == "jumping":
+        swing = -2
+    if base_pose == "falling":
+        swing = 2
+
+    hurt_shift = -2 if base_pose == "taking_damage" and frame % 2 == 0 else 0
+    attack_reach = 9 if base_pose in {"punching", "hitting", "shooting"} else 0
+    hair_sweep = -3 if base_pose in {"running", "jumping", "falling"} else -1
+
+    draw_shadow(d, 10, 50, 27)
+
+    # Long side-swept hair, with a moving tail silhouette like the source sheet.
+    d.rectangle((x + 2 + hurt_shift, y + 5, x + 24 + hurt_shift, y + 25), fill=PAL["outline"])
+    d.rectangle((x + 4 + hurt_shift, y + 6, x + 22 + hurt_shift, y + 24), fill=hair_dark)
+    d.polygon(
+        [
+            (x + 7 + hurt_shift, y + 4),
+            (x + 22 + hurt_shift, y + 7),
+            (x + 23 + hurt_shift + hair_sweep, y + 34),
+            (x + 13 + hurt_shift + hair_sweep, y + 31),
+            (x + 4 + hurt_shift, y + 24),
+        ],
+        fill=PAL["outline"],
+    )
+    d.polygon(
+        [
+            (x + 8 + hurt_shift, y + 5),
+            (x + 20 + hurt_shift, y + 8),
+            (x + 21 + hurt_shift + hair_sweep, y + 31),
+            (x + 13 + hurt_shift + hair_sweep, y + 29),
+            (x + 5 + hurt_shift, y + 23),
+        ],
+        fill=hair,
+    )
+    d.rectangle((x + 1 + hurt_shift + hair_sweep, y + 12, x + 7 + hurt_shift, y + 30), fill=PAL["outline"])
+    d.rectangle((x + 2 + hurt_shift + hair_sweep, y + 13, x + 6 + hurt_shift, y + 28), fill=hair)
+    d.rectangle((x + 6 + hurt_shift, y + 5, x + 22 + hurt_shift, y + 11), fill=hair)
+    d.rectangle((x + 16 + hurt_shift, y + 7, x + 24 + hurt_shift, y + 17), fill=hair_dark)
+    d.rectangle((x + 3 + hurt_shift, y + 24, x + 9 + hurt_shift, y + 34), fill=hair_dark)
+    d.point((x + 4 + hurt_shift, y + 19), fill=earring)
+
+    # Body.
+    d.rectangle((x + 3 + hurt_shift, y + 22, x + 24 + hurt_shift, y + 40), fill=PAL["outline"])
+    d.rectangle((x + 5 + hurt_shift, y + 23, x + 22 + hurt_shift, y + 39), fill=shirt)
+    d.rectangle((x + 5 + hurt_shift, y + 34, x + 22 + hurt_shift, y + 40), fill=shirt_dark)
+    d.rectangle((x + 8 + hurt_shift, y + 24, x + 14 + hurt_shift, y + 25), fill=rgba("#8a8c92"))
+
+    # Face, hairline, glasses, and compact smile.
+    d.rectangle((x + 6 + hurt_shift, y + 8, x + 21 + hurt_shift, y + 23), fill=PAL["outline"])
+    d.rectangle((x + 8 + hurt_shift, y + 9, x + 20 + hurt_shift, y + 21), fill=skin)
+    d.rectangle((x + 7 + hurt_shift, y + 9, x + 20 + hurt_shift, y + 12), fill=hair)
+    d.rectangle((x + 7 + hurt_shift, y + 12, x + 10 + hurt_shift, y + 20), fill=hair)
+    d.rectangle((x + 18 + hurt_shift, y + 11, x + 22 + hurt_shift, y + 21), fill=hair_dark)
+    d.rectangle((x + 9 + hurt_shift, y + 15, x + 13 + hurt_shift, y + 18), fill=glasses)
+    d.rectangle((x + 15 + hurt_shift, y + 15, x + 19 + hurt_shift, y + 18), fill=glasses)
+    d.rectangle((x + 13 + hurt_shift, y + 16, x + 15 + hurt_shift, y + 16), fill=glasses)
+    d.rectangle((x + 10 + hurt_shift, y + 16, x + 12 + hurt_shift, y + 17), fill=lens)
+    d.rectangle((x + 16 + hurt_shift, y + 16, x + 18 + hurt_shift, y + 17), fill=lens)
+    d.rectangle((x + 11 + hurt_shift, y + 20, x + 17 + hurt_shift, y + 21), fill=skin_shadow)
+    d.point((x + 18 + hurt_shift, y + 20), fill=PAL["ink"])
+
+    # Arms.
+    arm_y = y + 27
+    left_swing = max(0, swing)
+    right_swing = max(0, -swing)
+    if base_pose in {"punching", "hitting", "shooting"}:
+        right_swing = 0
+    d.rectangle((x - 2 + hurt_shift, arm_y + left_swing, x + 7 + hurt_shift, arm_y + 6 + left_swing), fill=PAL["outline"])
+    d.rectangle((x - 1 + hurt_shift, arm_y + 1 + left_swing, x + 5 + hurt_shift, arm_y + 5 + left_swing), fill=skin)
+    d.rectangle((x + 20 + hurt_shift, arm_y + right_swing, x + 28 + attack_reach + hurt_shift, arm_y + 6 + right_swing), fill=PAL["outline"])
+    d.rectangle((x + 21 + hurt_shift, arm_y + 1 + right_swing, x + 27 + attack_reach + hurt_shift, arm_y + 5 + right_swing), fill=skin)
+    d.rectangle((x + 1 + hurt_shift, arm_y, x + 5 + hurt_shift, arm_y + 5), fill=shirt_dark)
+    d.rectangle((x + 20 + hurt_shift, arm_y, x + 24 + hurt_shift, arm_y + 5), fill=shirt_dark)
+
+    # Jeans and brown-white sneakers.
+    front = max(0, swing)
+    back = max(0, -swing)
+    if base_pose == "running":
+        front += 2 if frame % 2 == 0 else 0
+        back += 2 if frame % 2 == 1 else 0
+    if base_pose in {"jumping", "falling"}:
+        front, back = 2, 0
+    if base_pose == "kick":
+        front, back = 0, 0
+
+    d.rectangle((x + 5, y + 39 + front, x + 11, y + 50 + front), fill=PAL["outline"])
+    d.rectangle((x + 7, y + 40 + front, x + 10, y + 48 + front), fill=pants)
+    d.rectangle((x + 16, y + 39 + back, x + 22, y + 50 + back), fill=PAL["outline"])
+    d.rectangle((x + 17, y + 40 + back, x + 20, y + 48 + back), fill=pants_dark)
+    d.rectangle((x + 8, y + 42 + front, x + 10, y + 44 + front), fill=rgba("#b6c8dc"))
+    d.rectangle((x + 17, y + 42 + back, x + 19, y + 44 + back), fill=rgba("#b6c8dc"))
+    d.rectangle((x + 4, y + 49 + front, x + 13, y + 53 + front), fill=PAL["outline"])
+    d.rectangle((x + 5, y + 50 + front, x + 12, y + 51 + front), fill=shoe_dark)
+    d.rectangle((x + 5, y + 51 + front, x + 12, y + 52 + front), fill=shoes)
+    d.rectangle((x + 15, y + 49 + back, x + 24, y + 53 + back), fill=PAL["outline"])
+    d.rectangle((x + 16, y + 50 + back, x + 23, y + 51 + back), fill=shoe_dark)
+    d.rectangle((x + 16, y + 51 + back, x + 23, y + 52 + back), fill=shoes)
+
+    if base_pose == "kick":
+        d.rectangle((x + 18, y + 38, x + 40, y + 44), fill=PAL["outline"])
+        d.rectangle((x + 19, y + 39, x + 35, y + 42), fill=pants)
+        d.rectangle((x + 35, y + 38, x + 43, y + 43), fill=shoe_dark)
+        d.rectangle((x + 36, y + 39, x + 44, y + 41), fill=shoes)
+
+    if base_pose == "shooting":
+        gun_x = x + 24 + hurt_shift
+        d.rectangle((gun_x - 1, arm_y, min(47, gun_x + 12), arm_y + 5), fill=PAL["outline"])
+        d.rectangle((gun_x, arm_y + 1, min(47, gun_x + 10), arm_y + 3), fill=weapon)
+        d.rectangle((gun_x + 3, arm_y + 3, min(47, gun_x + 7), arm_y + 7), fill=weapon)
+        if frame == 2:
+            d.rectangle((43, arm_y, 47, arm_y + 3), fill=muzzle)
+            d.rectangle((46, arm_y + 1, 47, arm_y + 2), fill=PAL["gold_light"])
+        elif frame == 3:
+            d.rectangle((44, arm_y + 1, 47, arm_y + 2), fill=muzzle)
+
+    if base_pose in {"hitting", "taking_damage"}:
+        d.rectangle((x - 3, y + 5, x + 0, y + 8), fill=PAL["red"])
+        if frame % 2 == 0:
+            d.rectangle((x + 26, y + 20, x + 29, y + 23), fill=PAL["red"])
+
+    if direction < 0:
+        img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    return img
 
 
 def draw_suit_character(spec: dict[str, tuple[int, int, int, int] | str], pose: str, frame: int) -> Image.Image:
     img = canvas(48, 56)
     d = ImageDraw.Draw(img)
     kind = str(spec["kind"])
+    if kind == "casual_glasses_runner":
+        return draw_casual_glasses_runner_character(spec, pose, frame)
+    if kind == "bearded_runner":
+        return draw_bearded_runner_character(spec, pose, frame)
+
     body = spec["body"]  # type: ignore[assignment]
     body_dark = spec["body_dark"]  # type: ignore[assignment]
     armor = spec["armor"]  # type: ignore[assignment]

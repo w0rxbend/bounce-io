@@ -325,6 +325,8 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 			s.handleRequestChunk(client, data)
 		case "pickup_collectible":
 			s.handlePickupCollectible(client, data)
+		case "select_skill_card":
+			s.handleSelectSkillCard(client, data)
 		case "ping":
 			var ping ClientPing
 			if json.Unmarshal(data, &ping) == nil {
@@ -412,6 +414,20 @@ func (s *Server) handleRequestChunk(client *Client, data []byte) {
 	} else {
 		s.logParseError(client, nil, "PARSE_ERROR", err)
 	}
+}
+
+func (s *Server) handleSelectSkillCard(client *Client, data []byte) {
+	room, playerID, _ := client.Session()
+	if room == nil || playerID == "" {
+		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: "NOT_JOINED", Message: "send join first"})
+		return
+	}
+	var msg ClientSelectSkillCard
+	if err := json.Unmarshal(data, &msg); err != nil || msg.OfferID == "" || msg.CardID == "" {
+		s.logParseError(client, nil, "PARSE_ERROR", err)
+		return
+	}
+	room.SelectSkillCard(playerID, msg.OfferID, msg.CardID)
 }
 
 func (s *Server) handlePickupCollectible(client *Client, data []byte) {
