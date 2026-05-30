@@ -96,6 +96,7 @@ func (cmd joinCommand) apply(s *roomState) {
 					"matchPhase":  s.phase,
 					"playerState": existing.player,
 				})
+				_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RECONNECTED", "playerId": existing.playerID})
 				cmd.reply <- joinReply{playerID: existing.playerID, token: existing.token}
 				return
@@ -147,6 +148,7 @@ func (cmd joinCommand) apply(s *roomState) {
 		Name:         name,
 	})
 	_ = cmd.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, 0)})
+	_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
 	for _, existing := range s.sessions {
 		if existing.playerID == playerID || !existing.connected {
 			continue
@@ -488,26 +490,41 @@ func (s *session) consumeInput() PlayerInput {
 func (s *roomState) broadcastSnapshot(now time.Time) {
 	s.snapshotSeq++
 	players := make([]PlayerState, 0, len(s.sessions))
-	entities := make([]EntityState, 0, len(s.sessions))
+	playerEntities := make([]PlayerEntityFrame, 0, len(s.sessions))
 	lastProcessed := make(map[string]int64, len(s.sessions))
 	for _, sess := range s.sessions {
 		if !sess.connected {
 			continue
 		}
-		players = append(players, sess.player)
-		entities = append(entities, EntityState{
-			ID:       sess.playerID,
-			Type:     "player",
-			Kind:     "player",
-			Position: sess.player.Position,
-			Velocity: sess.player.Velocity,
-			Facing:   sess.player.Facing,
+		playerEntities = append(playerEntities, PlayerEntityFrame{
+			ID:           sess.playerID,
+			SkinID:       sess.player.SkinID,
+			X:            quantize2(sess.player.Position.X),
+			Y:            quantize2(sess.player.Position.Y),
+			VX:           quantize2(sess.player.Velocity.X),
+			VY:           quantize2(sess.player.Velocity.Y),
+			Facing:       sess.player.Facing,
+			Grounded:     sess.player.Grounded,
+			KickPhase:    sess.player.KickPhase,
+			KickTimer:    quantize2(sess.player.KickTimer),
+			Invulnerable: quantize2(sess.player.Invulnerable),
+			Health:       sess.player.Health,
+			Coins:        sess.player.Coins,
 		})
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
 
 	events := s.pendingEvents
 	s.pendingEvents = make([]MatchEvent, 0, 32)
+	if len(events) > 0 {
+		s.broadcastJSON(EventsMessage{
+			Type:        "events",
+			ServerTick:  s.tick,
+			SnapshotSeq: s.snapshotSeq,
+			ServerTime:  unixMillis(now),
+			Events:      events,
+		})
+	}
 	startSerialization := time.Now()
 	base := SnapshotMessage{
 		Type:             "snapshot",
@@ -517,18 +534,19 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		ServerTime:       unixMillis(now),
 		MatchPhase:       s.phase,
 		Players:          players,
-		Entities:         entities,
+		Entities:         []EntityState{},
+		PlayerEntities:   playerEntities,
 		Enemies:          s.enemyList(),
-		CollectedRelics:  s.collectedRelicList(),
-		Events:           events,
+		CollectedRelics:  []string{},
+		Events:           []MatchEvent{},
 		LastProcessedSeq: lastProcessed,
 	}
-	encodedBase, err := json.Marshal(base)
+	encoded, err := json.Marshal(base)
 	if err != nil {
 		s.room.log.Error("marshal snapshot", "error", err)
 		return
 	}
-	s.metrics.recordSerialization(time.Since(startSerialization), len(encodedBase))
+	s.metrics.recordSerialization(time.Since(startSerialization), len(encoded))
 
 	startBroadcast := time.Now()
 	recipients := 0
@@ -536,13 +554,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		if !sess.connected {
 			continue
 		}
-		msg := base
-		msg.AckInputSeq = sess.lastProcessedSeq
-		encoded, err := json.Marshal(msg)
-		if err != nil {
-			continue
-		}
-		if sess.client.EnqueueEncoded(encoded) {
+		if sess.client.EnqueueSnapshotEncoded(encoded) {
 			recipients++
 			s.metrics.MessagesSent++
 			s.metrics.BytesSent += uint64(len(encoded))
@@ -570,6 +582,10 @@ func (s *roomState) broadcastJSON(payload any) {
 		}
 	}
 	s.metrics.recordBroadcast(time.Since(started), recipients)
+}
+
+func quantize2(value float64) float64 {
+	return math.Round(value*100) / 100
 }
 
 func (s *roomState) checkRelicCollection(sess *session) {

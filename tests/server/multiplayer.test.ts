@@ -248,13 +248,42 @@ test("snapshot message validates correctly including coins in player state", () 
   assert.equal(isServerMessage({
     type: "snapshot",
     tick: 60,
+    serverTick: 60,
     snapshotSeq: 1,
     serverTime: Date.now(),
     matchPhase: "playing",
+    ackInputSeq: 42,
     players: [playerState],
+    entities: [{
+      id: "p1",
+      type: "player",
+      kind: "player",
+      position: playerState.position,
+      velocity: playerState.velocity,
+      facing: playerState.facing,
+      grounded: playerState.grounded,
+    }],
     collectedRelics: ["relic:0:0", "relic:1:2"],
     events: [],
     lastProcessedSeq: { p1: 42 }
+  }), true);
+});
+
+test("reliable events message validates separately from snapshots", () => {
+  assert.equal(isServerMessage({
+    type: "events",
+    serverTick: 60,
+    snapshotSeq: 2,
+    serverTime: Date.now(),
+    events: [{ type: "PLAYER_KICK_HIT", playerId: "p1", targetId: "p2" }]
+  }), true);
+});
+
+test("relic state message validates collected relic sync", () => {
+  assert.equal(isServerMessage({
+    type: "relicState",
+    serverTime: Date.now(),
+    collectedRelics: ["relic:0:0", "relic:1:2"]
   }), true);
 });
 
@@ -299,8 +328,8 @@ test("snapshot with negative coins fails validation", () => {
   const badState = { ...createPlayerState("p1", 0, 0), coins: -1 };
   assert.equal(isServerMessage({
     type: "snapshot",
-    tick: 1, snapshotSeq: 1, serverTime: Date.now(), matchPhase: "playing",
-    players: [badState], collectedRelics: [], events: [], lastProcessedSeq: {}
+    tick: 1, serverTick: 1, snapshotSeq: 1, serverTime: Date.now(), matchPhase: "playing", ackInputSeq: -1,
+    players: [badState], entities: [], collectedRelics: [], events: [], lastProcessedSeq: {}
   }), false);
 });
 

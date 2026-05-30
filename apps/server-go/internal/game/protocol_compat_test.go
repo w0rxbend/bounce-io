@@ -264,8 +264,14 @@ func assertSnapshotShape(t *testing.T, msg map[string]any, playerID string) {
 	if _, ok := msg["tick"].(float64); !ok {
 		t.Fatalf("snapshot.tick must be numeric: %#v", msg)
 	}
+	if _, ok := msg["serverTick"].(float64); !ok {
+		t.Fatalf("snapshot.serverTick must be numeric: %#v", msg)
+	}
 	if _, ok := msg["snapshotSeq"].(float64); !ok {
 		t.Fatalf("snapshot.snapshotSeq must be numeric: %#v", msg)
+	}
+	if _, ok := msg["ackInputSeq"].(float64); !ok {
+		t.Fatalf("snapshot.ackInputSeq must be numeric: %#v", msg)
 	}
 	if _, ok := msg["players"].([]any); !ok {
 		t.Fatalf("snapshot.players must be array: %#v", msg)

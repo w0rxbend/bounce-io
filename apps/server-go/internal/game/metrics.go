@@ -8,6 +8,7 @@ import (
 
 type ServerMetrics struct {
 	StartedAt              time.Time
+	ActiveConnections      atomic.Int64
 	MessagesReceived       atomic.Uint64
 	BytesReceived          atomic.Uint64
 	MessagesSent           atomic.Uint64
@@ -32,6 +33,8 @@ type RoomMetrics struct {
 	BroadcastDurationMaxMS float64 `json:"broadcastDurationMaxMs"`
 	SerializationAvgMS     float64 `json:"serializationAvgMs"`
 	SerializationMaxMS     float64 `json:"serializationMaxMs"`
+	JSONEncodeAvgMS        float64 `json:"jsonEncodeAvgMs"`
+	JSONEncodeMaxMS        float64 `json:"jsonEncodeMaxMs"`
 	MessagesReceived       uint64  `json:"messagesReceived"`
 	BytesReceived          uint64  `json:"bytesReceived"`
 	MessagesSent           uint64  `json:"messagesSent"`
@@ -39,22 +42,30 @@ type RoomMetrics struct {
 	DroppedOutbound        uint64  `json:"droppedOutboundMessages"`
 	BackpressureDisconnect uint64  `json:"backpressureDisconnects"`
 	LastSnapshotBytes      int     `json:"lastSnapshotBytes"`
+	SnapshotBytesAvg       float64 `json:"snapshotBytesAvg"`
+	SnapshotBytesMax       int     `json:"snapshotBytesMax"`
 	BroadcastRecipients    int     `json:"broadcastRecipients"`
 	BroadcastDurationMS    float64 `json:"lastBroadcastDurationMs"`
 }
 
 type ClientMetrics struct {
-	MessagesReceived uint64  `json:"messagesReceived"`
-	BytesReceived    uint64  `json:"bytesReceived"`
-	MessagesSent     uint64  `json:"messagesSent"`
-	BytesSent        uint64  `json:"bytesSent"`
-	DroppedOutbound  uint64  `json:"droppedOutboundMessages"`
-	RTTMS            float64 `json:"rttMs"`
-	JitterMS         float64 `json:"jitterMs"`
-	LastPacketAgeMS  float64 `json:"lastPacketAgeMs"`
-	QueueDepth       int     `json:"queueDepth"`
-	LastInputSeq     int64   `json:"lastInputSeq"`
-	LastAckInputSeq  int64   `json:"lastAckInputSeq"`
+	MessagesReceived  uint64  `json:"messagesReceived"`
+	BytesReceived     uint64  `json:"bytesReceived"`
+	MessagesSent      uint64  `json:"messagesSent"`
+	BytesSent         uint64  `json:"bytesSent"`
+	DroppedOutbound   uint64  `json:"droppedOutboundMessages"`
+	WriteLatencyAvgMS float64 `json:"writeLatencyAvgMs"`
+	WriteLatencyMaxMS float64 `json:"writeLatencyMaxMs"`
+	ReadLatencyAvgMS  float64 `json:"readLatencyAvgMs"`
+	ReadLatencyMaxMS  float64 `json:"readLatencyMaxMs"`
+	JSONDecodeAvgMS   float64 `json:"jsonDecodeAvgMs"`
+	JSONDecodeMaxMS   float64 `json:"jsonDecodeMaxMs"`
+	RTTMS             float64 `json:"rttMs"`
+	JitterMS          float64 `json:"jitterMs"`
+	LastPacketAgeMS   float64 `json:"lastPacketAgeMs"`
+	QueueDepth        int     `json:"queueDepth"`
+	LastInputSeq      int64   `json:"lastInputSeq"`
+	LastAckInputSeq   int64   `json:"lastAckInputSeq"`
 }
 
 func recordEMA(previous, next, alpha float64) float64 {
@@ -98,7 +109,15 @@ func (m *RoomMetrics) recordSerialization(duration time.Duration, bytes int) {
 	if durationMS > m.SerializationMaxMS {
 		m.SerializationMaxMS = durationMS
 	}
+	m.JSONEncodeAvgMS = recordEMA(m.JSONEncodeAvgMS, durationMS, 0.08)
+	if durationMS > m.JSONEncodeMaxMS {
+		m.JSONEncodeMaxMS = durationMS
+	}
 	m.LastSnapshotBytes = bytes
+	m.SnapshotBytesAvg = recordEMA(m.SnapshotBytesAvg, float64(bytes), 0.08)
+	if bytes > m.SnapshotBytesMax {
+		m.SnapshotBytesMax = bytes
+	}
 }
 
 type ProcessMetrics struct {
@@ -106,13 +125,15 @@ type ProcessMetrics struct {
 	GoVersion     string `json:"goVersion"`
 	Goroutines    int    `json:"goroutines"`
 	Memory        struct {
-		AllocBytes     uint64 `json:"allocBytes"`
-		HeapAllocBytes uint64 `json:"heapAllocBytes"`
-		HeapSysBytes   uint64 `json:"heapSysBytes"`
-		NextGCBytes    uint64 `json:"nextGcBytes"`
-		LastGCPauseNS  uint64 `json:"lastGcPauseNs"`
-		TotalGCPauseNS uint64 `json:"totalGcPauseNs"`
-		NumGC          uint32 `json:"numGc"`
+		AllocBytes           uint64  `json:"allocBytes"`
+		HeapAllocBytes       uint64  `json:"heapAllocBytes"`
+		HeapSysBytes         uint64  `json:"heapSysBytes"`
+		TotalAllocBytes      uint64  `json:"totalAllocBytes"`
+		AllocRateBytesPerSec float64 `json:"allocRateBytesPerSecond"`
+		NextGCBytes          uint64  `json:"nextGcBytes"`
+		LastGCPauseNS        uint64  `json:"lastGcPauseNs"`
+		TotalGCPauseNS       uint64  `json:"totalGcPauseNs"`
+		NumGC                uint32  `json:"numGc"`
 	} `json:"memory"`
 }
 
@@ -127,6 +148,12 @@ func BuildProcessMetrics(startedAt time.Time) ProcessMetrics {
 	out.Memory.AllocBytes = mem.Alloc
 	out.Memory.HeapAllocBytes = mem.HeapAlloc
 	out.Memory.HeapSysBytes = mem.HeapSys
+	out.Memory.TotalAllocBytes = mem.TotalAlloc
+	uptime := time.Since(startedAt).Seconds()
+	if uptime < 1 {
+		uptime = 1
+	}
+	out.Memory.AllocRateBytesPerSec = float64(mem.TotalAlloc) / uptime
 	out.Memory.NextGCBytes = mem.NextGC
 	if mem.NumGC > 0 {
 		out.Memory.LastGCPauseNS = mem.PauseNs[(mem.NumGC+255)%256]

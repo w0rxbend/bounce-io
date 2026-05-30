@@ -109,6 +109,39 @@ function isEnemyState(value: unknown): value is EnemyState {
     isFiniteNumber(value.hurtCooldown);
 }
 
+function isSnapshotEntity(value: unknown): boolean {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isString(value.type) &&
+    isString(value.kind) &&
+    isVec2(value.position) &&
+    isVec2(value.velocity) &&
+    (value.facing === -1 || value.facing === 1) &&
+    (value.grounded === undefined || isBoolean(value.grounded)) &&
+    (value.kickPhase === undefined || isKickPhase(value.kickPhase)) &&
+    (value.kickTimer === undefined || isFiniteNumber(value.kickTimer)) &&
+    (value.invulnerable === undefined || isFiniteNumber(value.invulnerable)) &&
+    (value.health === undefined || isFiniteNumber(value.health)) &&
+    (value.coins === undefined || isInteger(value.coins));
+}
+
+function isPlayerEntityFrame(value: unknown): boolean {
+  return isRecord(value) &&
+    isString(value.id) &&
+    (value.s === undefined || isString(value.s)) &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y) &&
+    isFiniteNumber(value.vx) &&
+    isFiniteNumber(value.vy) &&
+    (value.f === -1 || value.f === 1) &&
+    isBoolean(value.g) &&
+    (value.k === undefined || isKickPhase(value.k)) &&
+    (value.kt === undefined || isFiniteNumber(value.kt)) &&
+    (value.iv === undefined || isFiniteNumber(value.iv)) &&
+    isFiniteNumber(value.h) &&
+    isInteger(value.c);
+}
+
 export function isPlayerInput(value: unknown): value is PlayerInput {
   return isRecord(value) &&
     isBoolean(value.left) &&
@@ -239,17 +272,32 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         isPlayerState(value.playerState);
     case "snapshot":
       return isInteger(value.tick) &&
+        isInteger(value.serverTick) &&
         isInteger(value.snapshotSeq) &&
         isFiniteNumber(value.serverTime) &&
         isString(value.matchPhase) &&
+        isInteger(value.ackInputSeq) &&
         Array.isArray(value.players) &&
         (value.players as unknown[]).every(isPlayerState) &&
+        Array.isArray(value.entities) &&
+        (value.entities as unknown[]).every(isSnapshotEntity) &&
+        (value.playerEntities === undefined || (Array.isArray(value.playerEntities) && (value.playerEntities as unknown[]).every(isPlayerEntityFrame))) &&
         (value.enemies === undefined || (Array.isArray(value.enemies) && (value.enemies as unknown[]).every(isEnemyState))) &&
         Array.isArray(value.collectedRelics) &&
         (value.collectedRelics as unknown[]).every(isString) &&
         Array.isArray(value.events) &&
         (value.events as unknown[]).every(isMatchEvent) &&
         isRecord(value.lastProcessedSeq);
+    case "events":
+      return isInteger(value.serverTick) &&
+        isInteger(value.snapshotSeq) &&
+        isFiniteNumber(value.serverTime) &&
+        Array.isArray(value.events) &&
+        (value.events as unknown[]).every(isMatchEvent);
+    case "relicState":
+      return isFiniteNumber(value.serverTime) &&
+        Array.isArray(value.collectedRelics) &&
+        (value.collectedRelics as unknown[]).every(isString);
     case "matchPhase":
       return isString(value.phase);
     case "chunk":

@@ -23,6 +23,7 @@ func main() {
 		Port:              envInt("PORT", 8787),
 		TickRate:          envInt("TICK_RATE", game.DefaultTickRate),
 		SnapshotRate:      envInt("SNAPSHOT_RATE", game.DefaultSnapshotRate),
+		MaxPlayers:        envInt("MAX_PLAYERS", game.DefaultMaxPlayers),
 		MaxMessageBytes:   int64(envInt("MAX_MESSAGE_BYTES", 2048)),
 		OutboundQueueSize: envInt("OUTBOUND_QUEUE_SIZE", game.DefaultOutboundQueue),
 		MaxOutboundDrops:  uint64(envInt("MAX_OUTBOUND_DROPS", 64)),

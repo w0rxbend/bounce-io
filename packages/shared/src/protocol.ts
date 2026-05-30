@@ -1,6 +1,38 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
 
+export type SnapshotEntity = {
+  id: PlayerId;
+  skinId?: string;
+  type: string;
+  kind: string;
+  position: { x: number; y: number };
+  velocity: { x: number; y: number };
+  facing: -1 | 1;
+  grounded?: boolean;
+  kickPhase?: PlayerState["kickPhase"];
+  kickTimer?: number;
+  invulnerable?: number;
+  health?: number;
+  coins?: number;
+};
+
+export type PlayerEntityFrame = {
+  id: PlayerId;
+  s?: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  f: -1 | 1;
+  g: boolean;
+  k?: PlayerState["kickPhase"];
+  kt?: number;
+  iv?: number;
+  h: number;
+  c: number;
+};
+
 export type ClientMessage =
   | {
       type: "hello";
@@ -45,14 +77,30 @@ export type ServerMessage =
   | {
       type: "snapshot";
       tick: number;
+      serverTick: number;
       snapshotSeq: number;
       serverTime: number;
       matchPhase: RoomPhase;
+      ackInputSeq: number;
       players: PlayerState[];
+      entities: SnapshotEntity[];
+      playerEntities?: PlayerEntityFrame[];
       enemies?: EnemyState[];
       collectedRelics: RelicId[];
       events: MatchEvent[];
       lastProcessedSeq: Record<PlayerId, number>;
+    }
+  | {
+      type: "events";
+      serverTick: number;
+      snapshotSeq: number;
+      serverTime: number;
+      events: MatchEvent[];
+    }
+  | {
+      type: "relicState";
+      serverTime: number;
+      collectedRelics: RelicId[];
     }
   | {
       type: "matchPhase";

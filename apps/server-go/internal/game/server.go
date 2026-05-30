@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"sort"
 	"strconv"
 	"sync"
@@ -19,6 +20,7 @@ type ServerConfig struct {
 	Port              int
 	TickRate          int
 	SnapshotRate      int
+	MaxPlayers        int
 	MaxMessageBytes   int64
 	OutboundQueueSize int
 	MaxOutboundDrops  uint64
@@ -62,6 +64,9 @@ func NewServer(cfg ServerConfig, log *slog.Logger) *Server {
 	if cfg.SnapshotRate <= 0 {
 		cfg.SnapshotRate = DefaultSnapshotRate
 	}
+	if cfg.MaxPlayers <= 0 {
+		cfg.MaxPlayers = DefaultMaxPlayers
+	}
 	if cfg.MaxMessageBytes <= 0 {
 		cfg.MaxMessageBytes = 2048
 	}
@@ -85,6 +90,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/ws", s.handleWebSocket)
 	mux.HandleFunc("/debug/world", s.handleWorldDebug)
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	mux.HandleFunc("/metrics/prometheus", s.handlePrometheusMetrics)
 	return mux
@@ -197,6 +207,7 @@ type MetricsSnapshot struct {
 	UptimeSeconds int64          `json:"uptimeSeconds"`
 	Process       ProcessMetrics `json:"process"`
 	WebSocket     struct {
+		ActiveConnections      int64   `json:"activeConnections"`
 		MessagesReceived       uint64  `json:"messagesReceived"`
 		MessagesSent           uint64  `json:"messagesSent"`
 		BytesReceived          uint64  `json:"bytesReceived"`
@@ -220,6 +231,7 @@ func (s *Server) metricsSnapshot() MetricsSnapshot {
 		UptimeSeconds: int64(uptime),
 		Process:       BuildProcessMetrics(s.stats.StartedAt),
 	}
+	out.WebSocket.ActiveConnections = s.stats.ActiveConnections.Load()
 	out.WebSocket.MessagesReceived = s.stats.MessagesReceived.Load()
 	out.WebSocket.MessagesSent = s.stats.MessagesSent.Load()
 	out.WebSocket.BytesReceived = s.stats.BytesReceived.Load()
@@ -258,6 +270,8 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	client := NewClient(conn, s.cfg.OutboundQueueSize, s.cfg.MaxOutboundDrops, s.stats, s.log)
+	s.stats.ActiveConnections.Add(1)
+	defer s.stats.ActiveConnections.Add(-1)
 	go client.WriteLoop(ctx)
 	s.readLoop(ctx, client, conn, r)
 	<-client.done
@@ -273,7 +287,9 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 	}()
 
 	for {
+		readStart := time.Now()
 		msgType, data, err := conn.Read(ctx)
+		client.RecordReadLatency(time.Since(readStart))
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
 				s.log.Debug("websocket read closed", "error", err)
@@ -291,11 +307,14 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 		client.RecordInbound(len(data))
 
 		var env MessageEnvelope
+		decodeStart := time.Now()
 		if err := json.Unmarshal(data, &env); err != nil {
+			client.RecordJSONDecode(time.Since(decodeStart))
 			s.logParseError(client, r, "PARSE_ERROR", err)
 			_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: "PARSE_ERROR", Message: "invalid JSON"})
 			continue
 		}
+		client.RecordJSONDecode(time.Since(decodeStart))
 		s.logInbound(client, r, env.Type)
 		switch env.Type {
 		case "hello", "join":
@@ -403,6 +422,7 @@ func (s *Server) getOrCreateRoom(id string) *Room {
 		ID:           id,
 		TickRate:     s.cfg.TickRate,
 		SnapshotRate: s.cfg.SnapshotRate,
+		MaxPlayers:   s.cfg.MaxPlayers,
 	}, s.stats, s.log)
 	s.rooms[id] = room
 	return room

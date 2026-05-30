@@ -30,7 +30,7 @@ import {
   stepPlayer,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "@skybound/shared";
+import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, RelicSpawn, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
 import "./styles.css";
 
@@ -2539,13 +2539,22 @@ interface NetworkMetrics {
   messagesSent: number;
   bytesReceived: number;
   bytesSent: number;
+  bufferedAmountBytes: number;
   messagesReceivedPerSecond: number;
   messagesSentPerSecond: number;
   bytesReceivedPerSecond: number;
   bytesSentPerSecond: number;
   droppedOutOfOrderSnapshots: number;
+  droppedStaleSnapshots: number;
   snapshotDelayMs: number;
   snapshotJitterMs: number;
+  interpolationBufferSize: number;
+  parseTimeAvgMs: number;
+  parseTimeMaxMs: number;
+  correctionDistancePx: number;
+  correctionDistanceMaxPx: number;
+  localPredictionRollbackCount: number;
+  pendingInputCount: number;
   lastSnapshotDelayMs: number;
   lastRateSampleMs: number;
   rateWindowMessagesReceived: number;
@@ -2559,13 +2568,22 @@ const netMetrics: NetworkMetrics = {
   messagesSent: 0,
   bytesReceived: 0,
   bytesSent: 0,
+  bufferedAmountBytes: 0,
   messagesReceivedPerSecond: 0,
   messagesSentPerSecond: 0,
   bytesReceivedPerSecond: 0,
   bytesSentPerSecond: 0,
   droppedOutOfOrderSnapshots: 0,
+  droppedStaleSnapshots: 0,
   snapshotDelayMs: 0,
   snapshotJitterMs: 0,
+  interpolationBufferSize: 0,
+  parseTimeAvgMs: 0,
+  parseTimeMaxMs: 0,
+  correctionDistancePx: 0,
+  correctionDistanceMaxPx: 0,
+  localPredictionRollbackCount: 0,
+  pendingInputCount: 0,
   lastSnapshotDelayMs: 0,
   lastRateSampleMs: Date.now(),
   rateWindowMessagesReceived: 0,
@@ -3021,6 +3039,34 @@ function resetGameSession(mode: GameMode): void {
   hasServerClock = false;
   pingSamples.length = 0;
   pingJitterMs = 0;
+  Object.assign(netMetrics, {
+    messagesReceived: 0,
+    messagesSent: 0,
+    bytesReceived: 0,
+    bytesSent: 0,
+    bufferedAmountBytes: 0,
+    messagesReceivedPerSecond: 0,
+    messagesSentPerSecond: 0,
+    bytesReceivedPerSecond: 0,
+    bytesSentPerSecond: 0,
+    droppedOutOfOrderSnapshots: 0,
+    droppedStaleSnapshots: 0,
+    snapshotDelayMs: 0,
+    snapshotJitterMs: 0,
+    interpolationBufferSize: 0,
+    parseTimeAvgMs: 0,
+    parseTimeMaxMs: 0,
+    correctionDistancePx: 0,
+    correctionDistanceMaxPx: 0,
+    localPredictionRollbackCount: 0,
+    pendingInputCount: 0,
+    lastSnapshotDelayMs: 0,
+    lastRateSampleMs: Date.now(),
+    rateWindowMessagesReceived: 0,
+    rateWindowMessagesSent: 0,
+    rateWindowBytesReceived: 0,
+    rateWindowBytesSent: 0,
+  });
   lastHudRegion = null;
   lastScoreboardKey = "";
   playerStatsHud?.reset();
@@ -6587,7 +6633,7 @@ function updateDebug(): void {
   dbgText.visible = showDebug;
   if (!showDebug) return;
 
-  drawHudPanel(dbgGfx, 4, 58, 244, 188);
+  drawHudPanel(dbgGfx, 4, 58, 268, 236);
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
@@ -6620,10 +6666,13 @@ function updateDebug(): void {
     `update ${perfMetrics.updateMsAvg.toFixed(1)}ms  sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
     `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms  particles ${perfMetrics.particleCount}\n` +
     `objects ${perfMetrics.displayObjectCount}  chunks ${authoritativeChunks.size}/${loadedChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
+    `ping ${pingMs.toFixed(0)}ms  jitter ${pingJitterMs.toFixed(1)}ms  interp ${adaptiveInterpDelayMs.toFixed(0)}ms\n` +
     `net in ${netMetrics.messagesReceivedPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesReceivedPerSecond)}B/s\n` +
-    `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s\n` +
-    `snap delay ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms\n` +
-    `dropped snapshots ${netMetrics.droppedOutOfOrderSnapshots}`;
+    `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s buf ${Math.round(netMetrics.bufferedAmountBytes)}B\n` +
+    `snap age ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms ibuf ${netMetrics.interpolationBufferSize.toFixed(1)}\n` +
+    `parse ${netMetrics.parseTimeAvgMs.toFixed(2)}ms max ${netMetrics.parseTimeMaxMs.toFixed(2)}ms\n` +
+    `corr ${netMetrics.correctionDistancePx.toFixed(1)}px max ${netMetrics.correctionDistanceMaxPx.toFixed(1)}px rollback ${netMetrics.localPredictionRollbackCount}\n` +
+    `pending inputs ${netMetrics.pendingInputCount} dropped stale ${netMetrics.droppedStaleSnapshots}`;
 }
 
 // ── Pixi menu flow ────────────────────────────────────────────────────────────
@@ -7429,6 +7478,7 @@ function sendWsMessage(payload: unknown): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const raw = JSON.stringify(payload);
   ws.send(raw);
+  netMetrics.bufferedAmountBytes = ws.bufferedAmount;
   const bytes = byteLength(raw);
   netMetrics.messagesSent++;
   netMetrics.bytesSent += bytes;
@@ -7436,8 +7486,14 @@ function sendWsMessage(payload: unknown): void {
   netMetrics.rateWindowBytesSent += bytes;
 }
 
+function recordClientParseTime(durationMs: number): void {
+  netMetrics.parseTimeAvgMs += (durationMs - netMetrics.parseTimeAvgMs) * 0.12;
+  if (durationMs > netMetrics.parseTimeMaxMs) netMetrics.parseTimeMaxMs = durationMs;
+}
+
 function updateNetworkRates(): void {
   const now = Date.now();
+  netMetrics.bufferedAmountBytes = ws?.bufferedAmount ?? 0;
   const elapsedSeconds = (now - netMetrics.lastRateSampleMs) / 1000;
   if (elapsedSeconds < 1) return;
 
@@ -7462,6 +7518,52 @@ function recordSnapshotDelay(serverTime: number): void {
     netMetrics.snapshotJitterMs += (jitter - netMetrics.snapshotJitterMs) * 0.12;
   }
   netMetrics.lastSnapshotDelayMs = delay;
+}
+
+function handleMatchEvents(events: MatchEvent[]): void {
+  for (const ev2 of events) {
+    if (ev2.type === "COIN_COLLECTED") {
+      collectedRelics.add(ev2.coinId);
+      const remote = remotePlayers.get(ev2.playerId);
+      if (remote && ev2.playerId !== localPlayerId) remote.current.coins += ev2.value;
+      pickupBurst(ev2.x, ev2.y, ev2.pickupType);
+      if (ev2.playerId === localPlayerId) {
+        const visual = collectibleVisual(ev2.pickupType);
+        pushNotification(visual.notification, visual.color);
+      }
+    } else if (ev2.type === "PLAYER_KICK_HIT") {
+      const target = ev2.targetId === localPlayerId
+        ? localPlayer
+        : remotePlayers.get(ev2.targetId)?.current ?? null;
+      if (target) damageFeedback(target.position.x + PLAYER_WIDTH / 2, target.position.y + PLAYER_HEIGHT * 0.45, 1);
+      if (ev2.playerId === localPlayerId) pushNotification("KICK HIT", PAL.hazardGlow);
+      else if (ev2.targetId === localPlayerId) pushNotification("KICKED!", PAL.hazardRed);
+    } else if (ev2.type === "ENEMY_HIT") {
+      damageFeedback(ev2.x, ev2.y, ev2.damage);
+      if (ev2.playerId === localPlayerId) pushNotification("NPC HIT", PAL.hazardGlow);
+    } else if (ev2.type === "ENEMY_KILLED") {
+      burst(ev2.x, ev2.y, PAL.coinGold);
+      spawnFloatingText(ev2.x, ev2.y - 14, "DROP", PAL.coinGold);
+      spawnDropAnimations(ev2.drops);
+      if (ev2.playerId === localPlayerId) pushNotification("NPC DOWN", PAL.coinGold);
+    } else if (ev2.type === "JUMP_PAD_TRIGGERED") {
+      if (ev2.playerId !== localPlayerId || elapsedMs - lastLocalJumpPadFxMs > 250) {
+        jumpPadFeedback(ev2.x, ev2.y, ev2.multiplier);
+      }
+    } else if (ev2.type === "CHECKPOINT_REACHED" && ev2.playerId === localPlayerId) {
+      checkpointCeremony(ev2.chunkY);
+      pushNotification("CHECKPOINT REACHED", PAL.portalGlow);
+    } else if (ev2.type === "PLAYER_DIED" && ev2.playerId === localPlayerId) {
+      triggerScreenFlash(PAL.hazardRed, 0.22);
+      triggerShake(4, 3);
+    } else if (ev2.type === "PLAYER_RESPAWNED" && ev2.playerId === localPlayerId) {
+      const p = localPlayer;
+      if (p) {
+        spawnRing(p.position.x + PLAYER_WIDTH / 2, p.position.y + PLAYER_HEIGHT / 2, PAL.portalBlue);
+        spawnFloatingText(p.position.x + PLAYER_WIDTH / 2, p.position.y - 10, "RESPAWN", PAL.portalGlow);
+      }
+    }
+  }
 }
 
 function disconnectNetwork(): void {
@@ -7518,7 +7620,12 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
     if (typeof ev.data !== "string") return;
     recordIncomingNetworkMessage(ev.data);
     let parsed: unknown;
-    try { parsed = JSON.parse(ev.data); } catch { return; }
+    const parseStart = performance.now();
+    try { parsed = JSON.parse(ev.data); } catch {
+      recordClientParseTime(performance.now() - parseStart);
+      return;
+    }
+    recordClientParseTime(performance.now() - parseStart);
     if (!isServerMessage(parsed)) return;
 
     switch (parsed.type) {
@@ -7556,6 +7663,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
       case "snapshot":
         if (parsed.snapshotSeq <= lastSnapshotSeq || parsed.tick <= serverTick) {
           netMetrics.droppedOutOfOrderSnapshots++;
+          netMetrics.droppedStaleSnapshots++;
           break;
         }
         lastSnapshotSeq = parsed.snapshotSeq;
@@ -7563,57 +7671,41 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         serverTick = parsed.tick; matchPhase = parsed.matchPhase;
         // Reconcile full collected set so late-joiners see correct coin state
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
-        for (const ev2 of parsed.events) {
-          if (ev2.type === "COIN_COLLECTED") {
-            collectedRelics.add(ev2.coinId);
-            pickupBurst(ev2.x, ev2.y, ev2.pickupType);
-            if (ev2.playerId === localPlayerId) {
-              const visual = collectibleVisual(ev2.pickupType);
-              pushNotification(visual.notification, visual.color);
-            }
-          } else if (ev2.type === "PLAYER_KICK_HIT") {
-            const target = ev2.targetId === localPlayerId
-              ? localPlayer
-              : remotePlayers.get(ev2.targetId)?.current ?? null;
-            if (target) damageFeedback(target.position.x + PLAYER_WIDTH / 2, target.position.y + PLAYER_HEIGHT * 0.45, 1);
-            if (ev2.playerId === localPlayerId) pushNotification("KICK HIT", PAL.hazardGlow);
-            else if (ev2.targetId === localPlayerId) pushNotification("KICKED!", PAL.hazardRed);
-          } else if (ev2.type === "ENEMY_HIT") {
-            damageFeedback(ev2.x, ev2.y, ev2.damage);
-            if (ev2.playerId === localPlayerId) pushNotification("NPC HIT", PAL.hazardGlow);
-          } else if (ev2.type === "ENEMY_KILLED") {
-            burst(ev2.x, ev2.y, PAL.coinGold);
-            spawnFloatingText(ev2.x, ev2.y - 14, "DROP", PAL.coinGold);
-            spawnDropAnimations(ev2.drops);
-            if (ev2.playerId === localPlayerId) pushNotification("NPC DOWN", PAL.coinGold);
-          } else if (ev2.type === "JUMP_PAD_TRIGGERED") {
-            if (ev2.playerId !== localPlayerId || elapsedMs - lastLocalJumpPadFxMs > 250) {
-              jumpPadFeedback(ev2.x, ev2.y, ev2.multiplier);
-            }
-          } else if (ev2.type === "CHECKPOINT_REACHED" && ev2.playerId === localPlayerId) {
-            checkpointCeremony(ev2.chunkY);
-            pushNotification("CHECKPOINT REACHED", PAL.portalGlow);
-          } else if (ev2.type === "PLAYER_DIED" && ev2.playerId === localPlayerId) {
-            triggerScreenFlash(PAL.hazardRed, 0.22);
-            triggerShake(4, 3);
-          } else if (ev2.type === "PLAYER_RESPAWNED" && ev2.playerId === localPlayerId) {
-            const p = localPlayer;
-            if (p) {
-              spawnRing(p.position.x + PLAYER_WIDTH / 2, p.position.y + PLAYER_HEIGHT / 2, PAL.portalBlue);
-              spawnFloatingText(p.position.x + PLAYER_WIDTH / 2, p.position.y - 10, "RESPAWN", PAL.portalGlow);
-            }
-          }
-        }
+        handleMatchEvents(parsed.events);
+        const fullPlayerIds = new Set<string>();
         for (const sp of parsed.players) {
-          if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.lastProcessedSeq[sp.id] ?? -1);
+          fullPlayerIds.add(sp.id);
+          if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.ackInputSeq ?? parsed.lastProcessedSeq[sp.id] ?? -1);
           else updateRemotePlayer(sp, parsed.serverTime, parsed.tick);
         }
+        for (const entity of parsed.entities) {
+          if (entity.type !== "player" || entity.id === localPlayerId || fullPlayerIds.has(entity.id)) continue;
+          updateRemotePlayer(playerStateFromSnapshotEntity(entity), parsed.serverTime, parsed.tick);
+        }
+        for (const entity of parsed.playerEntities ?? []) {
+          if (entity.id === localPlayerId && !fullPlayerIds.has(entity.id)) {
+            reconcileLocalPlayer(playerStateFromEntityFrame(entity, localPlayer), parsed.lastProcessedSeq[entity.id] ?? parsed.ackInputSeq ?? -1);
+            continue;
+          }
+          if (fullPlayerIds.has(entity.id)) continue;
+          updateRemotePlayer(playerStateFromEntityFrame(entity), parsed.serverTime, parsed.tick);
+        }
         updateEnemyEntries(parsed.enemies ?? [], elapsedMs / 1000);
-        { const ids = new Set(parsed.players.map((p) => p.id));
+        { const ids = new Set([
+            ...parsed.players.map((p) => p.id),
+            ...parsed.entities.filter((entity) => entity.type === "player").map((entity) => entity.id),
+            ...(parsed.playerEntities ?? []).map((entity) => entity.id),
+          ]);
           for (const pid of remotePlayers.keys()) {
             if (!ids.has(pid)) { const e = remotePlayers.get(pid); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(pid); }
           }
         }
+        break;
+      case "events":
+        handleMatchEvents(parsed.events);
+        break;
+      case "relicState":
+        for (const id of parsed.collectedRelics) collectedRelics.add(id);
         break;
       case "chunk": {
         const chunkY = parsed.chunk.chunkY;
@@ -7781,7 +7873,10 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
   if (idx < 0) { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true; return; }
   const pred = predBuf[idx]; if (!pred) return;
   const correction = Math.hypot(ss.position.x - pred.state.position.x, ss.position.y - pred.state.position.y);
+  netMetrics.correctionDistancePx += (correction - netMetrics.correctionDistancePx) * 0.16;
+  if (correction > netMetrics.correctionDistanceMaxPx) netMetrics.correctionDistanceMaxPx = correction;
   if (correction > RECONCILIATION_TOLERANCE_PX) {
+    netMetrics.localPredictionRollbackCount++;
     const snapVisual = correction > LOCAL_VISUAL_SNAP_THRESHOLD_PX || ss.invulnerable > 0;
     localPlayer = clonePlayerState(ss);
     for (let i = idx + 1; i < predBuf.length; i++) {
@@ -7793,6 +7888,7 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
     if (snapVisual) snapLocalVisualToSimulation();
   }
   predBuf.splice(0, idx + 1);
+  netMetrics.pendingInputCount = predBuf.length;
 }
 
 function updateRemotePlayer(s: PlayerState, serverTime: number, tick: number): void {
@@ -7805,10 +7901,46 @@ function updateRemotePlayer(s: PlayerState, serverTime: number, tick: number): v
   const last = e.states[e.states.length - 1];
   if (last && tick <= last.tick) {
     netMetrics.droppedOutOfOrderSnapshots++;
+    netMetrics.droppedStaleSnapshots++;
     return;
   }
   e.states.push({ state: clonePlayerState(s), t: serverTime, tick });
   if (e.states.length > 20) e.states.shift();
+  let total = 0;
+  for (const remote of remotePlayers.values()) total += remote.states.length;
+  netMetrics.interpolationBufferSize = remotePlayers.size > 0 ? total / remotePlayers.size : 0;
+}
+
+function playerStateFromSnapshotEntity(entity: SnapshotEntity): PlayerState {
+  const existing = remotePlayers.get(entity.id)?.current;
+  const player = existing ? clonePlayerState(existing) : createPlayerState(entity.id, entity.position.x, entity.position.y);
+  player.skinId = normalizeCharacterId(entity.skinId ?? player.skinId);
+  player.position = { x: entity.position.x, y: entity.position.y };
+  player.velocity = { x: entity.velocity.x, y: entity.velocity.y };
+  player.facing = entity.facing;
+  player.grounded = entity.grounded ?? player.grounded;
+  player.kickPhase = entity.kickPhase ?? player.kickPhase;
+  player.kickTimer = entity.kickTimer ?? player.kickTimer;
+  player.invulnerable = entity.invulnerable ?? player.invulnerable;
+  player.health = entity.health ?? player.health;
+  player.coins = entity.coins ?? player.coins;
+  return player;
+}
+
+function playerStateFromEntityFrame(frame: PlayerEntityFrame, base?: PlayerState | null): PlayerState {
+  const existing = base ?? remotePlayers.get(frame.id)?.current;
+  const player = existing ? clonePlayerState(existing) : createPlayerState(frame.id, frame.x, frame.y);
+  player.skinId = normalizeCharacterId(frame.s || player.skinId);
+  player.position = { x: frame.x, y: frame.y };
+  player.velocity = { x: frame.vx, y: frame.vy };
+  player.facing = frame.f;
+  player.grounded = frame.g;
+  player.kickPhase = frame.k ?? player.kickPhase;
+  player.kickTimer = frame.kt ?? player.kickTimer;
+  player.invulnerable = frame.iv ?? player.invulnerable;
+  player.health = frame.h;
+  player.coins = frame.c;
+  return player;
 }
 
 function interpRemotes(): void {
@@ -8084,6 +8216,7 @@ pixi.ticker.add((ticker) => {
       localPlayer = next;
       if (predBuf.length >= 120) predBuf.shift();
       predBuf.push({ seq: inp.sequence, input: inp, state: clonePlayerState(next) });
+      netMetrics.pendingInputCount = predBuf.length;
       sendInput(inp);
     }
   } else {

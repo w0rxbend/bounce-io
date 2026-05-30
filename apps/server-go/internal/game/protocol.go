@@ -172,12 +172,35 @@ type PlayerState struct {
 }
 
 type EntityState struct {
-	ID       string `json:"id"`
-	Kind     string `json:"kind"`
-	Type     string `json:"type"`
-	Position Vec2   `json:"position"`
-	Velocity Vec2   `json:"velocity"`
-	Facing   int    `json:"facing"`
+	ID           string  `json:"id"`
+	SkinID       string  `json:"skinId,omitempty"`
+	Kind         string  `json:"kind"`
+	Type         string  `json:"type"`
+	Position     Vec2    `json:"position"`
+	Velocity     Vec2    `json:"velocity"`
+	Facing       int     `json:"facing"`
+	Grounded     bool    `json:"grounded"`
+	KickPhase    string  `json:"kickPhase,omitempty"`
+	KickTimer    float64 `json:"kickTimer,omitempty"`
+	Invulnerable float64 `json:"invulnerable,omitempty"`
+	Health       int     `json:"health"`
+	Coins        int     `json:"coins"`
+}
+
+type PlayerEntityFrame struct {
+	ID           string  `json:"id"`
+	SkinID       string  `json:"s,omitempty"`
+	X            float64 `json:"x"`
+	Y            float64 `json:"y"`
+	VX           float64 `json:"vx"`
+	VY           float64 `json:"vy"`
+	Facing       int     `json:"f"`
+	Grounded     bool    `json:"g"`
+	KickPhase    string  `json:"k,omitempty"`
+	KickTimer    float64 `json:"kt,omitempty"`
+	Invulnerable float64 `json:"iv,omitempty"`
+	Health       int     `json:"h"`
+	Coins        int     `json:"c"`
 }
 
 type EnemySpawn struct {
@@ -217,19 +240,34 @@ type WelcomeMessage struct {
 }
 
 type SnapshotMessage struct {
-	Type             string           `json:"type"`
-	Tick             uint64           `json:"tick"`
-	ServerTick       uint64           `json:"serverTick"`
-	SnapshotSeq      uint64           `json:"snapshotSeq"`
-	ServerTime       int64            `json:"serverTime"`
-	MatchPhase       string           `json:"matchPhase"`
-	AckInputSeq      int64            `json:"ackInputSeq"`
-	Players          []PlayerState    `json:"players"`
-	Entities         []EntityState    `json:"entities"`
-	Enemies          []EnemyState     `json:"enemies"`
-	CollectedRelics  []string         `json:"collectedRelics"`
-	Events           []MatchEvent     `json:"events"`
-	LastProcessedSeq map[string]int64 `json:"lastProcessedSeq"`
+	Type             string              `json:"type"`
+	Tick             uint64              `json:"tick"`
+	ServerTick       uint64              `json:"serverTick"`
+	SnapshotSeq      uint64              `json:"snapshotSeq"`
+	ServerTime       int64               `json:"serverTime"`
+	MatchPhase       string              `json:"matchPhase"`
+	AckInputSeq      int64               `json:"ackInputSeq"`
+	Players          []PlayerState       `json:"players"`
+	Entities         []EntityState       `json:"entities"`
+	PlayerEntities   []PlayerEntityFrame `json:"playerEntities"`
+	Enemies          []EnemyState        `json:"enemies"`
+	CollectedRelics  []string            `json:"collectedRelics"`
+	Events           []MatchEvent        `json:"events"`
+	LastProcessedSeq map[string]int64    `json:"lastProcessedSeq"`
+}
+
+type EventsMessage struct {
+	Type        string       `json:"type"`
+	ServerTick  uint64       `json:"serverTick"`
+	SnapshotSeq uint64       `json:"snapshotSeq"`
+	ServerTime  int64        `json:"serverTime"`
+	Events      []MatchEvent `json:"events"`
+}
+
+type RelicStateMessage struct {
+	Type            string   `json:"type"`
+	ServerTime      int64    `json:"serverTime"`
+	CollectedRelics []string `json:"collectedRelics"`
 }
 
 type ErrorMessage struct {
