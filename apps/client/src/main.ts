@@ -118,6 +118,7 @@ const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing for
 const INITIAL_CHUNKS_TO_LOAD = 4;
 const CHUNK_PIXEL_HEIGHT = CHUNK_HEIGHT_TILES * TILE_SIZE;
 const ACTIVE_VIEW_MARGIN_PX = 120;
+const PRESSURE_VIEW_MARGIN_PX = 64;
 const BIOME_FLUTTER_VISIBLE_TARGET = 20;
 const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 
@@ -369,6 +370,12 @@ const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>(
 const PROCEDURAL_MOUNTAIN_FOLDERS = new Set(["environment/midMountains"]);
 const PROCEDURAL_PLATFORM_FOLDERS = new Set(["environment/platforms", "environment/platformVariants"]);
 const PROCEDURAL_GAMEPLAY_PROP_FOLDERS = new Set(["environment/relicShrines"]);
+const MAX_PIXEL_PARTICLES = 1_200;
+const LOW_FPS_PIXEL_PARTICLES = 700;
+const PRESSURE_PIXEL_PARTICLES = 320;
+const MAX_CRUMBLE_PARTICLES = 700;
+const LOW_FPS_CRUMBLE_PARTICLES = 320;
+const PRESSURE_CRUMBLE_PARTICLES = 160;
 
 function isProceduralManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
@@ -1002,7 +1009,7 @@ interface MidMountainCrumbleEmitter {
 
 interface MidMountainCrumbleShard {
   chunkY: number;
-  gfx: Graphics;
+  particle: PixiParticle;
   vx: number;
   vy: number;
   life: number;
@@ -1110,6 +1117,7 @@ interface ProceduralTreeInstance {
 
 const midMountainCrumbleEmitters = new Map<number, MidMountainCrumbleEmitter[]>();
 const midMountainCrumbleShards: MidMountainCrumbleShard[] = [];
+const midMountainCrumblePool: PixiParticle[] = [];
 const biomeFlutters = new Map<number, BiomeFlutter[]>();
 const proceduralLianas = new Map<number, ProceduralLiana[]>();
 const proceduralFlora = new Map<number, ProceduralFlora[]>();
@@ -1255,9 +1263,32 @@ function clearMidMountainCrumbleChunk(chunkY: number): void {
   for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
     const shard = midMountainCrumbleShards[i]!;
     if (shard.chunkY !== chunkY) continue;
-    if (!shard.gfx.destroyed) shard.gfx.destroy();
-    midMountainCrumbleShards.splice(i, 1);
+    releaseMidMountainCrumbleShard(i);
   }
+}
+
+function currentCrumbleParticleCap(): number {
+  const fps = pixi.ticker.FPS;
+  if (pendingChunkRenders.size > 0) return PRESSURE_CRUMBLE_PARTICLES;
+  if (fps > 0 && fps < 38) return LOW_FPS_CRUMBLE_PARTICLES;
+  if (fps > 0 && fps < 50) return Math.round((LOW_FPS_CRUMBLE_PARTICLES + MAX_CRUMBLE_PARTICLES) * 0.5);
+  return MAX_CRUMBLE_PARTICLES;
+}
+
+function releaseMidMountainCrumbleShard(index: number): void {
+  const shard = midMountainCrumbleShards[index];
+  if (!shard) return;
+  const lastIndex = midMountainCrumbleShards.length - 1;
+  const children = midMountainCrumbleParticleLayer.particleChildren;
+  if (index !== lastIndex) {
+    midMountainCrumbleShards[index] = midMountainCrumbleShards[lastIndex]!;
+    children[index] = children[lastIndex]!;
+  }
+  midMountainCrumbleShards.pop();
+  children.pop();
+  shard.particle.alpha = 0;
+  midMountainCrumbleParticleLayer.update();
+  if (midMountainCrumblePool.length < MAX_CRUMBLE_PARTICLES) midMountainCrumblePool.push(shard.particle);
 }
 
 function registerMidMountainCrumbleEmitters(
@@ -1308,18 +1339,21 @@ function registerMidMountainCrumbleEmitters(
 }
 
 function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void {
-  if (midMountainCrumbleShards.length > 180 || emitter.container.destroyed) return;
+  if (midMountainCrumbleShards.length >= currentCrumbleParticleCap() || emitter.container.destroyed) return;
   const n = midMountainNoise(emitter.chunkY, emitter.x + emitter.timer * 97, emitter.y, emitter.seed);
   const size = n % 5 === 0 ? 3 : n % 3 === 0 ? 2 : 1;
-  const gfx = new Graphics();
-  gfx.rect(0, 0, size, size).fill(n % 6 === 0 ? emitter.accent : emitter.color);
-  gfx.x = Math.round(emitter.x + ((n >> 4) % Math.max(1, Math.round(emitter.width))) - emitter.width * 0.5);
-  gfx.y = Math.round(emitter.y + ((n >> 11) % 7) - 3);
-  gfx.alpha = 1;
-  emitter.container.addChild(gfx);
+  const particle = midMountainCrumblePool.pop() ?? new PixiParticle({ texture: Texture.WHITE });
+  particle.x = Math.round(emitter.x + ((n >> 4) % Math.max(1, Math.round(emitter.width))) - emitter.width * 0.5);
+  particle.y = Math.round(emitter.y + ((n >> 11) % 7) - 3);
+  particle.scaleX = size;
+  particle.scaleY = size;
+  particle.tint = n % 6 === 0 ? emitter.accent : emitter.color;
+  particle.alpha = 1;
+  midMountainCrumbleParticleLayer.particleChildren.push(particle);
+  midMountainCrumbleParticleLayer.update();
   midMountainCrumbleShards.push({
     chunkY: emitter.chunkY,
-    gfx,
+    particle,
     vx: ((n >> 7) % 25) - 12,
     vy: 18 + ((n >> 13) % 34),
     life: 0.58 + ((n >> 18) % 45) / 100,
@@ -1344,15 +1378,14 @@ function updateMidMountainCrumble(dt: number): void {
   for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
     const shard = midMountainCrumbleShards[i]!;
     shard.life -= dt;
-    if (shard.life <= 0 || shard.gfx.destroyed || !isChunkActive(shard.chunkY)) {
-      if (!shard.gfx.destroyed) shard.gfx.destroy();
-      midMountainCrumbleShards.splice(i, 1);
+    if (shard.life <= 0 || !isChunkActive(shard.chunkY)) {
+      releaseMidMountainCrumbleShard(i);
       continue;
     }
     shard.vy += 78 * dt;
-    shard.gfx.x += shard.vx * dt;
-    shard.gfx.y += shard.vy * dt;
-    shard.gfx.alpha = clamp01(shard.life / shard.max);
+    shard.particle.x += shard.vx * dt;
+    shard.particle.y += shard.vy * dt;
+    shard.particle.alpha = clamp01(shard.life / shard.max);
   }
 }
 
@@ -2023,6 +2056,18 @@ function addProceduralPlatform(
 const skyLayer    = new Container();
 const worldLayer  = new Container({ isRenderGroup: true });
 const backDecorationLayer = new Container();
+const midMountainCrumbleParticleLayer = new ParticleContainer<PixiParticle>({
+  texture: Texture.WHITE,
+  roundPixels: true,
+  boundsArea: new Rectangle(-64, -10_000_000, WORLD_WIDTH + 128, 20_000_000),
+  dynamicProperties: {
+    vertex: false,
+    position: true,
+    rotation: false,
+    uvs: false,
+    color: true,
+  },
+});
 const chunkLayer  = new Container();
 const decorationLayer = new Container();
 const portalLayer = new Container();
@@ -2034,6 +2079,7 @@ const effectLayer = new Container();
 const effectParticleLayer = new ParticleContainer<PixiParticle>({
   texture: Texture.WHITE,
   roundPixels: true,
+  boundsArea: new Rectangle(-64, -10_000_000, WORLD_WIDTH + 128, 20_000_000),
   dynamicProperties: {
     vertex: false,
     position: true,
@@ -2046,7 +2092,7 @@ const hudLayer    = new Container({ isRenderGroup: true });
 
 enemyLayer.sortableChildren = true;
 effectLayer.addChild(effectParticleLayer);
-worldLayer.addChild(backDecorationLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
+worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
 pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
 
 const screenFlashGfx = new Graphics();
@@ -2068,6 +2114,7 @@ const chunkGraphics  = new Map<number, Graphics>();
 const chunkDecorations = new Map<number, { back: Container; front: Container }>();
 const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
+const pendingChunkRenders = new Set<number>();
 const collectedRelics = new Set<string>();
 
 interface HazardTelegraph {
@@ -2179,7 +2226,7 @@ const localSprite = makeCharacterSprite("character1");
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
 localSprite.anchor.set(0.5, playerSpriteAnchorY());
-localSprite.alpha = hasPlayerAnimationAssets() ? 0.92 : hasAsset("playerExplorer") ? 0.62 : 0;
+localSprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.62 : 0;
 localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
 localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
@@ -2280,12 +2327,12 @@ function resetLocalPrediction(): void {
 
 // ── World management ──────────────────────────────────────────────────────────
 
-function loadChunk(cy: number): void {
+function loadChunk(cy: number, immediateRender = false): void {
   if (cy < 0) return;
   if (loadedChunks.has(cy)) return;
   const chunk = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
   loadedChunks.set(cy, chunk);
-  renderChunk(chunk);
+  enqueueChunkRender(cy, immediateRender);
 }
 
 function chunkYForWorldY(y: number): number {
@@ -2296,7 +2343,14 @@ function chunkTopWorldY(chunkY: number): number {
   return -chunkY * CHUNK_PIXEL_HEIGHT;
 }
 
-function activeWorldBounds(margin = ACTIVE_VIEW_MARGIN_PX): { top: number; bottom: number } {
+function activeWorldMarginPx(): number {
+  const fps = pixi.ticker.FPS;
+  if (pendingChunkRenders.size > 0) return PRESSURE_VIEW_MARGIN_PX;
+  if (fps > 0 && fps < 42) return PRESSURE_VIEW_MARGIN_PX;
+  return ACTIVE_VIEW_MARGIN_PX;
+}
+
+function activeWorldBounds(margin = activeWorldMarginPx()): { top: number; bottom: number } {
   const scale = getScale();
   return {
     top: cameraY - margin,
@@ -2304,12 +2358,12 @@ function activeWorldBounds(margin = ACTIVE_VIEW_MARGIN_PX): { top: number; botto
   };
 }
 
-function isWorldYActive(y: number, margin = ACTIVE_VIEW_MARGIN_PX): boolean {
+function isWorldYActive(y: number, margin = activeWorldMarginPx()): boolean {
   const bounds = activeWorldBounds(margin);
   return y >= bounds.top && y <= bounds.bottom;
 }
 
-function isChunkActive(chunkY: number, margin = ACTIVE_VIEW_MARGIN_PX): boolean {
+function isChunkActive(chunkY: number, margin = activeWorldMarginPx()): boolean {
   const top = chunkTopWorldY(chunkY);
   const bottom = top + CHUNK_PIXEL_HEIGHT;
   const bounds = activeWorldBounds(margin);
@@ -2332,6 +2386,40 @@ function syncChunkVisibility(): void {
   }
 }
 
+function hasChunkVisuals(chunkY: number): boolean {
+  return chunkGraphics.has(chunkY) || chunkDecorations.has(chunkY);
+}
+
+function enqueueChunkRender(chunkY: number, immediate = false): void {
+  if (!loadedChunks.has(chunkY) || hasChunkVisuals(chunkY)) return;
+  if (immediate) {
+    pendingChunkRenders.delete(chunkY);
+    renderChunk(loadedChunks.get(chunkY)!);
+    return;
+  }
+  pendingChunkRenders.add(chunkY);
+}
+
+function processChunkRenderQueue(): void {
+  if (pendingChunkRenders.size === 0) return;
+  const centerChunkY = localPlayer ? chunkYForWorldY(localPlayer.position.y) : 0;
+  const fps = pixi.ticker.FPS;
+  const maxRenders = fps > 0 && fps < 45 ? 1 : 2;
+  const budgetMs = fps > 0 && fps < 45 ? 3 : 5;
+  const started = performance.now();
+  const queue = [...pendingChunkRenders].sort((a, b) => Math.abs(a - centerChunkY) - Math.abs(b - centerChunkY));
+
+  let rendered = 0;
+  for (const chunkY of queue) {
+    pendingChunkRenders.delete(chunkY);
+    const chunk = loadedChunks.get(chunkY);
+    if (!chunk || !isChunkInCurrentWindow(chunkY) || hasChunkVisuals(chunkY)) continue;
+    renderChunk(chunk);
+    rendered++;
+    if (rendered >= maxRenders || performance.now() - started >= budgetMs) break;
+  }
+}
+
 function currentChunkWindow(): { min: number; max: number } | null {
   if (!localPlayer) return null;
   const pChunkY = chunkYForWorldY(localPlayer.position.y);
@@ -2345,7 +2433,10 @@ function ensureChunksAhead(): void {
   if (!localPlayer) return;
   const window = currentChunkWindow();
   if (!window) return;
-  for (let cy = window.min; cy <= window.max; cy++) loadChunk(cy);
+  for (let cy = window.min; cy <= window.max; cy++) {
+    if (loadedChunks.has(cy)) enqueueChunkRender(cy);
+    else loadChunk(cy);
+  }
 
   // Sliding-window streaming. Chunks are deterministic, so disposing visuals is
   // safe; if the player goes back down, the window above reloads them.
@@ -2365,6 +2456,7 @@ function regenerateWorld(): void {
 
 function clearWorldChunks(): void {
   loadedChunks.clear();
+  pendingChunkRenders.clear();
   for (const g of chunkGraphics.values()) g.destroy();
   chunkGraphics.clear();
   for (const c of chunkDecorations.values()) {
@@ -2375,10 +2467,9 @@ function clearWorldChunks(): void {
   chunkHazardTelegraphs.clear();
   windZoneFxs.clear();
   midMountainCrumbleEmitters.clear();
-  for (const shard of midMountainCrumbleShards) {
-    if (!shard.gfx.destroyed) shard.gfx.destroy();
+  for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
+    releaseMidMountainCrumbleShard(i);
   }
-  midMountainCrumbleShards.length = 0;
   for (const flutters of biomeFlutters.values()) {
     for (const flutter of flutters) {
       if (!flutter.gfx.destroyed) flutter.gfx.destroy();
@@ -2421,6 +2512,7 @@ function clearWorldChunks(): void {
 }
 
 function destroyChunkVisuals(chunkY: number): void {
+  pendingChunkRenders.delete(chunkY);
   const oldGfx = chunkGraphics.get(chunkY);
   if (oldGfx) {
     oldGfx.destroy();
@@ -2884,7 +2976,7 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
   const mountainParticles: PixiParticle[] = [];
   const topY = baseTileY * TILE_SIZE;
   const chunkPixelHeight = chunk.height * TILE_SIZE;
-  const step = 4;
+  const step = 5;
 
   for (let localY = 0; localY < chunkPixelHeight; localY += step) {
     for (let x = 0; x < WORLD_WIDTH; x += step) {
@@ -4899,7 +4991,7 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
   const sprite = makeCharacterSprite(characterForRemote(ci));
   const crownSprite = makeSprite("crown");
   sprite.anchor.set(0.5, playerSpriteAnchorY());
-  sprite.alpha = hasPlayerAnimationAssets() ? 0.82 : hasAsset("playerExplorer") ? 0.54 : 0;
+  sprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.54 : 0;
   sprite.tint = 0xffffff;
   crownSprite.anchor.set(0.5, 1);
   crownSprite.visible = false;
@@ -4915,8 +5007,6 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
 interface Particle { particle: PixiParticle; vx: number; vy: number; life: number; max: number; gravity: number }
 interface WorldPulse { gfx: Graphics; wx: number; wy: number; life: number; max: number; color: number; radius: number; width: number }
 interface FloatingText { txt: Text; vx: number; vy: number; life: number; max: number }
-const MAX_PIXEL_PARTICLES = 360;
-const LOW_FPS_PIXEL_PARTICLES = 180;
 const particles:   Particle[] = [];
 const partPool:    PixiParticle[] = [];
 const worldPulses: WorldPulse[] = [];
@@ -4926,7 +5016,8 @@ let effectParticleLayerDirty = false;
 
 function currentPixelParticleCap(): number {
   const fps = pixi.ticker.FPS;
-  if (fps > 0 && fps < 38) return 120;
+  if (pendingChunkRenders.size > 0) return PRESSURE_PIXEL_PARTICLES;
+  if (fps > 0 && fps < 38) return PRESSURE_PIXEL_PARTICLES;
   if (fps > 0 && fps < 50) return LOW_FPS_PIXEL_PARTICLES;
   return MAX_PIXEL_PARTICLES;
 }
@@ -4984,7 +5075,8 @@ function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number,
 
 function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, life = 0.42, width = 2): void {
   if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
-  if (worldPulses.length > 24) return;
+  const pulseCap = pendingChunkRenders.size > 0 ? 8 : 24;
+  if (worldPulses.length > pulseCap) return;
   const gfx = new Graphics();
   gfx.x = wx;
   gfx.y = wy;
@@ -4994,7 +5086,8 @@ function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, lif
 
 function spawnFloatingText(wx: number, wy: number, msg: string, color: number): void {
   if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
-  if (floatingTexts.length > 12) return;
+  const textCap = pendingChunkRenders.size > 0 ? 4 : 12;
+  if (floatingTexts.length > textCap) return;
   const txt = new Text({
     text: msg,
     style: {
@@ -5016,6 +5109,15 @@ function triggerScreenFlash(color: number, life = 0.22): void {
   screenFlashColor = color;
   screenFlashLife = life;
   screenFlashMax = life;
+}
+
+function prewarmParticlePools(): void {
+  while (partPool.length < MAX_PIXEL_PARTICLES) {
+    partPool.push(new PixiParticle({ texture: Texture.WHITE, alpha: 0 }));
+  }
+  while (midMountainCrumblePool.length < MAX_CRUMBLE_PARTICLES) {
+    midMountainCrumblePool.push(new PixiParticle({ texture: Texture.WHITE, alpha: 0 }));
+  }
 }
 
 function updateParticles(dt: number): void {
@@ -5080,6 +5182,7 @@ function updateParticles(dt: number): void {
 let ambientTimer = 0;
 function spawnAmbientParticles(dt: number): void {
   ambientTimer += dt;
+  if (pendingChunkRenders.size > 0) return;
   if (!localPlayer || particles.length > 80) return;
   // Spawn a leaf every ~1.5s from above the visible area
   if (ambientTimer > 1.5) {
@@ -5101,7 +5204,7 @@ function spawnAmbientParticles(dt: number): void {
 }
 
 function spawnFallStreaks(dt: number): void {
-  if (!localPlayer || localPlayer.grounded || localPlayer.velocity.y < 260 || particles.length > 180) {
+  if (pendingChunkRenders.size > 0 || !localPlayer || localPlayer.grounded || localPlayer.velocity.y < 260 || particles.length > 180) {
     fallStreakTimer = 0;
     return;
   }
@@ -5302,7 +5405,9 @@ function triggerShake(sx: number, sy: number): void {
 
 function environmentAnimationIntervalMs(): number {
   const fps = pixi.ticker.FPS;
+  if (pendingChunkRenders.size > 0) return 1000 / 16;
   if (fps > 0 && fps < 42) return 1000 / 20;
+  if (fps > 0 && fps < 55) return 1000 / 24;
   return 1000 / 30;
 }
 
@@ -5710,7 +5815,7 @@ function connectRoom(name: string): void {
         // keeping late responses from expanding the scene graph off-screen.
         destroyChunkVisuals(chunkY);
         loadedChunks.set(chunkY, parsed.chunk);
-        renderChunk(parsed.chunk);
+        enqueueChunkRender(chunkY, isChunkActive(chunkY, 0));
         syncChunkVisibility();
         break;
       }
@@ -5988,7 +6093,8 @@ function drawActors(): void {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
+prewarmParticlePools();
+for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
 respawnLocal();
 joinBtn.addEventListener("click", () => connectRoom(nameInput.value.trim() || "Explorer"));
 
@@ -6002,6 +6108,7 @@ pixi.ticker.add((ticker) => {
   const scale = getScale();
 
   ensureChunksAhead();
+  processChunkRenderQueue();
   syncChunkVisibility();
   reqChunks();
   maybePing();
