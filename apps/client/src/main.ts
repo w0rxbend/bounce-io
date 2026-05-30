@@ -1345,9 +1345,10 @@ function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void 
   if (midMountainCrumbleShards.length >= currentCrumbleParticleCap() || emitter.container.destroyed) return;
   const n = midMountainNoise(emitter.chunkY, emitter.x + emitter.timer * 97, emitter.y, emitter.seed);
   const size = n % 5 === 0 ? 3 : n % 3 === 0 ? 2 : 1;
+  const spread = Math.max(1, Math.round(emitter.width));
   const particle = midMountainCrumblePool.pop() ?? new PixiParticle({ texture: Texture.WHITE });
-  particle.x = Math.round(emitter.x + ((n >> 4) % Math.max(1, Math.round(emitter.width))) - emitter.width * 0.5);
-  particle.y = Math.round(emitter.y + ((n >> 11) % 7) - 3);
+  particle.x = Math.round(emitter.x + ((n >>> 4) % spread) - emitter.width * 0.5);
+  particle.y = Math.round(emitter.y + ((n >>> 11) % 7) - 3);
   particle.scaleX = size;
   particle.scaleY = size;
   particle.tint = n % 6 === 0 ? emitter.accent : emitter.color;
@@ -1357,9 +1358,9 @@ function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void 
   midMountainCrumbleShards.push({
     chunkY: emitter.chunkY,
     particle,
-    vx: ((n >> 7) % 25) - 12,
-    vy: 18 + ((n >> 13) % 34),
-    life: 0.58 + ((n >> 18) % 45) / 100,
+    vx: ((n >>> 7) % 25) - 12,
+    vy: 18 + ((n >>> 13) % 34),
+    life: 0.58 + ((n >>> 18) % 45) / 100,
     max: 1,
   });
   const shard = midMountainCrumbleShards[midMountainCrumbleShards.length - 1]!;
@@ -1388,6 +1389,7 @@ function updateMidMountainCrumble(dt: number): void {
     shard.vy += 78 * dt;
     shard.particle.x += shard.vx * dt;
     shard.particle.y += shard.vy * dt;
+    shard.particle.alpha = clamp01(shard.life / shard.max);
   }
   if (midMountainCrumbleLayerDirty) {
     midMountainCrumbleParticleLayer.update();
@@ -2071,7 +2073,7 @@ const midMountainCrumbleParticleLayer = new ParticleContainer<PixiParticle>({
     position: true,
     rotation: false,
     uvs: false,
-    color: false,
+    color: true,
   },
 });
 const chunkLayer  = new Container();
