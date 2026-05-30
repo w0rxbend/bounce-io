@@ -27,6 +27,7 @@ import {
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
 import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "@skybound/shared";
+import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -511,6 +512,16 @@ function currentPixelParticleBaseCap(): number {
 function currentCrumbleParticleBaseCap(): number {
   return scaledCap(MAX_CRUMBLE_PARTICLES, activePerformanceConfig().crumbleScale);
 }
+
+const BACKGROUND_LIFE_CONFIG: BackgroundLifeConfig = {
+  enabled: true,
+  maxBirds: 12,
+  maxMonsters: 4,
+  maxPlanes: 3,
+  spawnRate: 0.34,
+  parallaxFactor: 0.18,
+  quality: initialFixedPerformanceProfile,
+};
 
 function isProceduralManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
@@ -2194,6 +2205,7 @@ function addProceduralPlatform(
 
 // ── Layer hierarchy ───────────────────────────────────────────────────────────
 // skyLayer    — screen-space parallax bg (not inside worldLayer)
+//   backgroundLifeLayer — decorative sky silhouettes only, no collision/gameplay
 // worldLayer  — world-space (camera-transformed)
 //   backDecorationLayer — backgroundMid / non-colliding scenery
 //   chunkLayer          — terrain / simple rectangular collision tiles
@@ -2916,8 +2928,10 @@ const towersCont  = new Container();
 const cloudBankBack = new Container();
 const cloudsFar   = new Container();
 const cloudsMid   = new Container();
+const backgroundLifeLayer = new Container();
 const cloudsFront = new Container();
 const canopyFrameFront = new Container();
+disableDisplayEvents(backgroundLifeLayer);
 skyLayer.addChild(
   skyBgGfx,
   sunGlowGfx,
@@ -2931,9 +2945,11 @@ skyLayer.addChild(
   cloudBankBack,
   cloudsFar,
   cloudsMid,
+  backgroundLifeLayer,
   cloudsFront,
   canopyFrameFront,
 );
+const backgroundLifeSystem = new BackgroundLifeSystem(pixi.renderer, backgroundLifeLayer, BACKGROUND_LIFE_CONFIG);
 
 function lerpColor(a: number, b: number, t: number): number {
   const c = Math.max(0, Math.min(1, t));
@@ -6723,6 +6739,8 @@ pixi.ticker.add((ticker) => {
   const visualPrepStart = performance.now();
   updateLocalVisualPosition(dt);
   updateCamera(dt, scale);
+  backgroundLifeSystem.setQuality(activeFixedPerformanceProfile);
+  backgroundLifeSystem.update(dtMs, 0, cameraY, pixi.screen.width, pixi.screen.height);
   enqueueVisibleChunkRenders();
   processChunkRenderQueue();
   pruneDistantChunkVisuals();
