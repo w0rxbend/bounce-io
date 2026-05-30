@@ -2589,10 +2589,6 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/ui/hud_panel_1.png", hud_panel()),
     ]
 
-    for biome in ("pine", "cloud", "snow", "frozen", "summit"):
-        for role in ("cap", "body", "left", "right", "bottom"):
-            assets.append((f"environment/midMountains/{biome}_{role}.png", mid_mountain_tile(biome, role)))
-
     for i, width in enumerate((10, 6, 2, 6), 1):
         assets.append((f"environment/collectibles/coin_spin_frame{i}.png", coin(width)))
     assets.append(("environment/collectibles/coin_1.png", coin(10)))

@@ -2965,7 +2965,6 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
   mountain.zIndex = -6;
   mountain.particleChildren.push(...mountainParticles);
   mountain.update();
-  mountain.cacheAsTexture(PIXEL_CACHE_OPTIONS);
   target.addChild(mountain);
   clearMidMountainCrumbleChunk(chunk.chunkY);
   registerMidMountainCrumbleEmitters(chunk, target, palette, connections);

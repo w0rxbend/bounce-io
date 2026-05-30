@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 826,
+  "assetCount": 801,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -256,33 +256,6 @@
       "environment/lights/lantern_cyan_1.png",
       "environment/lights/lantern_gold_1.png",
       "environment/lights/torch_1.png"
-    ],
-    "environment/midMountains": [
-      "environment/midMountains/cloud_body.png",
-      "environment/midMountains/cloud_bottom.png",
-      "environment/midMountains/cloud_cap.png",
-      "environment/midMountains/cloud_left.png",
-      "environment/midMountains/cloud_right.png",
-      "environment/midMountains/frozen_body.png",
-      "environment/midMountains/frozen_bottom.png",
-      "environment/midMountains/frozen_cap.png",
-      "environment/midMountains/frozen_left.png",
-      "environment/midMountains/frozen_right.png",
-      "environment/midMountains/pine_body.png",
-      "environment/midMountains/pine_bottom.png",
-      "environment/midMountains/pine_cap.png",
-      "environment/midMountains/pine_left.png",
-      "environment/midMountains/pine_right.png",
-      "environment/midMountains/snow_body.png",
-      "environment/midMountains/snow_bottom.png",
-      "environment/midMountains/snow_cap.png",
-      "environment/midMountains/snow_left.png",
-      "environment/midMountains/snow_right.png",
-      "environment/midMountains/summit_body.png",
-      "environment/midMountains/summit_bottom.png",
-      "environment/midMountains/summit_cap.png",
-      "environment/midMountains/summit_left.png",
-      "environment/midMountains/summit_right.png"
     ],
     "environment/mossTiles": [
       "environment/mossTiles/mossy_stone_tile.png"
@@ -2044,131 +2017,6 @@
       "png": "/assets/environment/lights/torch_1.png",
       "width": 16,
       "height": 32
-    },
-    "environment/midMountains/cloud_body.png": {
-      "png": "/assets/environment/midMountains/cloud_body.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/cloud_bottom.png": {
-      "png": "/assets/environment/midMountains/cloud_bottom.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/cloud_cap.png": {
-      "png": "/assets/environment/midMountains/cloud_cap.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/cloud_left.png": {
-      "png": "/assets/environment/midMountains/cloud_left.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/cloud_right.png": {
-      "png": "/assets/environment/midMountains/cloud_right.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/frozen_body.png": {
-      "png": "/assets/environment/midMountains/frozen_body.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/frozen_bottom.png": {
-      "png": "/assets/environment/midMountains/frozen_bottom.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/frozen_cap.png": {
-      "png": "/assets/environment/midMountains/frozen_cap.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/frozen_left.png": {
-      "png": "/assets/environment/midMountains/frozen_left.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/frozen_right.png": {
-      "png": "/assets/environment/midMountains/frozen_right.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/pine_body.png": {
-      "png": "/assets/environment/midMountains/pine_body.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/pine_bottom.png": {
-      "png": "/assets/environment/midMountains/pine_bottom.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/pine_cap.png": {
-      "png": "/assets/environment/midMountains/pine_cap.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/pine_left.png": {
-      "png": "/assets/environment/midMountains/pine_left.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/pine_right.png": {
-      "png": "/assets/environment/midMountains/pine_right.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/snow_body.png": {
-      "png": "/assets/environment/midMountains/snow_body.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/snow_bottom.png": {
-      "png": "/assets/environment/midMountains/snow_bottom.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/snow_cap.png": {
-      "png": "/assets/environment/midMountains/snow_cap.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/snow_left.png": {
-      "png": "/assets/environment/midMountains/snow_left.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/snow_right.png": {
-      "png": "/assets/environment/midMountains/snow_right.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/summit_body.png": {
-      "png": "/assets/environment/midMountains/summit_body.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/summit_bottom.png": {
-      "png": "/assets/environment/midMountains/summit_bottom.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/summit_cap.png": {
-      "png": "/assets/environment/midMountains/summit_cap.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/summit_left.png": {
-      "png": "/assets/environment/midMountains/summit_left.png",
-      "width": 16,
-      "height": 16
-    },
-    "environment/midMountains/summit_right.png": {
-      "png": "/assets/environment/midMountains/summit_right.png",
-      "width": 16,
-      "height": 16
     },
     "environment/mossTiles/mossy_stone_tile.png": {
       "png": "/assets/environment/mossTiles/mossy_stone_tile.png",
