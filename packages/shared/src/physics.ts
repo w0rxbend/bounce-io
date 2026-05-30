@@ -37,7 +37,7 @@ import {
   SHORT_HOP_CUTOFF,
   TILE_SIZE
 } from "./constants.js";
-import type { CollectibleKind, CollisionHit, HazardKind, KickPhase, PlayerId, PlayerInput, PlayerState, Rect, StepResult, TileMap } from "./types.js";
+import type { CollectibleKind, CollisionHit, GeneratedChunk, HazardKind, KickPhase, PlayerId, PlayerInput, PlayerState, Rect, StepResult, TileMap } from "./types.js";
 
 export interface PlayerInteractionEvent {
   type: "PLAYER_KICK_HIT";
@@ -299,6 +299,32 @@ export function applyHazardHit(player: PlayerState, kind: HazardKind = "spikeTra
       break;
   }
   player.invulnerable = Math.max(player.invulnerable, HAZARD_HIT_INVULNERABLE_SECONDS);
+}
+
+export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedChunk>, deltaSeconds: number): boolean {
+  if (player.health <= 0) return false;
+  const dt = Math.min(Math.max(deltaSeconds, 0), MAX_DELTA_SECONDS);
+  const bounds = playerRect(player);
+  let pushed = false;
+
+  for (const chunk of chunks) {
+    for (const zone of chunk.windZones ?? []) {
+      const zoneRect: Rect = {
+        x: zone.x * TILE_SIZE,
+        y: (chunk.worldTileY + zone.y) * TILE_SIZE,
+        width: zone.width * TILE_SIZE,
+        height: zone.height * TILE_SIZE
+      };
+      if (!rectsOverlap(bounds, zoneRect)) continue;
+
+      const targetVelocity = zone.direction * Math.min(PLAYER_MAX_PUSH_VELOCITY, zone.strength);
+      player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * 3.5 * dt);
+      player.velocity.x = clamp(player.velocity.x, -PLAYER_MAX_PUSH_VELOCITY, PLAYER_MAX_PUSH_VELOCITY);
+      pushed = true;
+    }
+  }
+
+  return pushed;
 }
 
 export function applyCollectible(player: PlayerState, kind: CollectibleKind): void {

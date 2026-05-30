@@ -20,6 +20,7 @@ import {
 import {
   applyDamage,
   applyCollectible,
+  applyWindZones,
   applyPlayerInteractions,
   collectibleKindForRelicId,
   createPlayerState,
@@ -759,6 +760,7 @@ function tickRoom(room: ServerRoom): void {
 
       const previousKickPhase = player.kickPhase;
       const { player: next } = stepPlayer(player, input, tileMap, PHYSICS_STEP_SECONDS);
+      applyWindZones(next, room.chunks.values(), PHYSICS_STEP_SECONDS);
       applyJumpPads(room, next);
       if (previousKickPhase === "idle" && next.kickPhase === "windup") {
         room.pendingEvents.push({ type: "PLAYER_KICK_STARTED", playerId: pid });

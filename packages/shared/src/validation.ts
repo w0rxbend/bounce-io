@@ -1,6 +1,6 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { ClientMessage, NetworkMessage, ServerMessage } from "./protocol.js";
-import type { EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind } from "./types.js";
+import type { EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -70,6 +70,20 @@ function isJumpPadSpawn(value: unknown): value is JumpPadSpawn {
     isInteger(value.y) &&
     isFiniteNumber(value.multiplier) &&
     (value.multiplier as number) > 0;
+}
+
+function isWindZoneSpawn(value: unknown): value is WindZoneSpawn {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isInteger(value.x) &&
+    isInteger(value.y) &&
+    isInteger(value.width) &&
+    isInteger(value.height) &&
+    (value.direction === -1 || value.direction === 1) &&
+    isFiniteNumber(value.strength) &&
+    (value.width as number) > 0 &&
+    (value.height as number) > 0 &&
+    (value.strength as number) > 0;
 }
 
 function isVec2(value: unknown): value is { x: number; y: number } {
@@ -177,7 +191,9 @@ export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
     Array.isArray(value.enemies) &&
     (value.enemies as unknown[]).every(isEnemySpawn) &&
     Array.isArray(value.jumpPads) &&
-    (value.jumpPads as unknown[]).every(isJumpPadSpawn);
+    (value.jumpPads as unknown[]).every(isJumpPadSpawn) &&
+    Array.isArray(value.windZones) &&
+    (value.windZones as unknown[]).every(isWindZoneSpawn);
 }
 
 function isMatchEvent(value: unknown): value is MatchEvent {

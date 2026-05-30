@@ -16,6 +16,7 @@ import {
   TILE_SIZE,
 } from "@skybound/shared";
 import {
+  applyWindZones,
   collectibleKindForRelicId,
   createMultiChunkTileMap,
   createPlayerState,
@@ -25,7 +26,7 @@ import {
   stepPlayer,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, PlayerInput, PlayerState, RelicSpawn, TileKind } from "@skybound/shared";
+import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "@skybound/shared";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -243,7 +244,6 @@ const ASSET_URLS = {
   magicArcBlue: "/assets/environment/hazards/magic_arc_blue_1.png",
   runeTrapGreen: "/assets/environment/hazards/rune_trap_green_1.png",
   runeTrapGold: "/assets/environment/hazards/rune_trap_gold_1.png",
-  windZone: "/assets/environment/hazards/wind_zone_1.png",
   magicWindPurple: "/assets/environment/hazards/magic_wind_purple_1.png",
   magicWindGreen: "/assets/environment/hazards/magic_wind_green_1.png",
   lightningHazard: "/assets/environment/hazards/lightning_1.png",
@@ -1630,16 +1630,18 @@ function clearProceduralFloraChunk(chunkY: number): void {
 }
 
 function drawFloraPixelLeaf(g: Graphics, x: number, y: number, side: number, width: number, height: number, color: number): void {
-  const leafX = side < 0 ? x - width : x;
-  g.rect(Math.round(leafX), Math.round(y), width, height).fill(color);
-  g.rect(Math.round(leafX + (side < 0 ? 0 : width - 1)), Math.round(y - 1), 1, height + 2).fill({ color, alpha: 0.55 });
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
+  const leafX = side < 0 ? x - w : x;
+  g.rect(Math.round(leafX), Math.round(y), w, h).fill(color);
+  g.rect(Math.round(leafX + (side < 0 ? 0 : w - 1)), Math.round(y - 1), 1, h + 1).fill({ color, alpha: 0.55 });
 }
 
 function drawFloraPetal(g: Graphics, x: number, y: number, width: number, height: number, color: number, alpha = 1): void {
-  const w = Math.max(2, Math.round(width));
-  const h = Math.max(2, Math.round(height));
+  const w = Math.max(1, Math.round(width));
+  const h = Math.max(1, Math.round(height));
   g.rect(Math.round(x - w / 2), Math.round(y - h / 2), w, h).fill({ color, alpha });
-  if (w > 3 && h > 3) g.rect(Math.round(x - w / 2 + 1), Math.round(y - h / 2), Math.max(1, w - 2), 1).fill({ color: 0xffffff, alpha: 0.22 * alpha });
+  if (w > 2 && h > 2) g.rect(Math.round(x - w / 2 + 1), Math.round(y - h / 2), Math.max(1, w - 2), 1).fill({ color: 0xffffff, alpha: 0.22 * alpha });
 }
 
 function drawProceduralFlora(flora: ProceduralFlora, tSec: number): void {
@@ -1651,89 +1653,88 @@ function drawProceduralFlora(flora: ProceduralFlora, tSec: number): void {
   gfx.clear();
 
   if (kind === "grass") {
-    const blades = 4 + (seed % 4);
+    const blades = 3 + (seed % 3);
     for (let i = 0; i < blades; i++) {
       const n = midMountainNoise(seed, i * 23, height, 2549);
-      const bx = -6 + i * 3 + (n % 3);
-      const bh = Math.max(9, height - 8 + (n % 12));
-      const bend = Math.round((wind * (2 + (n % 4))) + (i - blades / 2) * 0.4);
-      drawPixelLine(gfx, bx, 0, bx + bend, -bh, n % 3 === 0 ? 2 : 1, n % 4 === 0 ? palette.leafLight : palette.leaf);
-      if (n % 5 === 0) gfx.rect(bx + bend - 1, -bh - 1, 3, 2).fill(cold ? palette.frost : palette.petalA);
+      const bx = -3 + i * 2 + (n % 2);
+      const bh = Math.max(5, height - 4 + (n % 6));
+      const bend = Math.round(wind * (1 + (n % 2)) + (i - blades / 2) * 0.25);
+      drawPixelLine(gfx, bx, 0, bx + bend, -bh, 1, n % 4 === 0 ? palette.leafLight : palette.leaf);
+      if (n % 5 === 0) gfx.rect(bx + bend, -bh - 1, 1 + (n % 2), 1).fill(cold ? palette.frost : palette.petalA);
     }
     return;
   }
 
   const stemTopX = topSway;
   const stemTopY = -height;
-  drawPixelLine(gfx, 0, 0, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), 2, palette.stemDark, 0.96);
-  drawPixelLine(gfx, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), stemTopX, stemTopY, 2, palette.stem, 0.96);
-  drawPixelLine(gfx, 1, -2, stemTopX + 1, stemTopY + 1, 1, palette.leafLight, 0.5);
-  drawFloraPixelLeaf(gfx, -1 + Math.round(wind), -Math.round(height * 0.35), -1, 5 + (seed % 3), 4, palette.leafDark);
-  drawFloraPixelLeaf(gfx, 1 + Math.round(wind * 0.5), -Math.round(height * 0.58), 1, 5 + ((seed >> 4) % 3), 4, palette.leaf);
+  drawPixelLine(gfx, 0, 0, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), 1, palette.stemDark, 0.96);
+  drawPixelLine(gfx, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), stemTopX, stemTopY, 1, palette.stem, 0.96);
+  drawFloraPixelLeaf(gfx, Math.round(wind * 0.5), -Math.round(height * 0.35), -1, 3 + (seed % 2), 2, palette.leafDark);
+  drawFloraPixelLeaf(gfx, 1 + Math.round(wind * 0.5), -Math.round(height * 0.58), 1, 3 + ((seed >> 4) % 2), 2, palette.leaf);
 
   if (kind === "sprout") {
-    drawFloraPixelLeaf(gfx, stemTopX - 1, stemTopY - 2, -1, 8, 6, palette.leaf);
-    drawFloraPixelLeaf(gfx, stemTopX + 1, stemTopY - 1, 1, 8, 6, palette.leafLight);
-    gfx.rect(stemTopX - 2, stemTopY - 8, 5, 6).fill(cold ? palette.frost : palette.petalB);
-    gfx.rect(stemTopX - 1, stemTopY - 9, 3, 2).fill(palette.center);
+    drawFloraPixelLeaf(gfx, stemTopX - 1, stemTopY - 1, -1, 4, 3, palette.leaf);
+    drawFloraPixelLeaf(gfx, stemTopX + 1, stemTopY, 1, 4, 3, palette.leafLight);
+    gfx.rect(stemTopX - 1, stemTopY - 4, 3, 3).fill(cold ? palette.frost : palette.petalB);
+    gfx.rect(stemTopX, stemTopY - 5, 1, 1).fill(palette.center);
     return;
   }
 
   if (kind === "berry") {
     const berryColor = (seed >> 3) % 2 === 0 ? palette.petalA : palette.petalB;
-    const offsets = [[-4, -3], [1, -5], [5, -1], [-1, 2], [4, 4]] as const;
+    const offsets = [[-2, -2], [1, -3], [3, -1], [0, 1], [2, 2]] as const;
     for (const [i, [ox, oy]] of offsets.entries()) {
-      const wiggle = Math.round(flutter * ((i % 2) + 1));
-      gfx.rect(stemTopX + ox + wiggle, stemTopY + oy, 4, 4).fill(berryColor);
-      gfx.rect(stemTopX + ox + wiggle + 1, stemTopY + oy, 1, 1).fill({ color: 0xffffff, alpha: 0.38 });
+      const wiggle = Math.round(flutter * (i % 2 === 0 ? 1 : 0.5));
+      gfx.rect(stemTopX + ox + wiggle, stemTopY + oy, 2, 2).fill(berryColor);
+      gfx.rect(stemTopX + ox + wiggle, stemTopY + oy, 1, 1).fill({ color: 0xffffff, alpha: 0.38 });
     }
-    gfx.rect(stemTopX - 6, stemTopY - 8, 10, 3).fill(palette.leafDark);
+    gfx.rect(stemTopX - 3, stemTopY - 4, 6, 2).fill(palette.leafDark);
     return;
   }
 
   if (kind === "crystal") {
     const shine = Math.max(0.25, 0.6 + flutter * 0.28);
-    gfx.rect(stemTopX - 4, stemTopY - 5, 8, 10).fill({ color: palette.petalA, alpha: 0.9 });
-    gfx.rect(stemTopX - 2, stemTopY - 13, 4, 8).fill({ color: palette.frost, alpha: 0.95 });
-    gfx.rect(stemTopX - 7, stemTopY - 2, 3, 8).fill({ color: palette.petalB, alpha: 0.82 });
-    gfx.rect(stemTopX + 4, stemTopY - 1, 3, 7).fill({ color: palette.leafLight, alpha: 0.72 });
-    gfx.rect(stemTopX - 1, stemTopY - 10, 2, 13).fill({ color: 0xffffff, alpha: shine });
+    gfx.rect(stemTopX - 2, stemTopY - 2, 4, 5).fill({ color: palette.petalA, alpha: 0.9 });
+    gfx.rect(stemTopX - 1, stemTopY - 7, 2, 5).fill({ color: palette.frost, alpha: 0.95 });
+    gfx.rect(stemTopX - 4, stemTopY, 2, 4).fill({ color: palette.petalB, alpha: 0.82 });
+    gfx.rect(stemTopX + 2, stemTopY, 2, 4).fill({ color: palette.leafLight, alpha: 0.72 });
+    gfx.rect(stemTopX, stemTopY - 6, 1, 8).fill({ color: 0xffffff, alpha: shine });
     return;
   }
 
   if (kind === "bell") {
     const cupColor = (seed >> 6) % 2 === 0 ? palette.petalA : palette.petalB;
-    gfx.rect(stemTopX - 4, stemTopY - 4, 8, 3).fill(palette.leafLight);
-    gfx.rect(stemTopX - 5, stemTopY - 1, 10, 7).fill(cupColor);
-    gfx.rect(stemTopX - 7, stemTopY + 4, 4, 4).fill(cupColor);
-    gfx.rect(stemTopX + 3, stemTopY + 4, 4, 4).fill(cupColor);
-    gfx.rect(stemTopX - 2, stemTopY + 5, 4, 5).fill({ color: palette.center, alpha: 0.8 });
-    gfx.rect(stemTopX - 4, stemTopY, 8, 1).fill({ color: 0xffffff, alpha: 0.22 });
+    gfx.rect(stemTopX - 2, stemTopY - 2, 5, 2).fill(palette.leafLight);
+    gfx.rect(stemTopX - 3, stemTopY, 6, 4).fill(cupColor);
+    gfx.rect(stemTopX - 4, stemTopY + 3, 2, 2).fill(cupColor);
+    gfx.rect(stemTopX + 2, stemTopY + 3, 2, 2).fill(cupColor);
+    gfx.rect(stemTopX - 1, stemTopY + 3, 2, 3).fill({ color: palette.center, alpha: 0.8 });
+    gfx.rect(stemTopX - 2, stemTopY, 4, 1).fill({ color: 0xffffff, alpha: 0.22 });
     return;
   }
 
   if (kind === "lotus") {
-    const baseY = stemTopY + 2;
+    const baseY = stemTopY + 1;
     const a = palette.petalA;
     const b = palette.petalB;
-    drawFloraPetal(gfx, stemTopX - 7, baseY + 3, 7, 6, a, 0.95);
-    drawFloraPetal(gfx, stemTopX + 7, baseY + 3, 7, 6, b, 0.95);
-    drawFloraPetal(gfx, stemTopX - 3, baseY - 1, 7, 8, b, 0.95);
-    drawFloraPetal(gfx, stemTopX + 3, baseY - 1, 7, 8, a, 0.95);
-    drawFloraPetal(gfx, stemTopX, baseY - 5, 6, 8, palette.frost, cold ? 0.8 : 0.55);
-    gfx.rect(stemTopX - 2, baseY + 1, 4, 4).fill(palette.center);
+    drawFloraPetal(gfx, stemTopX - 4, baseY + 2, 4, 3, a, 0.95);
+    drawFloraPetal(gfx, stemTopX + 4, baseY + 2, 4, 3, b, 0.95);
+    drawFloraPetal(gfx, stemTopX - 2, baseY, 4, 4, b, 0.95);
+    drawFloraPetal(gfx, stemTopX + 2, baseY, 4, 4, a, 0.95);
+    drawFloraPetal(gfx, stemTopX, baseY - 3, 3, 4, palette.frost, cold ? 0.8 : 0.55);
+    gfx.rect(stemTopX - 1, baseY + 1, 2, 2).fill(palette.center);
     return;
   }
 
   const petalA = palette.petalA;
   const petalB = palette.petalB;
-  drawFloraPetal(gfx, stemTopX, stemTopY - 9, 6, 7, petalA);
-  drawFloraPetal(gfx, stemTopX - 7, stemTopY - 3, 7, 6, petalB);
-  drawFloraPetal(gfx, stemTopX + 7, stemTopY - 3, 7, 6, petalB);
-  drawFloraPetal(gfx, stemTopX - 4, stemTopY + 5, 6, 6, petalA);
-  drawFloraPetal(gfx, stemTopX + 4, stemTopY + 5, 6, 6, petalA);
-  gfx.rect(stemTopX - 3, stemTopY - 3, 6, 6).fill(palette.center);
-  gfx.rect(stemTopX - 1, stemTopY - 4, 2, 2).fill({ color: 0xffffff, alpha: 0.45 });
+  drawFloraPetal(gfx, stemTopX, stemTopY - 5, 3, 4, petalA);
+  drawFloraPetal(gfx, stemTopX - 4, stemTopY - 2, 4, 3, petalB);
+  drawFloraPetal(gfx, stemTopX + 4, stemTopY - 2, 4, 3, petalB);
+  drawFloraPetal(gfx, stemTopX - 2, stemTopY + 3, 3, 3, petalA);
+  drawFloraPetal(gfx, stemTopX + 2, stemTopY + 3, 3, 3, petalA);
+  gfx.rect(stemTopX - 1, stemTopY - 1, 3, 3).fill(palette.center);
+  gfx.rect(stemTopX, stemTopY - 2, 1, 1).fill({ color: 0xffffff, alpha: 0.45 });
 }
 
 function composeProceduralFlora(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
@@ -1753,7 +1754,7 @@ function composeProceduralFlora(chunk: GeneratedChunk, target: Container, biome:
       const edgeBias = i % 4 === 0 ? 0.08 + ((n >> 5) % 8) / 100 : i % 4 === 1 ? 0.92 - ((n >> 9) % 8) / 100 : (i + 0.55) / (count + 0.8);
       const xRatio = Math.max(0.08, Math.min(0.92, edgeBias + (((n >> 13) % 17) - 8) / 100));
       const kind = chooseProceduralFloraKind(biome, n);
-      const height = kind === "grass" ? 13 + (n % 12) : kind === "crystal" ? 18 + (n % 12) : 16 + (n % 17);
+      const height = kind === "grass" ? 7 + (n % 6) : kind === "crystal" ? 9 + (n % 6) : 8 + (n % 9);
       const plant: ProceduralFlora = {
         chunkY: chunk.chunkY,
         gfx: new Graphics(),
@@ -1761,7 +1762,7 @@ function composeProceduralFlora(chunk: GeneratedChunk, target: Container, biome:
         baseY: topY + 2,
         phase: ((n >> 17) % 628) / 100,
         speed: 0.85 + ((n >> 23) % 70) / 100,
-        amplitude: 1.5 + ((n >> 3) % 33) / 10,
+        amplitude: 0.7 + ((n >> 3) % 16) / 10,
         seed: n,
         height,
         kind,
@@ -2026,6 +2027,16 @@ interface JumpPadAnim {
 }
 const jumpPadAnims = new Map<string, JumpPadAnim>();
 
+interface WindZoneFx {
+  gfx: Graphics;
+  zone: WindZoneSpawn;
+  widthPx: number;
+  heightPx: number;
+  seed: number;
+  palette: { haze: number; streak: number; bright: number };
+}
+const windZoneFxs = new Map<number, WindZoneFx[]>();
+
 interface EnemyEntry {
   state: EnemyState;
   sprite: Sprite;
@@ -2243,6 +2254,7 @@ function clearWorldChunks(): void {
   }
   chunkDecorations.clear();
   chunkHazardTelegraphs.clear();
+  windZoneFxs.clear();
   midMountainCrumbleEmitters.clear();
   for (const shard of midMountainCrumbleShards) {
     if (!shard.gfx.destroyed) shard.gfx.destroy();
@@ -2296,6 +2308,7 @@ function destroyChunkVisuals(chunkY: number): void {
     chunkDecorations.delete(chunkY);
   }
   chunkHazardTelegraphs.delete(chunkY);
+  windZoneFxs.delete(chunkY);
   clearMidMountainCrumbleChunk(chunkY);
   clearBiomeFluttersChunk(chunkY);
   clearProceduralLianasChunk(chunkY);
@@ -3312,6 +3325,74 @@ function updateHazardTelegraphs(tSec: number): void {
   }
 }
 
+function windZonePaletteForBiome(biome: BiomeId): WindZoneFx["palette"] {
+  if (biome === "pineValley") return { haze: 0xbfeccc, streak: 0x9edee2, bright: 0xf2fff2 };
+  if (biome === "cloudRidge") return { haze: 0xd8f0ff, streak: 0x9ed8ff, bright: 0xffffff };
+  if (biome === "snowfallCliffs") return { haze: 0xbceeff, streak: 0x82dfff, bright: 0xecffff };
+  if (biome === "frozenSpires") return { haze: 0xaadfff, streak: 0x72c8ff, bright: 0xe8fbff };
+  return { haze: 0xc7fff0, streak: 0x8ef4ff, bright: 0xf4fffb };
+}
+
+function addProceduralWindZone(target: Container, chunk: GeneratedChunk, zone: WindZoneSpawn, biome: BiomeId): void {
+  const gfx = new Graphics();
+  gfx.x = zone.x * TILE_SIZE;
+  gfx.y = (chunk.worldTileY + zone.y) * TILE_SIZE;
+  gfx.zIndex = 5;
+  target.addChild(gfx);
+
+  const fxs = windZoneFxs.get(chunk.chunkY) ?? [];
+  fxs.push({
+    gfx,
+    zone,
+    widthPx: zone.width * TILE_SIZE,
+    heightPx: zone.height * TILE_SIZE,
+    seed: (chunk.seed ^ (chunk.chunkY * 193) ^ (zone.x * 977) ^ (zone.y * 251)) >>> 0,
+    palette: windZonePaletteForBiome(biome),
+  });
+  windZoneFxs.set(chunk.chunkY, fxs);
+}
+
+function updateWindZoneFxs(tSec: number): void {
+  for (const fxs of windZoneFxs.values()) {
+    for (const fx of fxs) {
+      if (fx.gfx.destroyed) continue;
+      const { gfx, zone, widthPx, heightPx, seed, palette } = fx;
+      const pulse = Math.sin(tSec * 2.6 + seed * 0.01) * 0.5 + 0.5;
+      const dir = zone.direction;
+      gfx.clear();
+
+      gfx.rect(0, 0, widthPx, heightPx)
+        .fill({ color: palette.haze, alpha: 0.025 + pulse * 0.025 });
+      gfx.rect(0, 0, widthPx, 2).fill({ color: palette.bright, alpha: 0.05 + pulse * 0.04 });
+      gfx.rect(0, heightPx - 2, widthPx, 2).fill({ color: palette.streak, alpha: 0.035 + pulse * 0.035 });
+
+      const streamCount = Math.max(5, Math.floor(heightPx / 10));
+      for (let i = 0; i < streamCount; i++) {
+        const rowPhase = tSec * (28 + (seed % 11)) + i * 23 + seed * 0.017;
+        const travel = rowPhase % (widthPx + 36);
+        const x = Math.round(dir > 0 ? travel - 30 : widthPx - travel + 6);
+        const y = Math.round(7 + i * ((heightPx - 14) / Math.max(1, streamCount - 1)) + Math.sin(tSec * 3 + i + seed) * 2);
+        const alpha = 0.10 + pulse * 0.12 + (i % 2) * 0.04;
+        const len = 16 + ((seed >> (i % 8)) & 7);
+
+        gfx.rect(x, y, len, 2).fill({ color: palette.bright, alpha });
+        gfx.rect(x - dir * 8, y + 4, Math.max(8, len - 6), 2).fill({ color: palette.streak, alpha: alpha * 0.72 });
+        gfx.rect(x + dir * (len - 2), y - 2, 6, 2).fill({ color: palette.bright, alpha: alpha * 0.45 });
+      }
+
+      for (let i = 0; i < 3; i++) {
+        const y = Math.round(12 + i * (heightPx / 3) + Math.sin(tSec * 2.2 + i) * 3);
+        const x = dir > 0 ? widthPx - 10 : 10;
+        gfx.poly([
+          x, y,
+          x - dir * 8, y - 5,
+          x - dir * 8, y + 5,
+        ]).fill({ color: palette.bright, alpha: 0.10 + pulse * 0.08 });
+      }
+    }
+  }
+}
+
 function composeChunkAtmosphere(chunk: GeneratedChunk, back: Container, biome: BiomeId): void {
   const baseTileY = chunk.worldTileY;
   const chunkTop = baseTileY * TILE_SIZE;
@@ -3526,6 +3607,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
   composeProceduralLianas(chunk, front, biome);
   composeProceduralFlora(chunk, front, biome);
   composeBiomeFlutters(chunk, front, biome);
+  for (const zone of chunk.windZones ?? []) {
+    addProceduralWindZone(front, chunk, zone, biome);
+  }
 
   for (let ly = 0; ly < chunk.height; ly++) {
     for (let lx = 0; lx < chunk.width; lx++) {
@@ -3846,15 +3930,6 @@ function decorateChunk(chunk: GeneratedChunk): void {
         pillar.alpha = 0.42;
         pillar.zIndex = -2;
         back.addChild(pillar);
-      }
-
-      if ((biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("windZone") && seed % 167 === 0) {
-        const wind = makeSceneSprite("windZone");
-        wind.x = wx - 24;
-        wind.y = wy - 36;
-        wind.alpha = 0.52;
-        wind.zIndex = 5;
-        front.addChild(wind);
       }
 
       if ((biome === "frozenSpires" || biome === "celestialSummit") && hasAsset("rollingBoulder") && seed % 223 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -5333,6 +5408,7 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
     for (let i = idx + 1; i < predBuf.length; i++) {
       const e = predBuf[i]; if (!e) continue;
       const { player: next } = stepPlayer(localPlayer, e.input, tileMap, PHYSICS_STEP_SECONDS);
+      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS);
       localPlayer = next;
     }
     if (snapVisual) snapLocalVisualToSimulation();
@@ -5382,6 +5458,7 @@ function interpRemotes(): void {
       };
       for (let i = 0; i < Math.min(steps, 8); i++) {
         extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
+        applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS);
       }
       e.current = extState;
       continue;
@@ -5500,6 +5577,7 @@ pixi.ticker.add((ticker) => {
   spawnAmbientParticles(dt);
   spawnFallStreaks(dt);
   updateHazardTelegraphs(tSec);
+  updateWindZoneFxs(tSec);
   updateJumpPadAnims(tSec);
   updateRelicAnims(tSec);
   updatePortals(tSec);
@@ -5539,6 +5617,7 @@ pixi.ticker.add((ticker) => {
       const wasKickPhase = localPlayer.kickPhase;
       const willJump = inp.jumpPressed && (localPlayer.grounded || localPlayer.coyoteTimer > 0);
       const { player: next } = stepPlayer(localPlayer, inp, tileMap, PHYSICS_STEP_SECONDS);
+      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS);
       const hitJumpPad = applyLocalJumpPads(next);
 
       if (willJump && wasGrounded) jumpDust(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT, next.facing);

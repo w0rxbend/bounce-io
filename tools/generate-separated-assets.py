@@ -2465,7 +2465,6 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/hazards/thorn_vine_1.png", thorn_vine()),
         ("environment/hazards/falling_icicle_1.png", icicle("single")),
         ("environment/hazards/falling_icicles_cluster_1.png", icicle("cluster")),
-        ("environment/hazards/wind_zone_1.png", wind_ribbon("ice")),
         ("environment/hazards/magic_wind_purple_1.png", wind_ribbon("purple")),
         ("environment/hazards/magic_wind_green_1.png", wind_ribbon("green")),
         ("environment/hazards/lightning_1.png", lightning_bolt("gold")),

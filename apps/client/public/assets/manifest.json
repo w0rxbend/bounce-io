@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 827,
+  "assetCount": 826,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -241,8 +241,7 @@
       "environment/hazards/spikes_1.png",
       "environment/hazards/stone_spikes_1.png",
       "environment/hazards/summit_spikes_1.png",
-      "environment/hazards/thorn_vine_1.png",
-      "environment/hazards/wind_zone_1.png"
+      "environment/hazards/thorn_vine_1.png"
     ],
     "environment/ladders": [
       "environment/ladders/climbing_chain.png",
@@ -2005,11 +2004,6 @@
       "png": "/assets/environment/hazards/thorn_vine_1.png",
       "width": 32,
       "height": 16
-    },
-    "environment/hazards/wind_zone_1.png": {
-      "png": "/assets/environment/hazards/wind_zone_1.png",
-      "width": 64,
-      "height": 24
     },
     "environment/ladders/climbing_chain.png": {
       "png": "/assets/environment/ladders/climbing_chain.png",
