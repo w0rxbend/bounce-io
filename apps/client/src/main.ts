@@ -116,6 +116,8 @@ let   smoothedRttMs         = 100;   // EMA-smoothed RTT used for delay target
 const CHUNKS_PRELOAD_BEHIND = 3;     // keep enough below for intentional descents
 const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing forever
 const INITIAL_CHUNKS_TO_LOAD = 4;
+const CHUNK_PIXEL_HEIGHT = CHUNK_HEIGHT_TILES * TILE_SIZE;
+const ACTIVE_VIEW_MARGIN_PX = 120;
 
 const ASSET_URLS = {
   aiForestRuinsPanorama: "/assets/environment/backgrounds/forest_ruins_panorama.png",
@@ -1080,11 +1082,35 @@ interface ProceduralFlora {
   palette: ProceduralFloraPalette;
 }
 
+interface ProceduralTreeLeafCluster {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  seed: number;
+  frosted: boolean;
+  windFactor: number;
+  kind: "blob" | "pine" | "frost" | "crystal";
+}
+
+interface ProceduralTreeInstance {
+  chunkY: number;
+  container: Container;
+  leavesGfx: Graphics;
+  leafClusters: ProceduralTreeLeafCluster[];
+  palette: ProceduralTreePalette;
+  seed: number;
+  phase: number;
+  sway: number;
+  shape: ProceduralTreeShape;
+}
+
 const midMountainCrumbleEmitters = new Map<number, MidMountainCrumbleEmitter[]>();
 const midMountainCrumbleShards: MidMountainCrumbleShard[] = [];
 const biomeFlutters = new Map<number, BiomeFlutter[]>();
 const proceduralLianas = new Map<number, ProceduralLiana[]>();
 const proceduralFlora = new Map<number, ProceduralFlora[]>();
+const proceduralTrees = new Map<number, ProceduralTreeInstance[]>();
 
 function midMountainNoise(chunkY: number, x: number, y: number, salt = 0): number {
   let h = Math.imul(chunkY + 101, 374761393)
@@ -1294,7 +1320,8 @@ function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void 
 }
 
 function updateMidMountainCrumble(dt: number): void {
-  for (const emitters of midMountainCrumbleEmitters.values()) {
+  for (const [chunkY, emitters] of midMountainCrumbleEmitters) {
+    if (!isChunkActive(chunkY)) continue;
     for (const emitter of emitters) {
       emitter.timer -= dt;
       if (emitter.timer > 0) continue;
@@ -1307,7 +1334,7 @@ function updateMidMountainCrumble(dt: number): void {
   for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
     const shard = midMountainCrumbleShards[i]!;
     shard.life -= dt;
-    if (shard.life <= 0 || shard.gfx.destroyed) {
+    if (shard.life <= 0 || shard.gfx.destroyed || !isChunkActive(shard.chunkY)) {
       if (!shard.gfx.destroyed) shard.gfx.destroy();
       midMountainCrumbleShards.splice(i, 1);
       continue;
@@ -1442,12 +1469,15 @@ function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: B
 
 function updateBiomeFlutters(tSec: number): void {
   for (const [chunkY, flutters] of biomeFlutters) {
+    const active = isChunkActive(chunkY);
     for (let i = flutters.length - 1; i >= 0; i--) {
       const flutter = flutters[i]!;
       if (flutter.gfx.destroyed) {
         flutters.splice(i, 1);
         continue;
       }
+      flutter.gfx.visible = active;
+      if (!active) continue;
       const drift = Math.sin(tSec * 0.42 + flutter.phase + flutter.seed * 0.001) * 3;
       flutter.gfx.x = Math.round(flutter.baseX + Math.sin(tSec * 0.85 + flutter.phase) * flutter.orbitX + drift);
       flutter.gfx.y = Math.round(flutter.baseY + Math.cos(tSec * 1.1 + flutter.phase) * flutter.orbitY);
@@ -1581,12 +1611,15 @@ function composeProceduralLianas(chunk: GeneratedChunk, target: Container, biome
 
 function updateProceduralLianas(tSec: number): void {
   for (const [chunkY, lianas] of proceduralLianas) {
+    const active = isChunkActive(chunkY);
     for (let i = lianas.length - 1; i >= 0; i--) {
       const liana = lianas[i]!;
       if (liana.gfx.destroyed) {
         lianas.splice(i, 1);
         continue;
       }
+      liana.gfx.visible = active;
+      if (!active) continue;
       liana.gfx.x = liana.anchorX + Math.round(Math.sin(tSec * 0.22 + liana.phase) * 1.5);
       liana.gfx.y = liana.anchorY + Math.round(Math.sin(tSec * 0.48 + liana.phase) * 0.8);
       drawProceduralLiana(liana, tSec);
@@ -1783,12 +1816,15 @@ function composeProceduralFlora(chunk: GeneratedChunk, target: Container, biome:
 
 function updateProceduralFlora(tSec: number): void {
   for (const [chunkY, flora] of proceduralFlora) {
+    const active = isChunkActive(chunkY);
     for (let i = flora.length - 1; i >= 0; i--) {
       const plant = flora[i]!;
       if (plant.gfx.destroyed) {
         flora.splice(i, 1);
         continue;
       }
+      plant.gfx.visible = active;
+      if (!active) continue;
       plant.gfx.x = plant.baseX + Math.round(Math.sin(tSec * 0.18 + plant.phase) * 0.5);
       plant.gfx.y = plant.baseY;
       drawProceduralFlora(plant, tSec);
@@ -2014,6 +2050,7 @@ interface RelicAnim {
   frames: AssetKey[];
   tileX: number;
   tileY: number;
+  lastParticleMs: number;
 }
 const relicAnims = new Map<string, RelicAnim>();
 
@@ -2213,6 +2250,46 @@ function chunkYForWorldY(y: number): number {
   return Math.max(0, -Math.floor(Math.floor(y / TILE_SIZE) / CHUNK_HEIGHT_TILES));
 }
 
+function chunkTopWorldY(chunkY: number): number {
+  return -chunkY * CHUNK_PIXEL_HEIGHT;
+}
+
+function activeWorldBounds(margin = ACTIVE_VIEW_MARGIN_PX): { top: number; bottom: number } {
+  const scale = getScale();
+  return {
+    top: cameraY - margin,
+    bottom: cameraY + pixi.screen.height / scale + margin,
+  };
+}
+
+function isWorldYActive(y: number, margin = ACTIVE_VIEW_MARGIN_PX): boolean {
+  const bounds = activeWorldBounds(margin);
+  return y >= bounds.top && y <= bounds.bottom;
+}
+
+function isChunkActive(chunkY: number, margin = ACTIVE_VIEW_MARGIN_PX): boolean {
+  const top = chunkTopWorldY(chunkY);
+  const bottom = top + CHUNK_PIXEL_HEIGHT;
+  const bounds = activeWorldBounds(margin);
+  return bottom >= bounds.top && top <= bounds.bottom;
+}
+
+function isChunkInCurrentWindow(chunkY: number): boolean {
+  const window = currentChunkWindow();
+  return !window || (chunkY >= window.min && chunkY <= window.max);
+}
+
+function syncChunkVisibility(): void {
+  for (const [chunkY, gfx] of chunkGraphics) {
+    gfx.visible = isChunkActive(chunkY);
+  }
+  for (const [chunkY, decor] of chunkDecorations) {
+    const visible = isChunkActive(chunkY);
+    decor.back.visible = visible;
+    decor.front.visible = visible;
+  }
+}
+
 function currentChunkWindow(): { min: number; max: number } | null {
   if (!localPlayer) return null;
   const pChunkY = chunkYForWorldY(localPlayer.position.y);
@@ -2278,6 +2355,12 @@ function clearWorldChunks(): void {
     }
   }
   proceduralFlora.clear();
+  for (const trees of proceduralTrees.values()) {
+    for (const tree of trees) {
+      if (!tree.container.destroyed) tree.container.destroy({ children: true });
+    }
+  }
+  proceduralTrees.clear();
   backDecorationLayer.removeChildren();
   chunkLayer.removeChildren();
   decorationLayer.removeChildren();
@@ -2313,6 +2396,7 @@ function destroyChunkVisuals(chunkY: number): void {
   clearBiomeFluttersChunk(chunkY);
   clearProceduralLianasChunk(chunkY);
   clearProceduralFloraChunk(chunkY);
+  clearProceduralTreesChunk(chunkY);
 
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
@@ -3044,111 +3128,237 @@ function drawPixelLine(g: Graphics, x1: number, y1: number, x2: number, y2: numb
   }
 }
 
-function drawLeafBlob(g: Graphics, cx: number, cy: number, rx: number, ry: number, palette: ProceduralTreePalette, seed: number, frosted: boolean): void {
+function drawTreeLeafBlob(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  palette: ProceduralTreePalette,
+  seed: number,
+  frosted: boolean,
+  swayX = 0,
+  swayY = 0
+): void {
   for (let y = -ry; y <= ry; y += 4) {
     for (let x = -rx; x <= rx; x += 4) {
       const n = midMountainNoise(seed, cx + x, cy + y, 1701);
-      const edge = (x * x) / (rx * rx) + (y * y) / (ry * ry);
-      if (edge > 1.06 || (edge > 0.78 && n % 5 === 0)) continue;
+      const warp = (((n >> 9) % 9) - 4) * 0.018;
+      const edge = (x * x) / (rx * rx) + (y * y) / (ry * ry) + warp;
+      if (edge > 1.08 || (edge > 0.76 && n % 4 === 0)) continue;
       const block = 4 + (n % 2) * 2;
       const color = frosted
         ? (n % 7 === 0 ? palette.frost : n % 3 === 0 ? palette.leafLight : palette.leafMid)
         : (edge > 0.74 ? palette.leafDark : n % 5 === 0 ? palette.leafLight : palette.leafMid);
-      g.rect(Math.round(cx + x), Math.round(cy + y), block, block).fill(color);
+      g.rect(Math.round(cx + x + swayX), Math.round(cy + y + swayY), block, block).fill(color);
       if (frosted && y < -ry * 0.25 && n % 4 === 0) {
-        g.rect(Math.round(cx + x), Math.round(cy + y), block, 2).fill(palette.frost);
+        g.rect(Math.round(cx + x + swayX), Math.round(cy + y + swayY), block, 2).fill(palette.frost);
+      }
+      if (!frosted && edge < 0.36 && n % 19 === 0) {
+        g.rect(Math.round(cx + x + swayX + 1), Math.round(cy + y + swayY + 1), 2, 2).fill(palette.accent);
       }
     }
   }
 }
 
-function drawPineTier(g: Graphics, cx: number, cy: number, width: number, palette: ProceduralTreePalette, seed: number, frosted: boolean): void {
+function drawPineTier(g: Graphics, cx: number, cy: number, width: number, palette: ProceduralTreePalette, seed: number, frosted: boolean, swayX = 0, swayY = 0): void {
   for (let row = 0; row < 4; row++) {
     const rowW = Math.max(6, width - row * 7);
-    const x = Math.round(cx - rowW / 2 + (midMountainNoise(seed, row, width, 1803) % 3) - 1);
-    const y = cy + row * 4;
+    const x = Math.round(cx + swayX - rowW / 2 + (midMountainNoise(seed, row, width, 1803) % 3) - 1);
+    const y = Math.round(cy + swayY + row * 4);
     g.rect(x, y, rowW, 4).fill(row === 3 ? palette.leafDark : palette.leafMid);
     if (frosted) g.rect(x + 1, y, Math.max(2, rowW - 2), 2).fill(row === 0 ? palette.frost : palette.frostShade);
   }
 }
 
-function makeProceduralTree(biome: BiomeId, seed: number): Container {
+function drawProceduralTreeLeaves(tree: ProceduralTreeInstance, tSec: number): void {
+  const g = tree.leavesGfx;
+  const wind = Math.sin(tSec * 0.72 + tree.phase);
+  const shimmer = Math.sin(tSec * 1.25 + tree.phase * 0.7);
+  g.clear();
+
+  for (const cluster of tree.leafClusters) {
+    const localWind = Math.sin(tSec * 0.85 + tree.phase + cluster.seed * 0.013);
+    const swayX = Math.round((wind * 0.65 + localWind * 0.35) * tree.sway * cluster.windFactor);
+    const swayY = Math.round(shimmer * cluster.windFactor * 0.8);
+    if (cluster.kind === "pine") {
+      drawPineTier(g, cluster.x, cluster.y, cluster.rx * 2, tree.palette, cluster.seed, cluster.frosted, swayX, swayY);
+    } else if (cluster.kind === "crystal") {
+      const glow = 0.52 + Math.max(0, shimmer) * 0.28;
+      g.rect(Math.round(cluster.x - 3 + swayX), Math.round(cluster.y - 2 + swayY), 6, 3).fill({ color: tree.palette.frost, alpha: 0.8 });
+      g.rect(Math.round(cluster.x - 1 + swayX), Math.round(cluster.y - 8 + swayY), 2, 7).fill({ color: tree.palette.accent, alpha: glow });
+      g.rect(Math.round(cluster.x - 5 + swayX), Math.round(cluster.y + swayY), 3, 5).fill({ color: tree.palette.frostShade, alpha: 0.7 });
+      g.rect(Math.round(cluster.x + 2 + swayX), Math.round(cluster.y - 1 + swayY), 3, 5).fill({ color: tree.palette.leafLight, alpha: 0.65 });
+    } else if (cluster.kind === "frost") {
+      g.rect(Math.round(cluster.x - 3 + swayX), Math.round(cluster.y - 2 + swayY), 7, 2).fill(tree.palette.frost);
+      g.rect(Math.round(cluster.x - 1 + swayX), Math.round(cluster.y - 5 + swayY), 3, 3).fill({ color: tree.palette.frostShade, alpha: 0.78 });
+    } else {
+      drawTreeLeafBlob(g, cluster.x, cluster.y, cluster.rx, cluster.ry, tree.palette, cluster.seed, cluster.frosted, swayX, swayY);
+    }
+  }
+}
+
+function registerProceduralTree(tree: ProceduralTreeInstance): void {
+  const trees = proceduralTrees.get(tree.chunkY) ?? [];
+  trees.push(tree);
+  proceduralTrees.set(tree.chunkY, trees);
+}
+
+function clearProceduralTreesChunk(chunkY: number): void {
+  const trees = proceduralTrees.get(chunkY);
+  if (!trees) return;
+  for (const tree of trees) {
+    if (!tree.container.destroyed) tree.container.destroy({ children: true });
+  }
+  proceduralTrees.delete(chunkY);
+}
+
+function updateProceduralTrees(tSec: number): void {
+  for (const [chunkY, trees] of proceduralTrees) {
+    const active = isChunkActive(chunkY);
+    for (let i = trees.length - 1; i >= 0; i--) {
+      const tree = trees[i]!;
+      if (tree.container.destroyed) {
+        trees.splice(i, 1);
+        continue;
+      }
+      tree.container.visible = active;
+      if (!active) continue;
+      tree.leavesGfx.x = Math.round(Math.sin(tSec * 0.3 + tree.phase) * tree.sway * 0.18);
+      drawProceduralTreeLeaves(tree, tSec);
+    }
+    if (trees.length === 0) proceduralTrees.delete(chunkY);
+  }
+}
+
+function makeProceduralTree(biome: BiomeId, seed: number, chunkY: number): Container {
   const palette = biomeTreePalette(biome);
   const shape = chooseProceduralTreeShape(biome, seed);
   const tree = new Container();
-  const g = new Graphics();
-  const height = 48 + (seed % 18) + (shape === "round" || shape === "wind" ? 14 : 0);
-  const segments = 6;
+  const trunkGfx = new Graphics();
+  const leavesGfx = new Graphics();
+  const isLarge = seed % 7 === 0;
+  const isGiant = seed % 19 === 0;
+  const heightScale = (isGiant ? 1.45 : isLarge ? 1.22 : 0.92 + (seed % 7) * 0.045) * (shape === "frostPine" ? 1.12 : 1);
+  const widthScale = isGiant ? 1.38 : isLarge ? 1.18 : 0.9 + ((seed >> 4) % 7) * 0.045;
+  const height = Math.round((48 + (seed % 22) + (shape === "round" || shape === "wind" ? 14 : 0)) * heightScale);
+  const segments = isGiant ? 9 : isLarge ? 8 : 7;
   const points: Array<{ x: number; y: number }> = [];
+  const leafClusters: ProceduralTreeLeafCluster[] = [];
   let x = 0;
 
   for (let i = 0; i <= segments; i++) {
     const n = midMountainNoise(seed, i * 13, height, 1601);
     if (i > 0) {
-      if (shape === "zigzag" || shape === "deadZigzag") x += (i % 2 === 0 ? -1 : 1) * (4 + (n % 4));
-      else if (shape === "wind") x -= 3 + (n % 3);
-      else if (shape === "deformed" || shape === "crystalDead") x += Math.round(Math.sin(i * 1.7 + seed) * 4) + (n % 3) - 1;
-      else x += (n % 5) - 2;
+      if (shape === "zigzag" || shape === "deadZigzag") x += (i % 2 === 0 ? -1 : 1) * Math.round((4 + (n % 6)) * widthScale);
+      else if (shape === "wind") x -= Math.round((3 + (n % 4)) * widthScale);
+      else if (shape === "deformed" || shape === "crystalDead") x += Math.round(Math.sin(i * 1.7 + seed) * 7 * widthScale) + (n % 5) - 2;
+      else x += Math.round(((n % 7) - 3) * widthScale);
     }
     points.push({ x, y: Math.round(-height * (i / segments)) });
   }
 
-  g.rect(-9, -2, 18, 3).fill({ color: palette.barkDark, alpha: 0.35 });
-  g.rect(-5, -4, 4, 7).fill(palette.barkDark);
-  g.rect(2, -3, 5, 6).fill(palette.barkDark);
+  const rootW = Math.round((isGiant ? 26 : isLarge ? 22 : 18) * widthScale);
+  trunkGfx.rect(-Math.round(rootW / 2), -2, rootW, 3).fill({ color: palette.barkDark, alpha: 0.35 });
+  trunkGfx.rect(-Math.round(rootW * 0.32), -4, Math.max(4, Math.round(rootW * 0.22)), 7).fill(palette.barkDark);
+  trunkGfx.rect(Math.round(rootW * 0.14), -3, Math.max(5, Math.round(rootW * 0.26)), 6).fill(palette.barkDark);
 
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i]!;
     const b = points[i + 1]!;
-    const w = Math.max(3, 8 - i);
-    drawPixelLine(g, a.x, a.y, b.x, b.y, w, palette.barkDark);
-    drawPixelLine(g, a.x + 1, a.y, b.x + 1, b.y, Math.max(2, w - 3), palette.barkMid);
-    if (i % 2 === 0) drawPixelLine(g, a.x + 2, a.y - 1, b.x + 2, b.y, 1, palette.barkLight, 0.75);
+    const w = Math.max(3, Math.round((9 - i * 0.72) * (isGiant ? 1.25 : isLarge ? 1.12 : 1)));
+    drawPixelLine(trunkGfx, a.x, a.y, b.x, b.y, w, palette.barkDark);
+    drawPixelLine(trunkGfx, a.x + 1, a.y, b.x + 1, b.y, Math.max(2, w - 3), palette.barkMid);
+    if (i % 2 === 0) drawPixelLine(trunkGfx, a.x + 2, a.y - 1, b.x + 2, b.y, 1, palette.barkLight, 0.75);
   }
 
   const branchTips: Array<{ x: number; y: number }> = [];
-  const branchCount = shape === "dead" || shape === "deadZigzag" || shape === "crystalDead" ? 7 : 5;
+  const branchCount = (shape === "dead" || shape === "deadZigzag" || shape === "crystalDead" ? 8 : 6) + (isLarge ? 1 : 0) + (isGiant ? 2 : 0);
   for (let i = 1; i <= branchCount; i++) {
-    const p = points[Math.min(points.length - 2, 2 + (i % 4))]!;
+    const p = points[Math.min(points.length - 2, 2 + (i % Math.max(4, points.length - 3)))]!;
     const n = midMountainNoise(seed, i * 29, p.y, 1637);
     const side = (i + seed) % 2 === 0 ? -1 : 1;
-    const len = 12 + (n % 16) + (shape === "wind" ? 8 : 0);
-    const lift = 8 + (n % 12);
+    const len = Math.round((12 + (n % 20) + (shape === "wind" ? 10 : 0)) * widthScale);
+    const lift = Math.round((8 + (n % 15)) * (0.9 + heightScale * 0.12));
     const endX = p.x + side * len + (shape === "wind" ? -10 : 0);
     const endY = p.y - lift;
-    drawPixelLine(g, p.x, p.y, endX, endY, Math.max(2, 5 - Math.floor(i / 2)), palette.barkDark);
-    drawPixelLine(g, p.x + side, p.y, endX, endY, 1, palette.barkLight, 0.7);
+    drawPixelLine(trunkGfx, p.x, p.y, endX, endY, Math.max(2, 6 - Math.floor(i / 2)), palette.barkDark);
+    drawPixelLine(trunkGfx, p.x + side, p.y, endX, endY, 1, palette.barkLight, 0.7);
     branchTips.push({ x: endX, y: endY });
     if ((shape === "dead" || shape === "deadZigzag" || shape === "crystalDead") && n % 3 !== 0) {
-      drawPixelLine(g, endX, endY, endX + side * (4 + n % 5), endY - 5, 2, palette.barkLight, 0.85);
+      drawPixelLine(trunkGfx, endX, endY, endX + side * (4 + n % 7), endY - 5, 2, palette.barkLight, 0.85);
     }
   }
 
   const top = points[points.length - 1]!;
   const frosted = shape === "frostRound" || shape === "frostPine" || shape === "crystalDead" || biome === "frozenSpires" || biome === "celestialSummit";
   if (shape === "frostPine") {
-    for (let i = 0; i < 5; i++) drawPineTier(g, top.x, top.y + 6 + i * 9, 42 - i * 5, palette, seed + i * 17, true);
+    for (let i = 0; i < (isGiant ? 7 : isLarge ? 6 : 5); i++) {
+      leafClusters.push({
+        x: top.x + Math.round(Math.sin(i + seed) * 2),
+        y: top.y + 6 + i * Math.round(8 * heightScale),
+        rx: Math.round((24 - i * 2.6) * widthScale),
+        ry: 6,
+        seed: seed + i * 17,
+        frosted: true,
+        windFactor: 0.35 + i * 0.08,
+        kind: "pine",
+      });
+    }
   } else if (shape === "dead" || shape === "deadZigzag" || shape === "crystalDead") {
     for (const tip of branchTips) {
-      if (frosted) g.rect(Math.round(tip.x - 2), Math.round(tip.y - 1), 5, 2).fill(shape === "crystalDead" ? palette.accent : palette.frost);
+      if (frosted) {
+        leafClusters.push({
+          x: tip.x,
+          y: tip.y,
+          rx: 6,
+          ry: 4,
+          seed: seed + Math.round(tip.x * 3 - tip.y),
+          frosted: true,
+          windFactor: 0.5,
+          kind: shape === "crystalDead" ? "crystal" : "frost",
+        });
+      }
     }
   } else {
-    drawLeafBlob(g, top.x - 18, top.y + 3, 27, 16, palette, seed, frosted);
-    drawLeafBlob(g, top.x + 11, top.y - 3, 29, 18, palette, seed + 41, frosted);
-    drawLeafBlob(g, top.x + (shape === "wind" ? -18 : 0), top.y - 16, 25, 18, palette, seed + 83, frosted);
-    if (shape === "deformed") drawLeafBlob(g, top.x + 24, top.y + 7, 18, 13, palette, seed + 127, false);
+    const canopyW = widthScale * (shape === "deformed" ? 1.15 : 1);
+    leafClusters.push(
+      { x: top.x - Math.round(18 * canopyW), y: top.y + Math.round(3 * heightScale), rx: Math.round(27 * canopyW), ry: Math.round(16 * heightScale), seed, frosted, windFactor: 0.85, kind: "blob" },
+      { x: top.x + Math.round(11 * canopyW), y: top.y - Math.round(3 * heightScale), rx: Math.round(29 * canopyW), ry: Math.round(18 * heightScale), seed: seed + 41, frosted, windFactor: 1, kind: "blob" },
+      { x: top.x + (shape === "wind" ? -Math.round(24 * canopyW) : 0), y: top.y - Math.round(16 * heightScale), rx: Math.round(25 * canopyW), ry: Math.round(18 * heightScale), seed: seed + 83, frosted, windFactor: 1.12, kind: "blob" },
+    );
+    if (shape === "deformed" || isLarge || isGiant) {
+      leafClusters.push({ x: top.x + Math.round(25 * canopyW), y: top.y + Math.round(8 * heightScale), rx: Math.round(18 * canopyW), ry: Math.round(13 * heightScale), seed: seed + 127, frosted: false, windFactor: 0.78, kind: "blob" });
+    }
+    if (isGiant) {
+      leafClusters.push({ x: top.x - Math.round(4 * canopyW), y: top.y - Math.round(30 * heightScale), rx: Math.round(20 * canopyW), ry: Math.round(12 * heightScale), seed: seed + 211, frosted, windFactor: 1.25, kind: "blob" });
+    }
   }
 
   if (frosted) {
     for (let i = 0; i < 7; i++) {
       const p = points[1 + (i % (points.length - 1))]!;
       const n = midMountainNoise(seed, i * 37, p.y, 1889);
-      if (n % 2 === 0) g.rect(p.x - 2 + (n % 5), p.y - 2, 4, 2).fill(palette.frost);
+      if (n % 2 === 0) trunkGfx.rect(p.x - 2 + (n % 5), p.y - 2, 4, 2).fill(palette.frost);
     }
   }
 
-  tree.addChild(g);
-  tree.scale.set(SCENE_ASSET_SCALE * (0.84 + (seed % 5) * 0.04));
+  tree.addChild(trunkGfx, leavesGfx);
+  const scale = SCENE_ASSET_SCALE * (isGiant ? 1.14 : isLarge ? 1.02 : 0.84 + (seed % 5) * 0.04);
+  tree.scale.set(scale);
+  const instance: ProceduralTreeInstance = {
+    chunkY,
+    container: tree,
+    leavesGfx,
+    leafClusters,
+    palette,
+    seed,
+    phase: ((seed >> 8) % 628) / 100,
+    sway: isGiant ? 5.6 : isLarge ? 4.4 : 3.2,
+    shape,
+  };
+  drawProceduralTreeLeaves(instance, 0);
+  registerProceduralTree(instance);
   return tree;
 }
 
@@ -3171,7 +3381,7 @@ function placeProceduralTreeOnPlatform(
   seed: number,
   offsetRatio: number
 ): void {
-  const tree = makeProceduralTree(biome, seed);
+  const tree = makeProceduralTree(biome, seed, chunk.chunkY);
   const usableWidth = Math.max(0, platform.width - 2) * TILE_SIZE;
   const edgeJitter = ((seed >> 9) % 7) - 3;
   tree.x = Math.round(platformCenterX(platform) + usableWidth * offsetRatio + edgeJitter);
@@ -3294,9 +3504,12 @@ function addHazardTelegraph(
 }
 
 function updateHazardTelegraphs(tSec: number): void {
-  for (const telegraphs of chunkHazardTelegraphs.values()) {
+  for (const [chunkY, telegraphs] of chunkHazardTelegraphs) {
+    const active = isChunkActive(chunkY);
     for (const h of telegraphs) {
       if (h.gfx.destroyed) continue;
+      h.gfx.visible = active;
+      if (!active) continue;
       const pulse = Math.sin(tSec * 4.8 + h.seed * 0.013) * 0.5 + 0.5;
       h.gfx.clear();
       if (h.style === "falling") {
@@ -3353,41 +3566,52 @@ function addProceduralWindZone(target: Container, chunk: GeneratedChunk, zone: W
 }
 
 function updateWindZoneFxs(tSec: number): void {
-  for (const fxs of windZoneFxs.values()) {
+  for (const [chunkY, fxs] of windZoneFxs) {
+    const active = isChunkActive(chunkY);
     for (const fx of fxs) {
       if (fx.gfx.destroyed) continue;
+      fx.gfx.visible = active;
+      if (!active) continue;
       const { gfx, zone, widthPx, heightPx, seed, palette } = fx;
-      const pulse = Math.sin(tSec * 2.6 + seed * 0.01) * 0.5 + 0.5;
+      const primary = Math.sin(tSec * 2.15 + seed * 0.000_31) * 0.5 + 0.5;
+      const choppy = Math.sin(tSec * 5.4 + seed * 0.000_17) * 0.5 + 0.5;
+      const lull = Math.sin(tSec * 1.3 + seed * 0.000_23) < -0.38;
+      const intensity = lull ? 0.28 + primary * 0.24 : 0.7 + primary * 0.65 + choppy * 0.22;
       const dir = zone.direction;
       gfx.clear();
 
       gfx.rect(0, 0, widthPx, heightPx)
-        .fill({ color: palette.haze, alpha: 0.025 + pulse * 0.025 });
-      gfx.rect(0, 0, widthPx, 2).fill({ color: palette.bright, alpha: 0.05 + pulse * 0.04 });
-      gfx.rect(0, heightPx - 2, widthPx, 2).fill({ color: palette.streak, alpha: 0.035 + pulse * 0.035 });
+        .fill({ color: palette.haze, alpha: 0.015 + intensity * 0.028 });
+      gfx.rect(0, 0, widthPx, 2).fill({ color: palette.bright, alpha: 0.035 + intensity * 0.045 });
+      gfx.rect(0, heightPx - 2, widthPx, 2).fill({ color: palette.streak, alpha: 0.025 + intensity * 0.035 });
 
-      const streamCount = Math.max(5, Math.floor(heightPx / 10));
+      const streamCount = Math.max(lull ? 4 : 7, Math.floor(heightPx / (lull ? 14 : 8)));
       for (let i = 0; i < streamCount; i++) {
-        const rowPhase = tSec * (28 + (seed % 11)) + i * 23 + seed * 0.017;
+        const rowGate = Math.sin(tSec * (1.6 + (i % 3) * 0.35) + i * 1.9 + seed * 0.000_41);
+        if (lull && rowGate < 0.18) continue;
+        const rowPhase = tSec * (lull ? 18 + (seed % 7) : 42 + (seed % 17)) + i * 23 + seed * 0.017;
         const travel = rowPhase % (widthPx + 36);
         const x = Math.round(dir > 0 ? travel - 30 : widthPx - travel + 6);
-        const y = Math.round(7 + i * ((heightPx - 14) / Math.max(1, streamCount - 1)) + Math.sin(tSec * 3 + i + seed) * 2);
-        const alpha = 0.10 + pulse * 0.12 + (i % 2) * 0.04;
-        const len = 16 + ((seed >> (i % 8)) & 7);
+        const y = Math.round(7 + i * ((heightPx - 14) / Math.max(1, streamCount - 1)) + Math.sin(tSec * 3 + i + seed) * (lull ? 4 : 2));
+        const alpha = (0.07 + intensity * 0.12 + (i % 2) * 0.035) * (rowGate > 0.55 ? 1.25 : 0.72);
+        const len = (lull ? 10 : 18) + ((seed >> (i % 8)) & (lull ? 5 : 11));
 
         gfx.rect(x, y, len, 2).fill({ color: palette.bright, alpha });
         gfx.rect(x - dir * 8, y + 4, Math.max(8, len - 6), 2).fill({ color: palette.streak, alpha: alpha * 0.72 });
-        gfx.rect(x + dir * (len - 2), y - 2, 6, 2).fill({ color: palette.bright, alpha: alpha * 0.45 });
+        if (!lull || rowGate > 0.55) {
+          gfx.rect(x + dir * (len - 2), y - 2, 6, 2).fill({ color: palette.bright, alpha: alpha * 0.5 });
+        }
       }
 
-      for (let i = 0; i < 3; i++) {
-        const y = Math.round(12 + i * (heightPx / 3) + Math.sin(tSec * 2.2 + i) * 3);
+      const arrowCount = lull ? 2 : 4;
+      for (let i = 0; i < arrowCount; i++) {
+        const y = Math.round(10 + i * ((heightPx - 18) / Math.max(1, arrowCount - 1)) + Math.sin(tSec * 2.2 + i) * 3);
         const x = dir > 0 ? widthPx - 10 : 10;
         gfx.poly([
           x, y,
           x - dir * 8, y - 5,
           x - dir * 8, y + 5,
-        ]).fill({ color: palette.bright, alpha: 0.10 + pulse * 0.08 });
+        ]).fill({ color: palette.bright, alpha: 0.08 + intensity * 0.08 });
       }
     }
   }
@@ -3890,7 +4114,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (shouldPlaceProceduralTree(biome, seed) && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, biome === "pineValley" || biome === "cloudRidge" ? 4 : 3)) {
-        const tree = makeProceduralTree(biome, seed);
+        const tree = makeProceduralTree(biome, seed, chunk.chunkY);
         tree.x = wx + TILE_SIZE / 2;
         tree.y = wy + 6;
         tree.alpha = biome === "celestialSummit" ? 0.8 : biome === "frozenSpires" ? 0.86 : 0.92;
@@ -4139,6 +4363,9 @@ function spawnJumpPadAnim(pad: JumpPadSpawn, worldTileY: number): void {
 
 function updateJumpPadAnims(tSec: number): void {
   for (const anim of jumpPadAnims.values()) {
+    const active = isWorldYActive(anim.worldY);
+    anim.container.visible = active;
+    if (!active) continue;
     const pulse = Math.sin(tSec * 5.4 + anim.pad.x) * 0.5 + 0.5;
     anim.aura.clear();
     anim.aura.ellipse(0, 2, 18 + pulse * 4, 7 + pulse * 1.5)
@@ -4236,8 +4463,39 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
     auraColor: visual.color,
     frames: collectibleFrames(kind, id, tileX, tileY),
     tileX,
-    tileY
+    tileY,
+    lastParticleMs: 0,
   });
+}
+
+function spawnCollectibleAuraSparks(anim: RelicAnim, tSec: number, bob: number, pulse: number): void {
+  if (elapsedMs - anim.lastParticleMs < 95) return;
+  anim.lastParticleMs = elapsedMs;
+
+  const wx = anim.tileX * TILE_SIZE + TILE_SIZE / 2;
+  const wy = anim.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
+  const seed = midMountainNoise(anim.tileX + Math.round(tSec * 18), anim.tileY, Math.round(elapsedMs / 16), 719);
+  const count = seed % 4 === 0 ? 3 : 2;
+
+  for (let i = 0; i < count; i++) {
+    const n = midMountainNoise(seed, i * 37, anim.tileX + anim.tileY * 13, 743);
+    const angle = ((n % 628) / 100) + tSec * 0.7;
+    const radius = 13 + ((n >> 5) % 8) + pulse * 5;
+    const speed = 18 + ((n >> 11) % 24);
+    const sx = wx + Math.cos(angle) * radius;
+    const sy = wy + Math.sin(angle) * radius * 0.72;
+    const color = n % 5 === 0 ? 0xffffff : anim.auraColor;
+    spawnPart(
+      sx,
+      sy,
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed - 10,
+      0.42 + ((n >> 17) % 22) / 100,
+      color,
+      n % 7 === 0 ? 3 : 2,
+      -18
+    );
+  }
 }
 
 function updateRelicAnims(tSec: number): void {
@@ -4247,6 +4505,9 @@ function updateRelicAnims(tSec: number): void {
       relicAnims.delete(id);
       continue;
     }
+    const active = isWorldYActive(a.tileY * TILE_SIZE);
+    a.container.visible = active;
+    if (!active) continue;
     const bob   = Math.sin(tSec * 3.0 + a.tileX * 0.8) * 2.5;
     a.container.y = a.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
 
@@ -4256,9 +4517,17 @@ function updateRelicAnims(tSec: number): void {
     const pulse = 0.5 + Math.sin(tSec * 4.6 + a.tileX * 0.7 + a.tileY * 0.3) * 0.5;
 
     a.aura.clear();
-    a.aura.circle(0, 0, 14 + pulse * 2).fill({ color: a.auraColor, alpha: 0.12 + pulse * 0.06 });
-    a.aura.circle(0, 0, 9 + pulse * 1.5).stroke({ color: a.auraColor, alpha: 0.4 + pulse * 0.18, width: 1 });
-    a.aura.circle(0, 0, 5 + pulse).stroke({ color: 0xffffff, alpha: 0.12 + pulse * 0.14, width: 1 });
+    a.aura.circle(0, 0, 22 + pulse * 4).fill({ color: a.auraColor, alpha: 0.08 + pulse * 0.07 });
+    a.aura.circle(0, 0, 16 + pulse * 3).stroke({ color: a.auraColor, alpha: 0.28 + pulse * 0.22, width: 1 });
+    a.aura.circle(0, 0, 10 + pulse * 2).stroke({ color: a.auraColor, alpha: 0.42 + pulse * 0.2, width: 1 });
+    a.aura.circle(0, 0, 6 + pulse).stroke({ color: 0xffffff, alpha: 0.18 + pulse * 0.16, width: 1 });
+    for (let i = 0; i < 4; i++) {
+      const angle = tSec * 1.35 + a.tileX * 0.5 + i * Math.PI * 0.5;
+      const r = 18 + pulse * 5 + (i % 2) * 3;
+      a.aura.rect(Math.round(Math.cos(angle) * r) - 1, Math.round(Math.sin(angle) * r * 0.75) - 1, 2, 2)
+        .fill({ color: i % 3 === 0 ? 0xffffff : a.auraColor, alpha: 0.3 + pulse * 0.28 });
+    }
+    spawnCollectibleAuraSparks(a, tSec, bob, pulse);
 
     if (hasAsset("coin")) {
       a.gfx.clear();
@@ -4409,7 +4678,10 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
 }
 
 function updatePortals(tSec: number): void {
-  for (const a of portalAnims.values()) {
+  for (const [chunkY, a] of portalAnims) {
+    const active = isChunkActive(chunkY);
+    a.container.visible = active;
+    if (!active) continue;
     const hw    = Math.round((a.tileW * TILE_SIZE) * 0.40);
     const ph    = a.isExit ? 32 : 22;
     const col   = a.isExit ? PAL.portalBlue : PAL.uiHighlight;
@@ -4562,6 +4834,7 @@ const floatingTexts: FloatingText[] = [];
 let fallStreakTimer = 0;
 
 function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number, color: number, size = 2, gravity = 200): void {
+  if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
   if (particles.length > 220) return;
   const gfx = partPool.pop() ?? new Graphics();
   gfx.clear();
@@ -4572,6 +4845,7 @@ function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number,
 }
 
 function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, life = 0.42, width = 2): void {
+  if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
   if (worldPulses.length > 24) return;
   const gfx = new Graphics();
   gfx.x = wx;
@@ -4581,6 +4855,7 @@ function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, lif
 }
 
 function spawnFloatingText(wx: number, wy: number, msg: string, color: number): void {
+  if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
   if (floatingTexts.length > 12) return;
   const txt = new Text({
     text: msg,
@@ -5272,10 +5547,19 @@ function connectRoom(name: string): void {
         }
         break;
       case "chunk": {
-        // Always replace locally-generated chunk with authoritative server version
-        destroyChunkVisuals(parsed.chunk.chunkY);
-        loadedChunks.set(parsed.chunk.chunkY, parsed.chunk);
+        const chunkY = parsed.chunk.chunkY;
+        if (!isChunkInCurrentWindow(chunkY)) {
+          destroyChunkVisuals(chunkY);
+          loadedChunks.delete(chunkY);
+          break;
+        }
+
+        // Replace locally-generated chunk with authoritative server version while
+        // keeping late responses from expanding the scene graph off-screen.
+        destroyChunkVisuals(chunkY);
+        loadedChunks.set(chunkY, parsed.chunk);
         renderChunk(parsed.chunk);
+        syncChunkVisibility();
         break;
       }
       case "playerJoined":
@@ -5408,7 +5692,7 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
     for (let i = idx + 1; i < predBuf.length; i++) {
       const e = predBuf[i]; if (!e) continue;
       const { player: next } = stepPlayer(localPlayer, e.input, tileMap, PHYSICS_STEP_SECONDS);
-      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS);
+      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000);
       localPlayer = next;
     }
     if (snapVisual) snapLocalVisualToSimulation();
@@ -5458,7 +5742,7 @@ function interpRemotes(): void {
       };
       for (let i = 0; i < Math.min(steps, 8); i++) {
         extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
-        applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS);
+        applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000 + i * PHYSICS_STEP_SECONDS);
       }
       e.current = extState;
       continue;
@@ -5566,12 +5850,14 @@ pixi.ticker.add((ticker) => {
   const scale = getScale();
 
   ensureChunksAhead();
+  syncChunkVisibility();
   reqChunks();
   maybePing();
   updateAdaptiveInterpDelay();
   updateParticles(dt);
   updateMidMountainCrumble(dt);
   updateBiomeFlutters(tSec);
+  updateProceduralTrees(tSec);
   updateProceduralLianas(tSec);
   updateProceduralFlora(tSec);
   spawnAmbientParticles(dt);
@@ -5617,7 +5903,7 @@ pixi.ticker.add((ticker) => {
       const wasKickPhase = localPlayer.kickPhase;
       const willJump = inp.jumpPressed && (localPlayer.grounded || localPlayer.coyoteTimer > 0);
       const { player: next } = stepPlayer(localPlayer, inp, tileMap, PHYSICS_STEP_SECONDS);
-      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS);
+      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, tSec);
       const hitJumpPad = applyLocalJumpPads(next);
 
       if (willJump && wasGrounded) jumpDust(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT, next.facing);

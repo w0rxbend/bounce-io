@@ -260,7 +260,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
           width: zoneWidth,
           height: zoneHeight,
           direction,
-          strength: options.chunkY >= 12 ? 340 : 260
+          strength: options.chunkY >= 12 ? 620 : 480
         });
         windIndex++;
       }

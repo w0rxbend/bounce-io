@@ -301,7 +301,22 @@ export function applyHazardHit(player: PlayerState, kind: HazardKind = "spikeTra
   player.invulnerable = Math.max(player.invulnerable, HAZARD_HIT_INVULNERABLE_SECONDS);
 }
 
-export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedChunk>, deltaSeconds: number): boolean {
+function windZoneSeed(chunk: GeneratedChunk, zone: GeneratedChunk["windZones"][number]): number {
+  return (chunk.seed ^ (chunk.chunkY * 73_856_093) ^ (zone.x * 19_349_663) ^ (zone.y * 83_492_791)) >>> 0;
+}
+
+function windGustMultiplier(seed: number, timeSeconds: number, bounds: Rect): number {
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  const primary = Math.sin(timeSeconds * 2.15 + seed * 0.000_31) * 0.5 + 0.5;
+  const choppy = Math.sin(timeSeconds * 5.4 + centerY * 0.08 + seed * 0.000_17) * 0.5 + 0.5;
+  const lane = Math.sin(centerY * 0.16 + centerX * 0.035 + seed * 0.000_09) * 0.5 + 0.5;
+  const lull = Math.sin(timeSeconds * 1.3 + centerY * 0.11 + seed * 0.000_23) < -0.38;
+  const base = lull ? 0.16 : 0.42;
+  return clamp(base + primary * 0.9 + choppy * 0.28 + lane * 0.22, 0.12, lull ? 0.55 : 1.65);
+}
+
+export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedChunk>, deltaSeconds: number, timeSeconds = 0): boolean {
   if (player.health <= 0) return false;
   const dt = Math.min(Math.max(deltaSeconds, 0), MAX_DELTA_SECONDS);
   const bounds = playerRect(player);
@@ -317,9 +332,10 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
       };
       if (!rectsOverlap(bounds, zoneRect)) continue;
 
-      const targetVelocity = zone.direction * Math.min(PLAYER_MAX_PUSH_VELOCITY, zone.strength);
-      player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * 3.5 * dt);
-      player.velocity.x = clamp(player.velocity.x, -PLAYER_MAX_PUSH_VELOCITY, PLAYER_MAX_PUSH_VELOCITY);
+      const gust = windGustMultiplier(windZoneSeed(chunk, zone), timeSeconds, bounds);
+      const targetVelocity = zone.direction * Math.min(MAX_RUN_SPEED * 1.45, zone.strength * 0.55 * gust);
+      player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * (2.2 + gust * 3.0) * dt);
+      player.velocity.x = clamp(player.velocity.x, -MAX_RUN_SPEED * 1.45, MAX_RUN_SPEED * 1.45);
       pushed = true;
     }
   }
