@@ -119,6 +119,8 @@ const INITIAL_CHUNKS_TO_LOAD = 4;
 const CHUNK_PIXEL_HEIGHT = CHUNK_HEIGHT_TILES * TILE_SIZE;
 const ACTIVE_VIEW_MARGIN_PX = 120;
 const PRESSURE_VIEW_MARGIN_PX = 64;
+const VISUAL_RENDER_MARGIN_PX = 96;
+const VISUAL_RETAIN_MARGIN_PX = CHUNK_PIXEL_HEIGHT * 1.25;
 const BIOME_FLUTTER_VISIBLE_TARGET = 20;
 const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 
@@ -1118,6 +1120,7 @@ interface ProceduralTreeInstance {
 const midMountainCrumbleEmitters = new Map<number, MidMountainCrumbleEmitter[]>();
 const midMountainCrumbleShards: MidMountainCrumbleShard[] = [];
 const midMountainCrumblePool: PixiParticle[] = [];
+let midMountainCrumbleLayerDirty = false;
 const biomeFlutters = new Map<number, BiomeFlutter[]>();
 const proceduralLianas = new Map<number, ProceduralLiana[]>();
 const proceduralFlora = new Map<number, ProceduralFlora[]>();
@@ -1287,7 +1290,7 @@ function releaseMidMountainCrumbleShard(index: number): void {
   midMountainCrumbleShards.pop();
   children.pop();
   shard.particle.alpha = 0;
-  midMountainCrumbleParticleLayer.update();
+  midMountainCrumbleLayerDirty = true;
   if (midMountainCrumblePool.length < MAX_CRUMBLE_PARTICLES) midMountainCrumblePool.push(shard.particle);
 }
 
@@ -1350,7 +1353,7 @@ function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void 
   particle.tint = n % 6 === 0 ? emitter.accent : emitter.color;
   particle.alpha = 1;
   midMountainCrumbleParticleLayer.particleChildren.push(particle);
-  midMountainCrumbleParticleLayer.update();
+  midMountainCrumbleLayerDirty = true;
   midMountainCrumbleShards.push({
     chunkY: emitter.chunkY,
     particle,
@@ -1385,7 +1388,10 @@ function updateMidMountainCrumble(dt: number): void {
     shard.vy += 78 * dt;
     shard.particle.x += shard.vx * dt;
     shard.particle.y += shard.vy * dt;
-    shard.particle.alpha = clamp01(shard.life / shard.max);
+  }
+  if (midMountainCrumbleLayerDirty) {
+    midMountainCrumbleParticleLayer.update();
+    midMountainCrumbleLayerDirty = false;
   }
 }
 
@@ -2065,7 +2071,7 @@ const midMountainCrumbleParticleLayer = new ParticleContainer<PixiParticle>({
     position: true,
     rotation: false,
     uvs: false,
-    color: true,
+    color: false,
   },
 });
 const chunkLayer  = new Container();
@@ -2085,7 +2091,7 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
     position: true,
     rotation: false,
     uvs: false,
-    color: true,
+    color: false,
   },
 });
 const hudLayer    = new Container({ isRenderGroup: true });
@@ -2332,7 +2338,7 @@ function loadChunk(cy: number, immediateRender = false): void {
   if (loadedChunks.has(cy)) return;
   const chunk = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
   loadedChunks.set(cy, chunk);
-  enqueueChunkRender(cy, immediateRender);
+  if (immediateRender) enqueueChunkRender(cy, true);
 }
 
 function chunkYForWorldY(y: number): number {
@@ -2390,8 +2396,16 @@ function hasChunkVisuals(chunkY: number): boolean {
   return chunkGraphics.has(chunkY) || chunkDecorations.has(chunkY);
 }
 
+function shouldRenderChunkVisuals(chunkY: number): boolean {
+  return isChunkInCurrentWindow(chunkY) && isChunkActive(chunkY, VISUAL_RENDER_MARGIN_PX);
+}
+
+function shouldRetainChunkVisuals(chunkY: number): boolean {
+  return isChunkInCurrentWindow(chunkY) && isChunkActive(chunkY, VISUAL_RETAIN_MARGIN_PX);
+}
+
 function enqueueChunkRender(chunkY: number, immediate = false): void {
-  if (!loadedChunks.has(chunkY) || hasChunkVisuals(chunkY)) return;
+  if (!loadedChunks.has(chunkY) || hasChunkVisuals(chunkY) || !shouldRenderChunkVisuals(chunkY)) return;
   if (immediate) {
     pendingChunkRenders.delete(chunkY);
     renderChunk(loadedChunks.get(chunkY)!);
@@ -2413,10 +2427,26 @@ function processChunkRenderQueue(): void {
   for (const chunkY of queue) {
     pendingChunkRenders.delete(chunkY);
     const chunk = loadedChunks.get(chunkY);
-    if (!chunk || !isChunkInCurrentWindow(chunkY) || hasChunkVisuals(chunkY)) continue;
+    if (!chunk || !shouldRenderChunkVisuals(chunkY) || hasChunkVisuals(chunkY)) continue;
     renderChunk(chunk);
     rendered++;
     if (rendered >= maxRenders || performance.now() - started >= budgetMs) break;
+  }
+}
+
+function enqueueVisibleChunkRenders(): void {
+  for (const chunkY of loadedChunks.keys()) {
+    if (shouldRenderChunkVisuals(chunkY)) enqueueChunkRender(chunkY);
+    else pendingChunkRenders.delete(chunkY);
+  }
+}
+
+function pruneDistantChunkVisuals(): void {
+  for (const chunkY of [...chunkGraphics.keys()]) {
+    if (!shouldRetainChunkVisuals(chunkY)) destroyChunkVisuals(chunkY);
+  }
+  for (const chunkY of [...chunkDecorations.keys()]) {
+    if (!shouldRetainChunkVisuals(chunkY)) destroyChunkVisuals(chunkY);
   }
 }
 
@@ -2434,8 +2464,7 @@ function ensureChunksAhead(): void {
   const window = currentChunkWindow();
   if (!window) return;
   for (let cy = window.min; cy <= window.max; cy++) {
-    if (loadedChunks.has(cy)) enqueueChunkRender(cy);
-    else loadChunk(cy);
+    if (!loadedChunks.has(cy)) loadChunk(cy);
   }
 
   // Sliding-window streaming. Chunks are deterministic, so disposing visuals is
@@ -2450,7 +2479,7 @@ function ensureChunksAhead(): void {
 
 function regenerateWorld(): void {
   clearWorldChunks();
-  for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
+  for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
   respawnLocal();
 }
 
@@ -2469,6 +2498,10 @@ function clearWorldChunks(): void {
   midMountainCrumbleEmitters.clear();
   for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
     releaseMidMountainCrumbleShard(i);
+  }
+  if (midMountainCrumbleLayerDirty) {
+    midMountainCrumbleParticleLayer.update();
+    midMountainCrumbleLayerDirty = false;
   }
   for (const flutters of biomeFlutters.values()) {
     for (const flutter of flutters) {
@@ -3901,7 +3934,7 @@ function composeTraversalConnectors(chunk: GeneratedChunk, back: Container, fron
   }
 }
 
-function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, front: Container, biome: BiomeId): void {
+function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, front: Container, biome: BiomeId, treeLayer = back): void {
   const mainFolders = biomePropFolders(biome);
   const smallFolders = biomeSmallPropFolders(biome);
 
@@ -3946,13 +3979,13 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
       const leftEdge = -0.43 + ((treeSeed % 9) - 4) * 0.008;
       const rightEdge = 0.43 + (((treeSeed >> 5) % 9) - 4) * 0.008;
       const preferLeft = treeSeed % 2 === 0;
-      placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed, preferLeft ? leftEdge : rightEdge);
+      placeProceduralTreeOnPlatform(treeLayer, chunk, platform, biome, treeSeed, preferLeft ? leftEdge : rightEdge);
       if (platform.width >= 6) {
-        placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed ^ 0x9e3779b9, preferLeft ? rightEdge : leftEdge);
+        placeProceduralTreeOnPlatform(treeLayer, chunk, platform, biome, treeSeed ^ 0x9e3779b9, preferLeft ? rightEdge : leftEdge);
       }
       if (platform.width >= 9 && treeSeed % 3 !== 1) {
         const centerDrift = ((treeSeed >> 11) % 21) / 100 - 0.1;
-        placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed ^ 0x85ebca6b, centerDrift);
+        placeProceduralTreeOnPlatform(treeLayer, chunk, platform, biome, treeSeed ^ 0x85ebca6b, centerDrift);
       }
     }
 
@@ -3994,25 +4027,41 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
   }
 }
 
+function cacheStaticChunkLayer(layer: Container): void {
+  if (layer.children.length === 0) return;
+  if (layer.sortableChildren) layer.sortChildren();
+  layer.cacheAsTexture(PIXEL_CACHE_OPTIONS);
+}
+
 function decorateChunk(chunk: GeneratedChunk): void {
   if (Object.keys(pixelAssets).length === 0) return;
 
   const back = new Container();
   const front = new Container();
-  back.sortableChildren = true;
-  front.sortableChildren = true;
+  const backStatic = new Container();
+  const backDynamic = new Container();
+  const frontUnderDynamic = new Container();
+  const frontStatic = new Container();
+  const frontOverDynamic = new Container();
+  backStatic.sortableChildren = true;
+  backDynamic.sortableChildren = true;
+  frontUnderDynamic.sortableChildren = true;
+  frontStatic.sortableChildren = true;
+  frontOverDynamic.sortableChildren = true;
+  back.addChild(backStatic, backDynamic);
+  front.addChild(frontUnderDynamic, frontStatic, frontOverDynamic);
   const baseTileY = chunk.worldTileY;
   const biome = biomeForChunkY(chunk.chunkY);
-  composeChunkAtmosphere(chunk, back, biome);
-  composeMidMountainLayer(chunk, back, biome);
-  composePlatformPartLayer(chunk, front, biome);
-  composeTraversalConnectors(chunk, back, front, biome);
-  composePlatformSceneDressing(chunk, back, front, biome);
-  composeProceduralLianas(chunk, front, biome);
-  composeProceduralFlora(chunk, front, biome);
-  composeBiomeFlutters(chunk, front, biome);
+  composeChunkAtmosphere(chunk, backStatic, biome);
+  composeMidMountainLayer(chunk, backStatic, biome);
+  composePlatformPartLayer(chunk, frontStatic, biome);
+  composeTraversalConnectors(chunk, backStatic, frontStatic, biome);
+  composePlatformSceneDressing(chunk, backStatic, frontStatic, biome, backDynamic);
+  composeProceduralLianas(chunk, frontOverDynamic, biome);
+  composeProceduralFlora(chunk, frontOverDynamic, biome);
+  composeBiomeFlutters(chunk, frontOverDynamic, biome);
   for (const zone of chunk.windZones ?? []) {
-    addProceduralWindZone(front, chunk, zone, biome);
+    addProceduralWindZone(frontOverDynamic, chunk, zone, biome);
   }
 
   for (let ly = 0; ly < chunk.height; ly++) {
@@ -4041,8 +4090,8 @@ function decorateChunk(chunk: GeneratedChunk): void {
           hazard.y = isHanging ? wy - 24 : hazardKey === "spikeBall" || hazardKey === "spikeBoulder" || hazardKey === "rollingBoulder" ? wy - 14 : wy - 2;
           hazard.alpha = 0.96;
           hazard.zIndex = 4;
-          addHazardTelegraph(front, chunk.chunkY, wx + (isWide ? -16 : 0), wy, seed, hazardTelegraphStyle(hazardKey), isWide ? 48 : TILE_SIZE);
-          front.addChild(hazard);
+          addHazardTelegraph(frontUnderDynamic, chunk.chunkY, wx + (isWide ? -16 : 0), wy, seed, hazardTelegraphStyle(hazardKey), isWide ? 48 : TILE_SIZE);
+          frontStatic.addChild(hazard);
         }
         continue;
       }
@@ -4051,7 +4100,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       if (seed % 23 === 0) {
         const key = folderChoiceForBiome(biome, seed);
-        if (key) placeManifestDecoration(seed % 2 === 0 ? back : front, key, wx, wy, seed, seed % 2 === 0);
+        if (key) placeManifestDecoration(seed % 2 === 0 ? backStatic : frontStatic, key, wx, wy, seed, seed % 2 === 0);
       }
 
       if (seed % 41 === 0) {
@@ -4063,7 +4112,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
           ...folderAssetKeys("environment/tiles"),
         ];
         const key = chooseAsset(terrainKeys, seed, "");
-        if (key) placeManifestDecoration(back, key, wx, wy + 4, seed, true);
+        if (key) placeManifestDecoration(backStatic, key, wx, wy + 4, seed, true);
       }
 
       if (biome !== "frozenSpires" && biome !== "celestialSummit" && hasAsset("grassClump") && seed % 7 === 0) {
@@ -4072,7 +4121,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         grass.y = wy - 12;
         grass.alpha = 0.9;
         grass.zIndex = 2;
-        front.addChild(grass);
+        frontStatic.addChild(grass);
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("flowerPatch") && seed % 19 === 0) {
@@ -4081,7 +4130,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         flower.y = wy - 13;
         flower.alpha = 0.92;
         flower.zIndex = 3;
-        front.addChild(flower);
+        frontStatic.addChild(flower);
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("leafCluster") && seed % 11 === 0) {
@@ -4090,7 +4139,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         leaves.y = wy - 14;
         leaves.alpha = 0.84;
         leaves.zIndex = 2;
-        front.addChild(leaves);
+        frontStatic.addChild(leaves);
       }
 
       if (biome !== "celestialSummit" && hasAsset("vineHanging") && seed % 17 === 0) {
@@ -4099,7 +4148,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         vine.y = wy + TILE_SIZE - 2;
         vine.alpha = 0.78;
         vine.zIndex = 1;
-        front.addChild(vine);
+        frontStatic.addChild(vine);
       }
 
       if (hasAsset("pebbleCluster") && seed % 29 === 0) {
@@ -4108,7 +4157,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         pebbles.y = wy + 3;
         pebbles.alpha = 0.72;
         pebbles.zIndex = 2;
-        front.addChild(pebbles);
+        frontStatic.addChild(pebbles);
       }
 
       const rockCapKey = seed % 89 === 0 ? chooseBiomeRockAsset(biome, seed, "cap") : null;
@@ -4118,7 +4167,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         cap.y = wy - 9;
         cap.alpha = 0.82;
         cap.zIndex = 2;
-        front.addChild(cap);
+        frontStatic.addChild(cap);
       }
 
       const rockClusterKey = seed % 127 === 0 ? chooseBiomeRockAsset(biome, seed, "cluster") : null;
@@ -4128,7 +4177,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         rocks.y = wy - 25;
         rocks.alpha = 0.74;
         rocks.zIndex = 0;
-        back.addChild(rocks);
+        backStatic.addChild(rocks);
       }
 
       const rockSpireKey = seed % 193 === 0 ? chooseBiomeRockAsset(biome, seed, "spire") : null;
@@ -4138,7 +4187,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         spire.y = wy - 27;
         spire.alpha = 0.68;
         spire.zIndex = 0;
-        back.addChild(spire);
+        backStatic.addChild(spire);
       }
 
       const tallFloraKey = seed % 31 === 0 ? chooseBiomeFloraAsset(biome, seed, "tall") : null;
@@ -4148,7 +4197,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         reeds.y = wy - 27;
         reeds.alpha = 0.84;
         reeds.zIndex = 3;
-        front.addChild(reeds);
+        frontStatic.addChild(reeds);
       }
 
       const bloomFloraKey = seed % 37 === 0 ? chooseBiomeFloraAsset(biome, seed, "bloom") : null;
@@ -4158,7 +4207,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         flowers.y = wy - 19;
         flowers.alpha = 0.9;
         flowers.zIndex = 3;
-        front.addChild(flowers);
+        frontStatic.addChild(flowers);
       }
 
       const groundFloraKey = seed % 61 === 0 ? chooseBiomeFloraAsset(biome, seed, "ground") : null;
@@ -4168,7 +4217,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         flower.y = wy - 18;
         flower.alpha = 0.82;
         flower.zIndex = 3;
-        front.addChild(flower);
+        frontStatic.addChild(flower);
       }
 
       if (hasAsset("runeStone") && chunk.chunkY >= 8 && seed % 53 === 0) {
@@ -4177,7 +4226,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         rune.y = wy;
         rune.alpha = 0.86;
         rune.zIndex = 2;
-        front.addChild(rune);
+        frontStatic.addChild(rune);
       }
 
       if (hasAsset("signpost") && seed % 83 === 0) {
@@ -4186,7 +4235,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         sign.y = wy - 20;
         sign.alpha = 0.9;
         sign.zIndex = 3;
-        front.addChild(sign);
+        frontStatic.addChild(sign);
       }
 
       if (hasAsset("fence") && seed % 97 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4195,7 +4244,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         fence.y = wy - 12;
         fence.alpha = 0.86;
         fence.zIndex = 2;
-        front.addChild(fence);
+        frontStatic.addChild(fence);
       }
 
       if (biome !== "celestialSummit" && hasAsset("ropeBridge") && seed % 181 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
@@ -4204,7 +4253,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         bridge.y = wy - 8;
         bridge.alpha = 0.72;
         bridge.zIndex = 1;
-        front.addChild(bridge);
+        frontStatic.addChild(bridge);
       }
 
       if (hasAsset("lanternCyan") && chunk.chunkY >= 3 && seed % 67 === 0) {
@@ -4213,7 +4262,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         lantern.y = wy - 22;
         lantern.alpha = 0.9;
         lantern.zIndex = 4;
-        front.addChild(lantern);
+        frontStatic.addChild(lantern);
       }
 
       if (hasAsset("stump") && seed % 109 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4222,7 +4271,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         stump.y = wy - 20;
         stump.alpha = 0.86;
         stump.zIndex = 2;
-        front.addChild(stump);
+        frontStatic.addChild(stump);
       }
 
       if (hasAsset("mushroomCluster") && seed % 43 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4231,7 +4280,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         mushrooms.y = wy - 17;
         mushrooms.alpha = 0.88;
         mushrooms.zIndex = 3;
-        front.addChild(mushrooms);
+        frontStatic.addChild(mushrooms);
       }
 
       if (hasAsset("ruinArchFragment") && seed % 113 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4240,7 +4289,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         arch.y = wy - 28;
         arch.alpha = 0.58;
         arch.zIndex = 0;
-        back.addChild(arch);
+        backStatic.addChild(arch);
       }
 
       if (hasAsset("ruinColumn") && seed % 157 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4249,7 +4298,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         column.y = wy - 36;
         column.alpha = 0.78;
         column.zIndex = 1;
-        front.addChild(column);
+        frontStatic.addChild(column);
       }
 
       if (hasAsset("crystalMarker") && chunk.chunkY >= 4 && seed % 131 === 0) {
@@ -4258,7 +4307,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         crystal.y = wy - 20;
         crystal.alpha = 0.86;
         crystal.zIndex = 3;
-        front.addChild(crystal);
+        frontStatic.addChild(crystal);
       }
 
       if (seed % 137 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4280,7 +4329,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
           decor.y = wy - (labeledBannerDecor ? 46 : tallDecor ? 50 : mediumDecor ? 38 : decorKey.startsWith("decorBrazier") || decorKey.startsWith("decorCampfire") ? 30 : decorKey.startsWith("decorFlowerCrystal") || decorKey.startsWith("decorFlowerPost") ? 31 : 25);
           decor.alpha = biome === "celestialSummit" ? 0.88 : 0.82;
           decor.zIndex = 2;
-          front.addChild(decor);
+          frontStatic.addChild(decor);
         }
       }
 
@@ -4290,7 +4339,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         bush.y = wy - 22;
         bush.alpha = 0.86;
         bush.zIndex = 2;
-        front.addChild(bush);
+        frontStatic.addChild(bush);
       }
 
       if (shouldPlaceProceduralTree(biome, seed) && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, biome === "pineValley" || biome === "cloudRidge" ? 4 : 3)) {
@@ -4299,7 +4348,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         tree.y = wy + 6;
         tree.alpha = biome === "celestialSummit" ? 0.8 : biome === "frozenSpires" ? 0.86 : 0.92;
         tree.zIndex = 0;
-        back.addChild(tree);
+        backDynamic.addChild(tree);
       }
 
       if ((biome === "cloudRidge" || biome === "snowfallCliffs") && hasAsset("climbingChain") && seed % 149 === 0) {
@@ -4308,7 +4357,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         chain.y = wy - 3;
         chain.alpha = 0.62;
         chain.zIndex = 1;
-        back.addChild(chain);
+        backStatic.addChild(chain);
       }
 
       if (seed % 173 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
@@ -4323,7 +4372,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
           cluster.y = wy - 49;
           cluster.alpha = 0.46;
           cluster.zIndex = -1;
-          back.addChild(cluster);
+          backStatic.addChild(cluster);
         }
       }
 
@@ -4333,7 +4382,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         pillar.y = wy - 54;
         pillar.alpha = 0.42;
         pillar.zIndex = -2;
-        back.addChild(pillar);
+        backStatic.addChild(pillar);
       }
 
       if ((biome === "frozenSpires" || biome === "celestialSummit") && hasAsset("rollingBoulder") && seed % 223 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
@@ -4342,7 +4391,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         boulder.y = wy - 26;
         boulder.alpha = 0.82;
         boulder.zIndex = 3;
-        front.addChild(boulder);
+        frontStatic.addChild(boulder);
       }
 
       if (biome === "celestialSummit" && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
@@ -4351,10 +4400,13 @@ function decorateChunk(chunk: GeneratedChunk): void {
         shrine.y = wy + 2;
         shrine.alpha = 0.82;
         shrine.zIndex = 2;
-        back.addChild(shrine);
+        backStatic.addChild(shrine);
       }
     }
   }
+
+  cacheStaticChunkLayer(backStatic);
+  cacheStaticChunkLayer(frontStatic);
 
   backDecorationLayer.addChild(back);
   decorationLayer.addChild(front);
@@ -5131,7 +5183,6 @@ function updateParticles(dt: number): void {
     p.particle.x += p.vx * dt;
     p.particle.y += p.vy * dt;
     p.vy    += p.gravity * dt;
-    p.particle.alpha = p.life / p.max;
   }
   if (effectParticleLayerDirty) {
     effectParticleLayer.update();
@@ -6108,8 +6159,6 @@ pixi.ticker.add((ticker) => {
   const scale = getScale();
 
   ensureChunksAhead();
-  processChunkRenderQueue();
-  syncChunkVisibility();
   reqChunks();
   maybePing();
   updateAdaptiveInterpDelay();
@@ -6216,6 +6265,10 @@ pixi.ticker.add((ticker) => {
 
   updateLocalVisualPosition(dt);
   updateCamera(dt, scale);
+  enqueueVisibleChunkRenders();
+  processChunkRenderQueue();
+  pruneDistantChunkVisuals();
+  syncChunkVisibility();
   drawActors();
   updateHud(tSec);
   updateDebug();
