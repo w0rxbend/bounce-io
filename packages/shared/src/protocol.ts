@@ -45,6 +45,8 @@ export type ClientMessage =
   | {
       type: "input";
       playerId: PlayerId;
+      inputSeq?: number;
+      clientTime?: number;
       input: PlayerInput;
     }
   | {

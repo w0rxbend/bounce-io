@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -38,6 +39,7 @@ type roomState struct {
 	phase             string
 	tick              uint64
 	snapshotSeq       uint64
+	eventSeq          uint64
 	countdownEndsAt   time.Time
 	sessions          map[string]*session
 	tokenToPlayer     map[string]string
@@ -514,7 +516,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
 
-	events := s.pendingEvents
+	events := s.enrichEvents(s.pendingEvents, s.tick, s.snapshotSeq)
 	s.pendingEvents = make([]MatchEvent, 0, 32)
 	if len(events) > 0 {
 		s.broadcastJSON(EventsMessage{
@@ -533,6 +535,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		SnapshotSeq:      s.snapshotSeq,
 		ServerTime:       unixMillis(now),
 		MatchPhase:       s.phase,
+		AckInputSeq:      -1,
 		Players:          players,
 		Entities:         []EntityState{},
 		PlayerEntities:   playerEntities,
@@ -567,6 +570,34 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		}
 	}
 	s.metrics.recordBroadcast(time.Since(startBroadcast), recipients)
+}
+
+func (s *roomState) enrichEvents(events []MatchEvent, serverTick, snapshotSeq uint64) []MatchEvent {
+	if len(events) == 0 {
+		return events
+	}
+	out := make([]MatchEvent, 0, len(events))
+	for _, event := range events {
+		if event == nil {
+			continue
+		}
+		enriched := make(MatchEvent, len(event)+3)
+		for key, value := range event {
+			enriched[key] = value
+		}
+		if _, ok := enriched["eventId"]; !ok {
+			s.eventSeq++
+			enriched["eventId"] = fmt.Sprintf("%s:%d", s.room.cfg.ID, s.eventSeq)
+		}
+		if _, ok := enriched["serverTick"]; !ok {
+			enriched["serverTick"] = serverTick
+		}
+		if _, ok := enriched["snapshotSeq"]; !ok {
+			enriched["snapshotSeq"] = snapshotSeq
+		}
+		out = append(out, enriched)
+	}
+	return out
 }
 
 func (s *roomState) broadcastJSON(payload any) {

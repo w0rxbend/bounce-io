@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Point, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Point, Rectangle, Sprite, Text, Texture, TextureStyle, UPDATE_PRIORITY, type RendererPreference } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -30,7 +30,7 @@ import {
   stepPlayer,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, RelicSpawn, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
+import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, RelicSpawn, ServerMessage, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
 import "./styles.css";
 
@@ -111,12 +111,53 @@ const PLAYER_COLORS = [
 
 const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 576px
 
+type SnapshotServerMessage = Extract<ServerMessage, { type: "snapshot" }>;
+
+function envNumber(name: string, fallback: number): number {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  const raw = env?.[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function envString(name: string, fallback: string): string {
+  const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
+  const raw = env?.[name]?.trim();
+  return raw || fallback;
+}
+
+function queryString(name: string, fallback: string): string {
+  return new URLSearchParams(window.location.search).get(name)?.trim() || fallback;
+}
+
+function queryBoolean(name: string, fallback: boolean): boolean {
+  const value = new URLSearchParams(window.location.search).get(name)?.trim().toLowerCase();
+  if (value === "1" || value === "true" || value === "yes") return true;
+  if (value === "0" || value === "false" || value === "no") return false;
+  return fallback;
+}
+
 // ── Network interpolation tuning ──────────────────────────────────────────────
-const MIN_INTERP_DELAY_MS   = 50;    // floor for local/LAN play
-const MAX_INTERP_DELAY_MS   = 300;   // ceiling; beyond this the delay itself hurts
+const INTERPOLATION_DELAY_MS = envNumber("VITE_INTERPOLATION_DELAY_MS", 100);
+const MIN_INTERP_DELAY_MS   = envNumber("VITE_MIN_INTERPOLATION_DELAY_MS", 50);
+const MAX_INTERP_DELAY_MS   = envNumber("VITE_MAX_INTERPOLATION_DELAY_MS", 300);
+const MAX_EXTRAPOLATION_MS  = envNumber("VITE_MAX_EXTRAPOLATION_MS", 160);
 const SNAPSHOT_INTERVAL_MS  = 1000 / 20; // 50 ms — matches server SNAPSHOT_RATE
+const CORRECTION_DEADZONE_PX = envNumber("VITE_CORRECTION_DEADZONE_PX", RECONCILIATION_TOLERANCE_PX);
+const SMOOTH_CORRECTION_FACTOR = envNumber("VITE_SMOOTH_CORRECTION_FACTOR", 14);
+const MAX_SMOOTH_CORRECTION_PX = envNumber("VITE_MAX_SMOOTH_CORRECTION_PX", 10);
+const SNAP_CORRECTION_THRESHOLD_PX = envNumber("VITE_SNAP_CORRECTION_THRESHOLD_PX", 72);
+const MAX_QUEUED_SNAPSHOTS = 8;
+const MAX_SNAPSHOTS_PROCESSED_PER_FRAME = 4;
+const MAX_PENDING_SNAPSHOT_BACKLOG = 3;
+const SNAPSHOT_BACKLOG_RETAIN = 1;
+const WS_BUFFERED_WARN_BYTES = envNumber("VITE_WS_BUFFERED_WARN_BYTES", 256 * 1024);
+const WS_BUFFERED_CRITICAL_BYTES = envNumber("VITE_WS_BUFFERED_CRITICAL_BYTES", 1024 * 1024);
+const APPLIED_EVENT_IDS_LIMIT = 256;
+const EVENT_STALE_WINDOW_SNAPSHOTS = 8;
 const PING_HISTORY_SIZE     = 16;    // larger window for more stable jitter estimate
-let   adaptiveInterpDelayMs = 100;   // starts neutral, self-tunes each pong
+let   adaptiveInterpDelayMs = INTERPOLATION_DELAY_MS; // starts neutral, self-tunes each pong
 let   smoothedRttMs         = 100;   // EMA-smoothed RTT used for delay target
 const CHUNKS_PRELOAD_BEHIND = 3;     // keep enough below for intentional descents
 const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing forever
@@ -455,11 +496,29 @@ const PERF_DEGRADE_SCALE_STEP = 0.10;
 interface RuntimePerfMetrics {
   fpsAvg: number;
   frameTimeAvgMs: number;
+  frameP50Ms: number;
+  frameP95Ms: number;
+  frameP99Ms: number;
   updateMsAvg: number;
   simulationMsAvg: number;
   renderPrepMsAvg: number;
+  renderMsAvg: number;
+  networkApplyMsAvg: number;
+  networkEntityApplyMsAvg: number;
+  entityUpdateMsAvg: number;
+  particleUpdateMsAvg: number;
+  uiUpdateMsAvg: number;
+  longTaskCount: number;
+  longTaskLastMs: number;
+  longTaskMaxMs: number;
+  heapUsedMB: number;
   particleCount: number;
   displayObjectCount: number;
+  visibleSpriteCount: number;
+  graphicsObjectCount: number;
+  textObjectCount: number;
+  visibleParticleCount: number;
+  activeFilterCount: number;
   adaptiveScale: number;
   lowFpsSeconds: number;
   highFpsSeconds: number;
@@ -469,16 +528,59 @@ interface RuntimePerfMetrics {
 const perfMetrics: RuntimePerfMetrics = {
   fpsAvg: 60,
   frameTimeAvgMs: 1000 / 60,
+  frameP50Ms: 1000 / 60,
+  frameP95Ms: 1000 / 60,
+  frameP99Ms: 1000 / 60,
   updateMsAvg: 0,
   simulationMsAvg: 0,
   renderPrepMsAvg: 0,
+  renderMsAvg: 0,
+  networkApplyMsAvg: 0,
+  networkEntityApplyMsAvg: 0,
+  entityUpdateMsAvg: 0,
+  particleUpdateMsAvg: 0,
+  uiUpdateMsAvg: 0,
+  longTaskCount: 0,
+  longTaskLastMs: 0,
+  longTaskMaxMs: 0,
+  heapUsedMB: 0,
   particleCount: 0,
   displayObjectCount: 0,
+  visibleSpriteCount: 0,
+  graphicsObjectCount: 0,
+  textObjectCount: 0,
+  visibleParticleCount: 0,
+  activeFilterCount: 0,
   adaptiveScale: 1,
   lowFpsSeconds: 0,
   highFpsSeconds: 0,
   lastDisplayCountMs: 0,
 };
+
+const PERF_FRAME_SAMPLE_COUNT = 240;
+const FRAME_GRAPH_SAMPLE_COUNT = 72;
+const perfFrameSamples: number[] = [];
+const frameGraphSamples: number[] = [];
+const perfSortScratch: number[] = [];
+let currentFrameStartMs = 0;
+let currentFrameUpdateEndMs = 0;
+let currentFrameRenderRecorded = true;
+
+function recordPerfFrameSample(frameMs: number): void {
+  perfFrameSamples.push(frameMs);
+  if (perfFrameSamples.length > PERF_FRAME_SAMPLE_COUNT) perfFrameSamples.shift();
+  frameGraphSamples.push(frameMs);
+  if (frameGraphSamples.length > FRAME_GRAPH_SAMPLE_COUNT) frameGraphSamples.shift();
+}
+
+function percentileFromSamples(samples: number[], p: number, fallback: number): number {
+  if (samples.length === 0) return fallback;
+  perfSortScratch.length = 0;
+  perfSortScratch.push(...samples);
+  perfSortScratch.sort((a, b) => a - b);
+  const idx = Math.min(perfSortScratch.length - 1, Math.max(0, Math.floor((perfSortScratch.length - 1) * p)));
+  return perfSortScratch[idx] ?? fallback;
+}
 
 function normalizePerformanceProfile(value: string | null | undefined): PerformanceProfileName | null {
   if (value === "high" || value === "medium" || value === "low" || value === "auto") return value;
@@ -501,6 +603,23 @@ const initialFixedPerformanceProfile: FixedPerformanceProfileName =
     : selectedPerformanceProfile;
 let activeFixedPerformanceProfile: FixedPerformanceProfileName = initialFixedPerformanceProfile;
 let adaptiveProfileScale = 1;
+
+function recordLongTask(durationMs: number): void {
+  perfMetrics.longTaskCount++;
+  perfMetrics.longTaskLastMs = durationMs;
+  if (durationMs > perfMetrics.longTaskMaxMs) perfMetrics.longTaskMaxMs = durationMs;
+}
+
+try {
+  if (typeof PerformanceObserver !== "undefined" && PerformanceObserver.supportedEntryTypes?.includes("longtask")) {
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) recordLongTask(entry.duration);
+    });
+    observer.observe({ entryTypes: ["longtask"] });
+  }
+} catch {
+  // Long-task support is browser-dependent; the rest of the netgraph works without it.
+}
 
 function activePerformanceConfig(): PerformanceProfileConfig {
   return PERFORMANCE_PROFILES[activeFixedPerformanceProfile];
@@ -671,15 +790,25 @@ function disableDisplayEvents(displayObject: { eventMode?: string }): void {
   displayObject.eventMode = "none";
 }
 
+function rendererPreferenceList(): RendererPreference[] {
+  const requested = queryString("renderer", envString("VITE_PIXI_RENDERER", "webgl")).toLowerCase();
+  if (requested === "webgpu") return ["webgpu", "webgl"];
+  return ["webgl"];
+}
+
+const pixiResolutionCap = Math.max(0.5, Math.min(3, Number(queryString("resolution", envString("VITE_PIXI_RESOLUTION", "2")))));
+const pixiAntialias = queryBoolean("aa", envString("VITE_PIXI_ANTIALIAS", "false") === "true");
+const pixiRendererPreference = rendererPreferenceList();
+
 const pixi = new Application();
 await pixi.init({
   manageImports: false,
   resizeTo: gameWrap,
-  preference: ["webgl", "canvas"],
+  preference: pixiRendererPreference,
   backgroundAlpha: 0,
-  antialias: false,
+  antialias: pixiAntialias,
   powerPreference: "high-performance",
-  resolution: Math.min(window.devicePixelRatio || 1, 2),
+  resolution: Math.min(window.devicePixelRatio || 1, pixiResolutionCap),
   autoDensity: true,
   roundPixels: true,
 });
@@ -2386,6 +2515,7 @@ const enemyEntries = new Map<string, EnemyEntry>();
 interface RemoteEntry {
   states: Array<{ state: PlayerState; t: number; tick: number }>;
   current: PlayerState;
+  renderPosition: { x: number; y: number };
   colorIndex: number;
   sprite: Sprite;
   crownSprite: Sprite;
@@ -2402,12 +2532,11 @@ let   localSeq = 0;
 let   predictionAccumulatorSeconds = 0;
 let   queuedJumpPressed = false;
 let   queuedKickPressed = false;
+let   lastAuthoritativeLocalPlayer: PlayerState | null = null;
 
 const MAX_PREDICTION_STEPS_PER_FRAME = 3;
 const MAX_PREDICTION_ACCUMULATOR_SECONDS = PHYSICS_STEP_SECONDS * MAX_PREDICTION_STEPS_PER_FRAME;
 const PREDICTION_STEP_EPSILON = 0.000_001;
-const LOCAL_VISUAL_CORRECTION_RATE = 18;
-const LOCAL_VISUAL_SNAP_THRESHOLD_PX = 72;
 let ws: WebSocket | null = null;
 let pingMs        = 0;
 let lastPingTime  = 0;
@@ -2553,8 +2682,14 @@ interface NetworkMetrics {
   parseTimeMaxMs: number;
   correctionDistancePx: number;
   correctionDistanceMaxPx: number;
+  remoteCorrectionDistancePx: number;
+  remoteCorrectionDistanceMaxPx: number;
   localPredictionRollbackCount: number;
   pendingInputCount: number;
+  pendingSnapshotQueue: number;
+  backpressureSkips: number;
+  interpolationBufferUnderruns: number;
+  remoteExtrapolationMs: number;
   lastSnapshotDelayMs: number;
   lastRateSampleMs: number;
   rateWindowMessagesReceived: number;
@@ -2582,8 +2717,14 @@ const netMetrics: NetworkMetrics = {
   parseTimeMaxMs: 0,
   correctionDistancePx: 0,
   correctionDistanceMaxPx: 0,
+  remoteCorrectionDistancePx: 0,
+  remoteCorrectionDistanceMaxPx: 0,
   localPredictionRollbackCount: 0,
   pendingInputCount: 0,
+  pendingSnapshotQueue: 0,
+  backpressureSkips: 0,
+  interpolationBufferUnderruns: 0,
+  remoteExtrapolationMs: 0,
   lastSnapshotDelayMs: 0,
   lastRateSampleMs: Date.now(),
   rateWindowMessagesReceived: 0,
@@ -2592,6 +2733,9 @@ const netMetrics: NetworkMetrics = {
   rateWindowBytesSent: 0,
 };
 const netTextEncoder = new TextEncoder();
+const pendingSnapshots: SnapshotServerMessage[] = [];
+const appliedEventIds: string[] = [];
+const appliedEventIdSet = new Set<string>();
 
 let cameraY   = 0;
 let cameraSnap = true;
@@ -2619,52 +2763,106 @@ localCrownSprite.visible = false;
 localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
 localLayer.addChild(localSprite, localGfx, localCrownSprite);
 
-const displayObjectCountStack: Array<{ visible: boolean; renderable?: boolean; children?: unknown[]; particleChildren?: unknown[] }> = [];
+interface DisplayTreeStats {
+  total: number;
+  sprites: number;
+  graphics: number;
+  texts: number;
+  particles: number;
+  filters: number;
+}
 
-function countActiveDisplayObjects(root: Container): number {
-  let count = 0;
+const displayObjectCountStack: Array<Container | Sprite | Graphics | Text | ParticleContainer<PixiParticle>> = [];
+const displayTreeStats: DisplayTreeStats = { total: 0, sprites: 0, graphics: 0, texts: 0, particles: 0, filters: 0 };
+
+function countDisplayTreeStats(root: Container): DisplayTreeStats {
+  displayTreeStats.total = 0;
+  displayTreeStats.sprites = 0;
+  displayTreeStats.graphics = 0;
+  displayTreeStats.texts = 0;
+  displayTreeStats.particles = 0;
+  displayTreeStats.filters = 0;
   displayObjectCountStack.length = 0;
   displayObjectCountStack.push(root);
   while (displayObjectCountStack.length > 0) {
     const obj = displayObjectCountStack.pop()!;
     if (!obj.visible || obj.renderable === false) continue;
-    count++;
-    const particlesInContainer = obj.particleChildren;
-    if (particlesInContainer) count += particlesInContainer.length;
-    const children = obj.children;
+    displayTreeStats.total++;
+    if (obj instanceof Sprite) displayTreeStats.sprites++;
+    else if (obj instanceof Graphics) displayTreeStats.graphics++;
+    else if (obj instanceof Text) displayTreeStats.texts++;
+    const filters = (obj as unknown as { filters?: readonly unknown[] | null }).filters;
+    if (filters) displayTreeStats.filters += filters.length;
+    const particlesInContainer = (obj as { particleChildren?: unknown[] }).particleChildren;
+    if (particlesInContainer) {
+      displayTreeStats.particles += particlesInContainer.length;
+      displayTreeStats.total += particlesInContainer.length;
+    }
+    const children = (obj as { children?: unknown[] }).children;
     if (children) {
       for (let i = 0; i < children.length; i++) {
-        displayObjectCountStack.push(children[i] as { visible: boolean; renderable?: boolean; children?: unknown[]; particleChildren?: unknown[] });
+        displayObjectCountStack.push(children[i] as Container | Sprite | Graphics | Text | ParticleContainer<PixiParticle>);
       }
     }
   }
-  return count;
+  return displayTreeStats;
 }
 
-function updatePerformanceAverages(rawFrameMs: number, updateMs: number, simulationMs: number, renderPrepMs: number): void {
+function updatePerformanceAverages(
+  rawFrameMs: number,
+  updateMs: number,
+  simulationMs: number,
+  renderPrepMs: number,
+  networkApplyMs: number,
+  networkEntityApplyMs: number,
+  entityUpdateMs: number,
+  particleUpdateMs: number,
+  uiUpdateMs: number,
+): void {
   const alpha = 0.05;
+  recordPerfFrameSample(rawFrameMs);
   perfMetrics.frameTimeAvgMs += (rawFrameMs - perfMetrics.frameTimeAvgMs) * alpha;
+  perfMetrics.frameP50Ms = percentileFromSamples(perfFrameSamples, 0.50, perfMetrics.frameTimeAvgMs);
+  perfMetrics.frameP95Ms = percentileFromSamples(perfFrameSamples, 0.95, perfMetrics.frameTimeAvgMs);
+  perfMetrics.frameP99Ms = percentileFromSamples(perfFrameSamples, 0.99, perfMetrics.frameTimeAvgMs);
   perfMetrics.fpsAvg = 1000 / Math.max(1, perfMetrics.frameTimeAvgMs);
   perfMetrics.updateMsAvg += (updateMs - perfMetrics.updateMsAvg) * alpha;
   perfMetrics.simulationMsAvg += (simulationMs - perfMetrics.simulationMsAvg) * alpha;
   perfMetrics.renderPrepMsAvg += (renderPrepMs - perfMetrics.renderPrepMsAvg) * alpha;
+  perfMetrics.networkApplyMsAvg += (networkApplyMs - perfMetrics.networkApplyMsAvg) * alpha;
+  perfMetrics.networkEntityApplyMsAvg += (networkEntityApplyMs - perfMetrics.networkEntityApplyMsAvg) * alpha;
+  perfMetrics.entityUpdateMsAvg += (entityUpdateMs - perfMetrics.entityUpdateMsAvg) * alpha;
+  perfMetrics.particleUpdateMsAvg += (particleUpdateMs - perfMetrics.particleUpdateMsAvg) * alpha;
+  perfMetrics.uiUpdateMsAvg += (uiUpdateMs - perfMetrics.uiUpdateMsAvg) * alpha;
   perfMetrics.particleCount = particles.length + midMountainCrumbleShards.length;
   perfMetrics.adaptiveScale = adaptiveProfileScale;
+  const memory = (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory;
+  perfMetrics.heapUsedMB = memory?.usedJSHeapSize ? memory.usedJSHeapSize / (1024 * 1024) : 0;
 
   if (elapsedMs - perfMetrics.lastDisplayCountMs > 500) {
     perfMetrics.lastDisplayCountMs = elapsedMs;
-    perfMetrics.displayObjectCount = countActiveDisplayObjects(pixi.stage);
+    const stats = countDisplayTreeStats(pixi.stage);
+    perfMetrics.displayObjectCount = stats.total;
+    perfMetrics.visibleSpriteCount = stats.sprites;
+    perfMetrics.graphicsObjectCount = stats.graphics;
+    perfMetrics.textObjectCount = stats.texts;
+    perfMetrics.visibleParticleCount = stats.particles;
+    perfMetrics.activeFilterCount = stats.filters;
   }
 }
 
 function updateAdaptivePerformance(dt: number): void {
   if (selectedPerformanceProfile !== "auto") return;
 
-  const frameBudgetPressure = perfMetrics.updateMsAvg > 11;
+  const frameBudgetPressure =
+    perfMetrics.updateMsAvg > 11 ||
+    perfMetrics.frameP95Ms > 22 ||
+    perfMetrics.longTaskLastMs > 50 ||
+    netMetrics.pendingSnapshotQueue > 2;
   if (perfMetrics.fpsAvg < PERF_TARGET_FPS - 4 || frameBudgetPressure) {
     perfMetrics.lowFpsSeconds += dt;
     perfMetrics.highFpsSeconds = 0;
-  } else if (perfMetrics.fpsAvg > PERF_TARGET_FPS && perfMetrics.updateMsAvg < 9) {
+  } else if (perfMetrics.fpsAvg > PERF_TARGET_FPS && perfMetrics.updateMsAvg < 9 && perfMetrics.frameP95Ms < 18) {
     perfMetrics.highFpsSeconds += dt;
     perfMetrics.lowFpsSeconds = 0;
   } else {
@@ -2740,6 +2938,35 @@ function clonePlayerState(state: PlayerState): PlayerState {
   };
 }
 
+function smoothPositionTowards(
+  position: { x: number; y: number },
+  target: { x: number; y: number },
+  dt: number,
+): number {
+  const dx = target.x - position.x;
+  const dy = target.y - position.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= CORRECTION_DEADZONE_PX) {
+    position.x = target.x;
+    position.y = target.y;
+    return distance;
+  }
+  if (distance > SNAP_CORRECTION_THRESHOLD_PX) {
+    position.x = target.x;
+    position.y = target.y;
+    return distance;
+  }
+
+  const alpha = 1 - Math.exp(-SMOOTH_CORRECTION_FACTOR * dt);
+  const desiredStep = distance * alpha;
+  const frameScale = Math.max(0.25, Math.min(4, dt * 60));
+  const maxStep = Math.max(0.001, MAX_SMOOTH_CORRECTION_PX * frameScale);
+  const step = Math.min(desiredStep, maxStep);
+  position.x += (dx / distance) * step;
+  position.y += (dy / distance) * step;
+  return distance;
+}
+
 function snapLocalVisualToSimulation(): void {
   localVisualPosition = localPlayer
     ? { x: localPlayer.position.x, y: localPlayer.position.y }
@@ -2760,14 +2987,12 @@ function updateLocalVisualPosition(dt: number): void {
   const dx = localPlayer.position.x - localVisualPosition.x;
   const dy = localPlayer.position.y - localVisualPosition.y;
   const correction = Math.hypot(dx, dy);
-  if (correction > LOCAL_VISUAL_SNAP_THRESHOLD_PX) {
+  if (correction > SNAP_CORRECTION_THRESHOLD_PX) {
     snapLocalVisualToSimulation();
     return;
   }
 
-  const alpha = 1 - Math.exp(-LOCAL_VISUAL_CORRECTION_RATE * dt);
-  localVisualPosition.x += dx * alpha;
-  localVisualPosition.y += dy * alpha;
+  smoothPositionTowards(localVisualPosition, localPlayer.position, dt);
 }
 
 function getLocalRenderPosition(): { x: number; y: number } | null {
@@ -2787,10 +3012,17 @@ function resetLocalPrediction(): void {
 function loadChunk(cy: number, immediateRender = false): void {
   if (cy < 0) return;
   if (loadedChunks.has(cy)) return;
-  const chunk = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
+  const generated = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
+  const chunk = selectedMode === "online" && generated.windZones.length > 0
+    ? { ...generated, windZones: [] }
+    : generated;
   authoritativeChunks.delete(cy);
   loadedChunks.set(cy, chunk);
   if (immediateRender) enqueueChunkRender(cy, true);
+}
+
+function shouldApplyClientWindZones(): boolean {
+  return selectedMode !== "online";
 }
 
 function chunkYForWorldY(y: number): number {
@@ -3025,8 +3257,12 @@ function resetGameSession(mode: GameMode): void {
   playerNames.clear();
   localPlayer = null;
   localVisualPosition = null;
+  lastAuthoritativeLocalPlayer = null;
   localPlayerId = null;
   predBuf.length = 0;
+  pendingSnapshots.length = 0;
+  appliedEventIds.length = 0;
+  appliedEventIdSet.clear();
   localSeq = 0;
   serverTick = 0;
   lastSnapshotSeq = -1;
@@ -3058,8 +3294,14 @@ function resetGameSession(mode: GameMode): void {
     parseTimeMaxMs: 0,
     correctionDistancePx: 0,
     correctionDistanceMaxPx: 0,
+    remoteCorrectionDistancePx: 0,
+    remoteCorrectionDistanceMaxPx: 0,
     localPredictionRollbackCount: 0,
     pendingInputCount: 0,
+    pendingSnapshotQueue: 0,
+    backpressureSkips: 0,
+    interpolationBufferUnderruns: 0,
+    remoteExtrapolationMs: 0,
     lastSnapshotDelayMs: 0,
     lastRateSampleMs: Date.now(),
     rateWindowMessagesReceived: 0,
@@ -3067,8 +3309,22 @@ function resetGameSession(mode: GameMode): void {
     rateWindowBytesReceived: 0,
     rateWindowBytesSent: 0,
   });
+  Object.assign(perfMetrics, {
+    frameP50Ms: 1000 / 60,
+    frameP95Ms: 1000 / 60,
+    frameP99Ms: 1000 / 60,
+    networkApplyMsAvg: 0,
+    networkEntityApplyMsAvg: 0,
+    entityUpdateMsAvg: 0,
+    particleUpdateMsAvg: 0,
+    uiUpdateMsAvg: 0,
+    longTaskLastMs: 0,
+  });
+  perfFrameSamples.length = 0;
+  frameGraphSamples.length = 0;
   lastHudRegion = null;
   lastScoreboardKey = "";
+  lastHudPhaseKey = "";
   playerStatsHud?.reset();
 }
 
@@ -5651,7 +5907,16 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
   gfx.alpha = hasPlayerAnimationAssets() ? 0.16 : 1;
   const label = makeLabel(name);
   remoteLayer.addChild(sprite, gfx, crownSprite, label);
-  return { states: [{ state: clonePlayerState(player), t: serverTime, tick }], current: clonePlayerState(player), colorIndex: ci, sprite, crownSprite, gfx, label };
+  return {
+    states: [{ state: clonePlayerState(player), t: serverTime, tick }],
+    current: clonePlayerState(player),
+    renderPosition: { x: player.position.x, y: player.position.y },
+    colorIndex: ci,
+    sprite,
+    crownSprite,
+    gfx,
+    label,
+  };
 }
 
 // ── Particle system ───────────────────────────────────────────────────────────
@@ -6287,6 +6552,7 @@ const hudRowTexts: Text[] = [];
 const hudLegendTexts: Text[] = [];
 let lastHudRegion: number | null = null;
 let lastHudLayoutKey = "";
+let lastHudPhaseKey = "";
 
 function destroyGameHud(): void {
   if (!hudBuilt) return;
@@ -6300,6 +6566,7 @@ function destroyGameHud(): void {
   hudBuilt = false;
   lastHudLayoutKey = "";
   lastScoreboardKey = "";
+  lastHudPhaseKey = "";
 }
 
 function ensureHud(): void {
@@ -6360,8 +6627,10 @@ function updateHud(tSec: number): void {
   }
 
   const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : regionDisplayNameForChunkY(currentChunkY);
-  hudPhaseTxt.text = phText;
-  if (phText) {
+  const phaseKey = `${phText}|${pixi.screen.width}|${matchPhase}`;
+  if (phaseKey !== lastHudPhaseKey) {
+    lastHudPhaseKey = phaseKey;
+    hudPhaseTxt.text = phText;
     hudPhaseTxt.x = Math.round(pixi.screen.width / 2 - hudPhaseTxt.width / 2);
     hudPhaseTxt.y = 10;
     hudPhaseTxt.alpha = matchPhase === "playing" ? 0.76 : 1;
@@ -6413,7 +6682,7 @@ function updateHud(tSec: number): void {
     }
   }
 
-  hudLegendTexts[0]!.text = "HOW TO PLAY";
+  if (hudLegendTexts[0]!.text !== "HOW TO PLAY") hudLegendTexts[0]!.text = "HOW TO PLAY";
   hudLegendTexts[0]!.style.fill = PAL.coinGold;
 }
 
@@ -6606,9 +6875,14 @@ function drawWorldDebugOverlay(): void {
   }
 
   const localRender = getLocalRenderPosition();
+  if (lastAuthoritativeLocalPlayer) {
+    const sp = lastAuthoritativeLocalPlayer.position;
+    worldDebugGfx.rect(sp.x, sp.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0xffcf66, alpha: 0.95, width: 1 });
+    addLabel("server", sp.x + PLAYER_WIDTH + 2, sp.y - 17);
+  }
   if (localPlayer) {
     worldDebugGfx.rect(localPlayer.position.x, localPlayer.position.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0x5dff9c, alpha: 0.95, width: 1 });
-    addLabel("local/server", localPlayer.position.x + PLAYER_WIDTH + 2, localPlayer.position.y - 8);
+    addLabel("predicted", localPlayer.position.x + PLAYER_WIDTH + 2, localPlayer.position.y - 8);
   }
   if (localPlayer && localRender) {
     worldDebugGfx.rect(localRender.x, localRender.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0xffffff, alpha: 0.55, width: 1 });
@@ -6622,6 +6896,12 @@ function drawWorldDebugOverlay(): void {
     const p = remote.current;
     worldDebugGfx.rect(p.position.x, p.position.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0x7db7ff, alpha: 0.85, width: 1 });
     addLabel(id, p.position.x + PLAYER_WIDTH + 2, p.position.y - 8);
+    if (Math.hypot(remote.renderPosition.x - p.position.x, remote.renderPosition.y - p.position.y) > 1) {
+      worldDebugGfx.rect(remote.renderPosition.x, remote.renderPosition.y, PLAYER_WIDTH, PLAYER_HEIGHT).stroke({ color: 0xffffff, alpha: 0.42, width: 1 });
+      worldDebugGfx.moveTo(p.position.x + PLAYER_WIDTH / 2, p.position.y + PLAYER_HEIGHT / 2)
+        .lineTo(remote.renderPosition.x + PLAYER_WIDTH / 2, remote.renderPosition.y + PLAYER_HEIGHT / 2)
+        .stroke({ color: 0x7db7ff, alpha: 0.46, width: 1 });
+    }
   }
 
   hideWorldDebugLabels(labelIndex);
@@ -6633,7 +6913,7 @@ function updateDebug(): void {
   dbgText.visible = showDebug;
   if (!showDebug) return;
 
-  drawHudPanel(dbgGfx, 4, 58, 268, 236);
+  drawHudPanel(dbgGfx, 4, 58, 330, 318);
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
@@ -6660,19 +6940,41 @@ function updateDebug(): void {
   dbgGfx.rect(8, 115, Math.round(predBuf.length * 0.98), 6).fill(PAL.portalBlue);
   dbgGfx.rect(8, 124, Math.min((serverTick % 60) * 2, 118), 3).fill(PAL.stoneMid);
   dbgGfx.rect(8, 130, Math.min(particles.length * 1.5, 118), 3).fill(PAL.canopyLight);
+  const graphX = 142;
+  const graphY = 70;
+  const graphW = 180;
+  const graphH = 42;
+  dbgGfx.rect(graphX, graphY, graphW, graphH).fill({ color: 0x06100a, alpha: 0.72 });
+  dbgGfx.rect(graphX, graphY + Math.round(graphH * (1 - 16.67 / 40)), graphW, 1).fill({ color: 0x5dff9c, alpha: 0.36 });
+  dbgGfx.rect(graphX, graphY + Math.round(graphH * (1 - 33.33 / 40)), graphW, 1).fill({ color: PAL.hazardRed, alpha: 0.34 });
+  const sampleCount = frameGraphSamples.length;
+  const barW = Math.max(1, Math.floor(graphW / FRAME_GRAPH_SAMPLE_COUNT));
+  for (let i = 0; i < sampleCount; i++) {
+    const ms = frameGraphSamples[i] ?? 0;
+    const h = Math.min(graphH, Math.round(ms / 40 * graphH));
+    const color = ms <= 17 ? 0x5dff9c : ms <= 25 ? PAL.coinGold : PAL.hazardRed;
+    dbgGfx.rect(graphX + i * barW, graphY + graphH - h, barW, h).fill({ color, alpha: 0.78 });
+  }
+  const rendererName = (pixi.renderer as { name?: string }).name ?? pixiRendererPreference[0] ?? "?";
   dbgText.text =
+    `renderer ${rendererName} res ${pixi.renderer.resolution.toFixed(2)} aa ${pixiAntialias ? "on" : "off"}\n` +
     `perf ${selectedPerformanceProfile}->${activeFixedPerformanceProfile} x${adaptiveProfileScale.toFixed(2)}\n` +
-    `fps ${perfMetrics.fpsAvg.toFixed(1)}  frame ${perfMetrics.frameTimeAvgMs.toFixed(1)}ms\n` +
-    `update ${perfMetrics.updateMsAvg.toFixed(1)}ms  sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
-    `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms  particles ${perfMetrics.particleCount}\n` +
-    `objects ${perfMetrics.displayObjectCount}  chunks ${authoritativeChunks.size}/${loadedChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
+    `fps ${perfMetrics.fpsAvg.toFixed(1)}  frame avg/p95/p99 ${perfMetrics.frameTimeAvgMs.toFixed(1)}/${perfMetrics.frameP95Ms.toFixed(1)}/${perfMetrics.frameP99Ms.toFixed(1)}ms\n` +
+    `update ${perfMetrics.updateMsAvg.toFixed(1)}ms render~ ${perfMetrics.renderMsAvg.toFixed(1)}ms sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
+    `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms netapply ${perfMetrics.networkApplyMsAvg.toFixed(2)}ms entity ${perfMetrics.entityUpdateMsAvg.toFixed(1)}ms\n` +
+    `particles ${perfMetrics.particleUpdateMsAvg.toFixed(1)}ms ui ${perfMetrics.uiUpdateMsAvg.toFixed(1)}ms count ${perfMetrics.particleCount}\n` +
+    `objects ${perfMetrics.displayObjectCount} sprites ${perfMetrics.visibleSpriteCount} gfx ${perfMetrics.graphicsObjectCount} text ${perfMetrics.textObjectCount} filters ${perfMetrics.activeFilterCount}\n` +
+    `pixiParticles ${perfMetrics.visibleParticleCount} chunks ${authoritativeChunks.size}/${loadedChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
+    `long ${perfMetrics.longTaskCount} last/max ${perfMetrics.longTaskLastMs.toFixed(1)}/${perfMetrics.longTaskMaxMs.toFixed(1)}ms heap ${perfMetrics.heapUsedMB.toFixed(0)}MB\n` +
     `ping ${pingMs.toFixed(0)}ms  jitter ${pingJitterMs.toFixed(1)}ms  interp ${adaptiveInterpDelayMs.toFixed(0)}ms\n` +
     `net in ${netMetrics.messagesReceivedPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesReceivedPerSecond)}B/s\n` +
     `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s buf ${Math.round(netMetrics.bufferedAmountBytes)}B\n` +
     `snap age ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms ibuf ${netMetrics.interpolationBufferSize.toFixed(1)}\n` +
     `parse ${netMetrics.parseTimeAvgMs.toFixed(2)}ms max ${netMetrics.parseTimeMaxMs.toFixed(2)}ms\n` +
     `corr ${netMetrics.correctionDistancePx.toFixed(1)}px max ${netMetrics.correctionDistanceMaxPx.toFixed(1)}px rollback ${netMetrics.localPredictionRollbackCount}\n` +
-    `pending inputs ${netMetrics.pendingInputCount} dropped stale ${netMetrics.droppedStaleSnapshots}`;
+    `remote corr ${netMetrics.remoteCorrectionDistancePx.toFixed(1)}px max ${netMetrics.remoteCorrectionDistanceMaxPx.toFixed(1)}px ext ${netMetrics.remoteExtrapolationMs.toFixed(0)}ms\n` +
+    `pending inputs ${netMetrics.pendingInputCount} snapq ${netMetrics.pendingSnapshotQueue} underrun ${netMetrics.interpolationBufferUnderruns}\n` +
+    `dropped stale ${netMetrics.droppedStaleSnapshots} ooo ${netMetrics.droppedOutOfOrderSnapshots}`;
 }
 
 // ── Pixi menu flow ────────────────────────────────────────────────────────────
@@ -7474,16 +7776,36 @@ function recordIncomingNetworkMessage(raw: string): void {
   netMetrics.rateWindowBytesReceived += bytes;
 }
 
-function sendWsMessage(payload: unknown): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  const raw = JSON.stringify(payload);
-  ws.send(raw);
+type OutboundPriority = "critical" | "input" | "heartbeat" | "bulk";
+
+function canSendWsMessage(priority: OutboundPriority): boolean {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
   netMetrics.bufferedAmountBytes = ws.bufferedAmount;
+  if ((priority === "bulk" || priority === "heartbeat") && ws.bufferedAmount > WS_BUFFERED_WARN_BYTES) {
+    netMetrics.backpressureSkips++;
+    return false;
+  }
+  if (priority === "input" && ws.bufferedAmount > WS_BUFFERED_CRITICAL_BYTES) {
+    netMetrics.backpressureSkips++;
+    ws.close(1008, "client backpressure");
+    return false;
+  }
+  return true;
+}
+
+function sendWsMessage(payload: unknown, priority: OutboundPriority = "critical"): boolean {
+  if (!canSendWsMessage(priority)) return false;
+  const socket = ws;
+  if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+  const raw = JSON.stringify(payload);
+  socket.send(raw);
+  netMetrics.bufferedAmountBytes = socket.bufferedAmount;
   const bytes = byteLength(raw);
   netMetrics.messagesSent++;
   netMetrics.bytesSent += bytes;
   netMetrics.rateWindowMessagesSent++;
   netMetrics.rateWindowBytesSent += bytes;
+  return true;
 }
 
 function recordClientParseTime(durationMs: number): void {
@@ -7520,8 +7842,24 @@ function recordSnapshotDelay(serverTime: number): void {
   netMetrics.lastSnapshotDelayMs = delay;
 }
 
+function shouldApplyMatchEvent(event: MatchEvent): boolean {
+  if (event.snapshotSeq !== undefined && event.snapshotSeq + EVENT_STALE_WINDOW_SNAPSHOTS < lastSnapshotSeq) {
+    return false;
+  }
+  if (!event.eventId) return true;
+  if (appliedEventIdSet.has(event.eventId)) return false;
+  appliedEventIdSet.add(event.eventId);
+  appliedEventIds.push(event.eventId);
+  while (appliedEventIds.length > APPLIED_EVENT_IDS_LIMIT) {
+    const old = appliedEventIds.shift();
+    if (old) appliedEventIdSet.delete(old);
+  }
+  return true;
+}
+
 function handleMatchEvents(events: MatchEvent[]): void {
   for (const ev2 of events) {
+    if (!shouldApplyMatchEvent(ev2)) continue;
     if (ev2.type === "COIN_COLLECTED") {
       collectedRelics.add(ev2.coinId);
       const remote = remotePlayers.get(ev2.playerId);
@@ -7564,6 +7902,102 @@ function handleMatchEvents(events: MatchEvent[]): void {
       }
     }
   }
+}
+
+function enqueueSnapshotMessage(snapshot: SnapshotServerMessage): void {
+  if (snapshot.snapshotSeq <= lastSnapshotSeq || snapshot.tick <= serverTick) {
+    netMetrics.droppedOutOfOrderSnapshots++;
+    netMetrics.droppedStaleSnapshots++;
+    return;
+  }
+  if (pendingSnapshots.length >= MAX_PENDING_SNAPSHOT_BACKLOG || netMetrics.bufferedAmountBytes > WS_BUFFERED_WARN_BYTES) {
+    const retain = Math.max(0, Math.min(SNAPSHOT_BACKLOG_RETAIN, pendingSnapshots.length));
+    const dropCount = pendingSnapshots.length - retain;
+    if (dropCount > 0) {
+      pendingSnapshots.splice(0, dropCount);
+      netMetrics.droppedStaleSnapshots += dropCount;
+    }
+  }
+  if (pendingSnapshots.length >= MAX_QUEUED_SNAPSHOTS) {
+    pendingSnapshots.shift();
+    netMetrics.droppedStaleSnapshots++;
+  }
+  pendingSnapshots.push(snapshot);
+  netMetrics.pendingSnapshotQueue = pendingSnapshots.length;
+}
+
+function processQueuedSnapshots(): { networkApplyMs: number; entityApplyMs: number } {
+  const start = performance.now();
+  let entityApplyMs = 0;
+  let processed = 0;
+  if (pendingSnapshots.length > MAX_PENDING_SNAPSHOT_BACKLOG) {
+    const dropCount = Math.max(0, pendingSnapshots.length - SNAPSHOT_BACKLOG_RETAIN);
+    pendingSnapshots.splice(0, dropCount);
+    netMetrics.droppedStaleSnapshots += dropCount;
+  }
+  while (pendingSnapshots.length > 0 && processed < MAX_SNAPSHOTS_PROCESSED_PER_FRAME) {
+    const snapshot = pendingSnapshots.shift();
+    if (snapshot) entityApplyMs += processSnapshotMessage(snapshot);
+    processed++;
+  }
+  if (pendingSnapshots.length > MAX_QUEUED_SNAPSHOTS) {
+    const stale = pendingSnapshots.length - MAX_QUEUED_SNAPSHOTS;
+    pendingSnapshots.splice(0, stale);
+    netMetrics.droppedStaleSnapshots += stale;
+  }
+  netMetrics.pendingSnapshotQueue = pendingSnapshots.length;
+  return { networkApplyMs: performance.now() - start, entityApplyMs };
+}
+
+function ackForPlayer(snapshot: SnapshotServerMessage, playerId: string): number {
+  return snapshot.lastProcessedSeq[playerId] ?? snapshot.ackInputSeq ?? -1;
+}
+
+function processSnapshotMessage(parsed: SnapshotServerMessage): number {
+  if (parsed.snapshotSeq <= lastSnapshotSeq || parsed.tick <= serverTick) {
+    netMetrics.droppedOutOfOrderSnapshots++;
+    netMetrics.droppedStaleSnapshots++;
+    return 0;
+  }
+  const entityStart = performance.now();
+  lastSnapshotSeq = parsed.snapshotSeq;
+  recordSnapshotDelay(parsed.serverTime);
+  serverTick = parsed.tick; matchPhase = parsed.matchPhase;
+  // Reconcile full collected set so late-joiners see correct coin state
+  for (const id of parsed.collectedRelics) collectedRelics.add(id);
+  handleMatchEvents(parsed.events);
+  const fullPlayerIds = new Set<string>();
+  for (const sp of parsed.players) {
+    fullPlayerIds.add(sp.id);
+    if (sp.id === localPlayerId) reconcileLocalPlayer(sp, ackForPlayer(parsed, sp.id));
+    else updateRemotePlayer(sp, parsed.serverTime, parsed.tick);
+  }
+  for (const entity of parsed.entities) {
+    if (entity.type !== "player" || entity.id === localPlayerId || fullPlayerIds.has(entity.id)) continue;
+    updateRemotePlayer(playerStateFromSnapshotEntity(entity), parsed.serverTime, parsed.tick);
+  }
+  for (const entity of parsed.playerEntities ?? []) {
+    if (entity.id === localPlayerId && !fullPlayerIds.has(entity.id)) {
+      reconcileLocalPlayer(playerStateFromEntityFrame(entity, localPlayer), ackForPlayer(parsed, entity.id));
+      continue;
+    }
+    if (fullPlayerIds.has(entity.id)) continue;
+    updateRemotePlayer(playerStateFromEntityFrame(entity), parsed.serverTime, parsed.tick);
+  }
+  updateEnemyEntries(parsed.enemies ?? [], elapsedMs / 1000);
+  const ids = new Set([
+    ...parsed.players.map((p) => p.id),
+    ...parsed.entities.filter((entity) => entity.type === "player").map((entity) => entity.id),
+    ...(parsed.playerEntities ?? []).map((entity) => entity.id),
+  ]);
+  for (const pid of remotePlayers.keys()) {
+    if (!ids.has(pid)) {
+      const e = remotePlayers.get(pid);
+      if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); }
+      remotePlayers.delete(pid);
+    }
+  }
+  return performance.now() - entityStart;
 }
 
 function disconnectNetwork(): void {
@@ -7611,9 +8045,9 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
 
   ws.addEventListener("open", () => {
     reconnDelay = 1000;
-    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", skinId, token: sessionToken ?? undefined });
-    lastPingTime = Date.now();
-    sendWsMessage({ type: "ping", clientTime: lastPingTime });
+    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", skinId, token: sessionToken ?? undefined }, "critical");
+    const pingTime = Date.now();
+    if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
   });
 
   ws.addEventListener("message", (ev) => {
@@ -7661,45 +8095,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         resolveConnect();
         break;
       case "snapshot":
-        if (parsed.snapshotSeq <= lastSnapshotSeq || parsed.tick <= serverTick) {
-          netMetrics.droppedOutOfOrderSnapshots++;
-          netMetrics.droppedStaleSnapshots++;
-          break;
-        }
-        lastSnapshotSeq = parsed.snapshotSeq;
-        recordSnapshotDelay(parsed.serverTime);
-        serverTick = parsed.tick; matchPhase = parsed.matchPhase;
-        // Reconcile full collected set so late-joiners see correct coin state
-        for (const id of parsed.collectedRelics) collectedRelics.add(id);
-        handleMatchEvents(parsed.events);
-        const fullPlayerIds = new Set<string>();
-        for (const sp of parsed.players) {
-          fullPlayerIds.add(sp.id);
-          if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.ackInputSeq ?? parsed.lastProcessedSeq[sp.id] ?? -1);
-          else updateRemotePlayer(sp, parsed.serverTime, parsed.tick);
-        }
-        for (const entity of parsed.entities) {
-          if (entity.type !== "player" || entity.id === localPlayerId || fullPlayerIds.has(entity.id)) continue;
-          updateRemotePlayer(playerStateFromSnapshotEntity(entity), parsed.serverTime, parsed.tick);
-        }
-        for (const entity of parsed.playerEntities ?? []) {
-          if (entity.id === localPlayerId && !fullPlayerIds.has(entity.id)) {
-            reconcileLocalPlayer(playerStateFromEntityFrame(entity, localPlayer), parsed.lastProcessedSeq[entity.id] ?? parsed.ackInputSeq ?? -1);
-            continue;
-          }
-          if (fullPlayerIds.has(entity.id)) continue;
-          updateRemotePlayer(playerStateFromEntityFrame(entity), parsed.serverTime, parsed.tick);
-        }
-        updateEnemyEntries(parsed.enemies ?? [], elapsedMs / 1000);
-        { const ids = new Set([
-            ...parsed.players.map((p) => p.id),
-            ...parsed.entities.filter((entity) => entity.type === "player").map((entity) => entity.id),
-            ...(parsed.playerEntities ?? []).map((entity) => entity.id),
-          ]);
-          for (const pid of remotePlayers.keys()) {
-            if (!ids.has(pid)) { const e = remotePlayers.get(pid); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(pid); }
-          }
-        }
+        enqueueSnapshotMessage(parsed);
         break;
       case "events":
         handleMatchEvents(parsed.events);
@@ -7790,7 +8186,7 @@ function schedReconn(name: string, skinId: CharacterId): void {
 
 function sendInput(inp: PlayerInput): void {
   if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayerId) return;
-  sendWsMessage({ type: "input", playerId: localPlayerId, input: inp });
+  sendWsMessage({ type: "input", playerId: localPlayerId, inputSeq: inp.sequence, clientTime: Date.now(), input: inp }, "input");
 }
 
 function shouldPredictLocalMovement(): boolean {
@@ -7799,7 +8195,10 @@ function shouldPredictLocalMovement(): boolean {
 
 function maybePing(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  if (Date.now() - lastPingTime > 1000) { lastPingTime = Date.now(); sendWsMessage({ type: "ping", clientTime: lastPingTime }); }
+  if (Date.now() - lastPingTime > 1000) {
+    const pingTime = Date.now();
+    if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
+  }
 }
 
 function addPingSample(rtt: number): void {
@@ -7849,8 +8248,9 @@ function reqChunks(): void {
   if (!window) return;
   for (let cy = window.min; cy <= window.max; cy++) {
     if (!authoritativeChunks.has(cy) && !pendingAuthoritativeChunks.has(cy)) {
-      pendingAuthoritativeChunks.add(cy);
-      sendWsMessage({ type: "requestChunk", chunkY: cy });
+      if (sendWsMessage({ type: "requestChunk", chunkY: cy }, "bulk")) {
+        pendingAuthoritativeChunks.add(cy);
+      }
     }
   }
 }
@@ -7858,13 +8258,14 @@ function reqChunks(): void {
 // ── Reconciliation & remote interpolation ────────────────────────────────────
 
 function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
+  lastAuthoritativeLocalPlayer = clonePlayerState(ss);
   if (!localPlayer) { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; return; }
   const healthDelta = localPlayer.health - ss.health;
   if (healthDelta > 0) {
     damageFeedback(ss.position.x + PLAYER_WIDTH / 2, ss.position.y + PLAYER_HEIGHT * 0.45, healthDelta);
   }
   if (lastSeq < 0) {
-    if (Math.hypot(ss.position.x - localPlayer.position.x, ss.position.y - localPlayer.position.y) > RECONCILIATION_TOLERANCE_PX * 4)
+    if (Math.hypot(ss.position.x - localPlayer.position.x, ss.position.y - localPlayer.position.y) > SNAP_CORRECTION_THRESHOLD_PX)
       { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; }
     resetLocalPrediction();
     return;
@@ -7875,14 +8276,16 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
   const correction = Math.hypot(ss.position.x - pred.state.position.x, ss.position.y - pred.state.position.y);
   netMetrics.correctionDistancePx += (correction - netMetrics.correctionDistancePx) * 0.16;
   if (correction > netMetrics.correctionDistanceMaxPx) netMetrics.correctionDistanceMaxPx = correction;
-  if (correction > RECONCILIATION_TOLERANCE_PX) {
+  if (correction > CORRECTION_DEADZONE_PX) {
     netMetrics.localPredictionRollbackCount++;
-    const snapVisual = correction > LOCAL_VISUAL_SNAP_THRESHOLD_PX || ss.invulnerable > 0;
+    const snapVisual = correction > SNAP_CORRECTION_THRESHOLD_PX || ss.invulnerable > 0;
     localPlayer = clonePlayerState(ss);
     for (let i = idx + 1; i < predBuf.length; i++) {
       const e = predBuf[i]; if (!e) continue;
       const { player: next } = stepPlayer(localPlayer, e.input, tileMap, PHYSICS_STEP_SECONDS);
-      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000);
+      if (shouldApplyClientWindZones()) {
+        applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000);
+      }
       localPlayer = next;
     }
     if (snapVisual) snapLocalVisualToSimulation();
@@ -7943,24 +8346,40 @@ function playerStateFromEntityFrame(frame: PlayerEntityFrame, base?: PlayerState
   return player;
 }
 
-function interpRemotes(): void {
+function setRemoteRenderTarget(e: RemoteEntry, target: PlayerState, dt: number): void {
+  e.current = target;
+  const correction = smoothPositionTowards(e.renderPosition, target.position, dt);
+  netMetrics.remoteCorrectionDistancePx += (correction - netMetrics.remoteCorrectionDistancePx) * 0.12;
+  if (correction > netMetrics.remoteCorrectionDistanceMaxPx) netMetrics.remoteCorrectionDistanceMaxPx = correction;
+}
+
+function interpRemotes(dt: number): void {
   const rt = estimatedServerTime() - adaptiveInterpDelayMs;
   // Adaptive extrapolation cap scales with RTT so high-ping clients project further.
-  const extrapCapMs = Math.max(80, Math.min(pingMs * 0.5 + SNAPSHOT_INTERVAL_MS, 250));
+  const extrapCapMs = Math.max(40, Math.min(MAX_EXTRAPOLATION_MS, pingMs * 0.5 + SNAPSHOT_INTERVAL_MS));
 
   for (const e of remotePlayers.values()) {
     const { states } = e;
     if (states.length === 0) continue;
-    if (states.length === 1) { e.current = states[0]!.state; continue; }
+    if (states.length === 1) {
+      netMetrics.interpolationBufferUnderruns++;
+      setRemoteRenderTarget(e, states[0]!.state, dt);
+      continue;
+    }
     const first = states[0]!;
     const last  = states[states.length - 1]!;
 
-    if (rt <= first.t) { e.current = first.state; continue; }
+    if (rt <= first.t) {
+      netMetrics.interpolationBufferUnderruns++;
+      setRemoteRenderTarget(e, first.state, dt);
+      continue;
+    }
 
     if (rt >= last.t) {
       // Physics-based dead-reckoning: run shared stepPlayer() for the missing time.
       // This correctly applies gravity and collisions instead of naive linear drift.
       const extrapolateMs = Math.min(rt - last.t, extrapCapMs);
+      netMetrics.remoteExtrapolationMs += (extrapolateMs - netMetrics.remoteExtrapolationMs) * 0.12;
       const steps = Math.round((extrapolateMs / 1000) / PHYSICS_STEP_SECONDS);
       let extState = clonePlayerState(last.state);
       const dri: PlayerInput = {
@@ -7974,9 +8393,11 @@ function interpRemotes(): void {
       };
       for (let i = 0; i < Math.min(steps, 8); i++) {
         extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
-        applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000 + i * PHYSICS_STEP_SECONDS);
+        if (shouldApplyClientWindZones()) {
+          applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000 + i * PHYSICS_STEP_SECONDS);
+        }
       }
-      e.current = extState;
+      setRemoteRenderTarget(e, extState, dt);
       continue;
     }
 
@@ -7987,13 +8408,14 @@ function interpRemotes(): void {
     }
     const span = af.t - bf.t;
     const t = span > 0 ? Math.min(1, (rt - bf.t) / span) : 1;
-    e.current = {
+    const target = {
       ...af.state,
       position: {
         x: bf.state.position.x + (af.state.position.x - bf.state.position.x) * t,
         y: bf.state.position.y + (af.state.position.y - bf.state.position.y) * t,
       },
     };
+    setRemoteRenderTarget(e, target, dt);
   }
 }
 
@@ -8016,7 +8438,7 @@ function drawCrown(g: Graphics, cx: number, cy: number, color: number): void {
 // ── Draw actors ───────────────────────────────────────────────────────────────
 
 function drawActors(): void {
-  interpRemotes();
+  interpRemotes(Math.min(pixi.ticker.deltaMS / 1000, 1 / 30));
 
   // Find leader (highest world height = lowest y position)
   let leaderY = Infinity, leaderId: string | null = null;
@@ -8025,27 +8447,28 @@ function drawActors(): void {
     leaderId = localPlayerId;
   }
   for (const [pid, e] of remotePlayers) {
-    if (e.current.position.y < leaderY) { leaderY = e.current.position.y; leaderId = pid; }
+    if (e.renderPosition.y < leaderY) { leaderY = e.renderPosition.y; leaderId = pid; }
   }
 
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
     const characterId = skinForPlayer(e.current, characterForRemote(e.colorIndex));
+    const drawPosition = e.renderPosition;
     e.sprite.visible = hasAsset("playerExplorer") && !(e.current.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
     if (hasCharacterAnimationAssets(characterId)) e.sprite.texture = playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs));
     else e.sprite.texture = characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
-    e.sprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
-    e.sprite.y = Math.round(e.current.position.y + PLAYER_HEIGHT + 2);
+    e.sprite.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2);
+    e.sprite.y = Math.round(drawPosition.y + PLAYER_HEIGHT + 2);
     e.sprite.scale.x = (e.current.facing < 0 ? -1 : 1) * playerSpriteScale();
     e.sprite.scale.y = playerSpriteScale();
     e.sprite.tint = 0xffffff;
-    drawPlayerInto(e.gfx, e.current, col, elapsedMs);
-    e.label.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2 - e.label.width / 2);
-    e.label.y = Math.round(e.current.position.y - 16);
+    drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition);
+    e.label.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2 - e.label.width / 2);
+    e.label.y = Math.round(drawPosition.y - 16);
     e.crownSprite.visible = hasAsset("crown") && pid === leaderId;
-    e.crownSprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
-    e.crownSprite.y = Math.round(e.current.position.y - 10);
-    if (pid === leaderId && !hasAsset("crown")) drawCrown(e.gfx, Math.round(e.current.position.x + PLAYER_WIDTH / 2), Math.round(e.current.position.y) - 12, col);
+    e.crownSprite.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2);
+    e.crownSprite.y = Math.round(drawPosition.y - 10);
+    if (pid === leaderId && !hasAsset("crown")) drawCrown(e.gfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, col);
   }
 
   if (localPlayer) {
@@ -8106,6 +8529,8 @@ setAppState("mainMenu");
 
 pixi.ticker.add((ticker) => {
   const frameStart = performance.now();
+  currentFrameStartMs = frameStart;
+  currentFrameRenderRecorded = false;
   const rawDtMs = ticker.deltaMS;
   const dtMs = Math.min(rawDtMs, 1000 / 30);
   const dt   = Math.min(dtMs / 1000, 1 / 30);
@@ -8113,9 +8538,11 @@ pixi.ticker.add((ticker) => {
   const tSec  = elapsedMs / 1000;
   if (appState !== "game") {
     updateMenu(tSec);
+    currentFrameUpdateEndMs = performance.now();
     return;
   }
   const scale = getScale();
+  const { networkApplyMs, entityApplyMs: networkEntityApplyMs } = processQueuedSnapshots();
 
   const renderPrepStart = performance.now();
   ensureChunksAhead();
@@ -8123,6 +8550,7 @@ pixi.ticker.add((ticker) => {
   maybePing();
   updateNetworkRates();
   updateAdaptiveInterpDelay();
+  const particleStart = performance.now();
   updateParticles(dt);
   const updateEnvironmentAnimations = elapsedMs - lastEnvironmentAnimMs >= environmentAnimationIntervalMs();
   const envDt = Math.min(Math.max(0, elapsedMs - lastEnvironmentAnimMs) / 1000, 1 / 15);
@@ -8142,6 +8570,7 @@ pixi.ticker.add((ticker) => {
   spawnAmbientParticles(dt);
   spawnFallStreaks(dt);
   updateNotifications(dt);
+  const particleUpdateMs = performance.now() - particleStart;
 
   // Slow horizontal cloud drift — rebuild when offset exceeds screen width
   cloudDriftFar   += dt * 6;
@@ -8179,7 +8608,9 @@ pixi.ticker.add((ticker) => {
       const wasKickPhase = localPlayer.kickPhase;
       const willJump = inp.jumpPressed && (localPlayer.grounded || localPlayer.coyoteTimer > 0);
       const { player: next } = stepPlayer(localPlayer, inp, tileMap, PHYSICS_STEP_SECONDS);
-      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, tSec);
+      if (shouldApplyClientWindZones()) {
+        applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, tSec);
+      }
       const hitJumpPad = applyLocalJumpPads(next);
 
       if (willJump && wasGrounded) jumpDust(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT, next.facing);
@@ -8237,11 +8668,23 @@ pixi.ticker.add((ticker) => {
   processChunkRenderQueue();
   pruneDistantChunkVisuals();
   syncChunkVisibility();
+  const entityUpdateStart = performance.now();
   drawActors();
+  const entityUpdateMs = performance.now() - entityUpdateStart + networkEntityApplyMs;
+  const uiUpdateStart = performance.now();
   updateHud(tSec);
+  updateDebug();
+  const uiUpdateMs = performance.now() - uiUpdateStart;
   renderPrepMs += performance.now() - visualPrepStart;
   const updateMs = performance.now() - frameStart;
-  updatePerformanceAverages(rawDtMs, updateMs, simulationMs, renderPrepMs);
+  updatePerformanceAverages(rawDtMs, updateMs, simulationMs, renderPrepMs, networkApplyMs, networkEntityApplyMs, entityUpdateMs, particleUpdateMs, uiUpdateMs);
   updateAdaptivePerformance(dt);
-  updateDebug();
+  currentFrameUpdateEndMs = performance.now();
 });
+
+pixi.ticker.add(() => {
+  if (currentFrameRenderRecorded || currentFrameUpdateEndMs <= 0 || currentFrameStartMs <= 0) return;
+  const renderMs = Math.max(0, performance.now() - currentFrameUpdateEndMs);
+  perfMetrics.renderMsAvg += (renderMs - perfMetrics.renderMsAvg) * 0.05;
+  currentFrameRenderRecorded = true;
+}, undefined, UPDATE_PRIORITY.LOW - 1);

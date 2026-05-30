@@ -215,6 +215,9 @@ func (c *Client) WriteLoop(ctx context.Context) {
 		}
 	}()
 	for {
+		if !c.writeLatestSnapshotIfReady(ctx) {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -223,31 +226,28 @@ func (c *Client) WriteLoop(ctx context.Context) {
 				return
 			}
 		case <-c.snapshotSignal:
-			if !c.writePendingReliable(ctx) {
-				return
-			}
-			msg := c.takeLatestSnapshot()
-			if len(msg) == 0 {
-				continue
-			}
-			if !c.writeMessage(ctx, msg) {
+			if !c.writeLatestSnapshot(ctx) {
 				return
 			}
 		}
 	}
 }
 
-func (c *Client) writePendingReliable(ctx context.Context) bool {
-	for {
-		select {
-		case msg := <-c.send:
-			if !c.writeMessage(ctx, msg) {
-				return false
-			}
-		default:
-			return true
-		}
+func (c *Client) writeLatestSnapshotIfReady(ctx context.Context) bool {
+	select {
+	case <-c.snapshotSignal:
+		return c.writeLatestSnapshot(ctx)
+	default:
+		return true
 	}
+}
+
+func (c *Client) writeLatestSnapshot(ctx context.Context) bool {
+	msg := c.takeLatestSnapshot()
+	if len(msg) == 0 {
+		return true
+	}
+	return c.writeMessage(ctx, msg)
 }
 
 func (c *Client) writeMessage(ctx context.Context, msg []byte) bool {

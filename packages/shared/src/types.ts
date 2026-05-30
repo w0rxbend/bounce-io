@@ -250,7 +250,13 @@ export type MatchEventType =
   | "MATCH_STARTED"
   | "MATCH_ENDED";
 
-export type MatchEvent =
+export interface MatchEventMetadata {
+  eventId?: string;
+  serverTick?: number;
+  snapshotSeq?: number;
+}
+
+export type MatchEventPayload =
   | { type: "PLAYER_JOINED";        playerId: PlayerId }
   | { type: "PLAYER_LEFT";          playerId: PlayerId }
   | { type: "PLAYER_DISCONNECTED";  playerId: PlayerId }
@@ -268,3 +274,5 @@ export type MatchEvent =
   | { type: "MATCH_COUNTDOWN_STARTED"; countdownMs: number }
   | { type: "MATCH_STARTED" }
   | { type: "MATCH_ENDED" };
+
+export type MatchEvent = MatchEventMetadata & MatchEventPayload;

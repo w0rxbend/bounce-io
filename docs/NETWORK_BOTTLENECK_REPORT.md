@@ -71,6 +71,16 @@ The clean 50-client run still recorded 35 tick overruns and a 19.1 ms tick max. 
 - Kept reliable/control messages on the existing bounded queue.
 - Tightened shared snapshot validation so accepted snapshots must include `serverTick` and `ackInputSeq`.
 
+## 2026-05-30 Latency/Stability Follow-up
+
+- Server WebSocket writer now prioritizes the latest pending snapshot instead of draining the reliable/control queue before gameplay state. This reduces the chance that chunk/control traffic creates stale-state latency.
+- Server event batches now enrich events with `eventId`, `serverTick`, and `snapshotSeq` before broadcast, giving clients enough metadata to dedupe late/replayed events.
+- Shared snapshots explicitly use `ackInputSeq: -1`; clients read the real local acknowledgement from `lastProcessedSeq[localPlayerId]`.
+- Client snapshot intake now drops old pending snapshots aggressively when a frame spike or network backlog appears. The interpolation history still keeps smooth remote motion, but the apply queue no longer tries to catch up through stale snapshots.
+- Client outbound policy now watches `WebSocket.bufferedAmount`: low-priority chunk requests and heartbeat pings are skipped under backlog, and severe input backlog closes the socket to force reconnect/resync instead of growing latency.
+- Client `requestChunk` only marks a chunk as pending after the request is actually sent, so backpressure skips do not strand chunks forever.
+- Client event handling now deduplicates `eventId`s with a small LRU window and ignores very stale event batches.
+
 ## Remaining Risks
 
 - 50-client load still has occasional tick overruns. Next target: allocation profiling with `/debug/pprof/heap` and CPU profiling during active load.

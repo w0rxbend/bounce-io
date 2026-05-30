@@ -230,7 +230,11 @@ export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
 }
 
 function isMatchEvent(value: unknown): value is MatchEvent {
-  return isRecord(value) && isString(value.type);
+  return isRecord(value) &&
+    isString(value.type) &&
+    (value.eventId === undefined || isString(value.eventId)) &&
+    (value.serverTick === undefined || isInteger(value.serverTick)) &&
+    (value.snapshotSeq === undefined || isInteger(value.snapshotSeq));
 }
 
 export function isClientMessage(value: unknown): value is ClientMessage {
@@ -244,7 +248,10 @@ export function isClientMessage(value: unknown): value is ClientMessage {
         (value.skinId === undefined || isString(value.skinId)) &&
         (value.token === undefined || isString(value.token));
     case "input":
-      return isString(value.playerId) && isPlayerInput(value.input);
+      return isString(value.playerId) &&
+        (value.inputSeq === undefined || isInteger(value.inputSeq)) &&
+        (value.clientTime === undefined || isFiniteNumber(value.clientTime)) &&
+        isPlayerInput(value.input);
     case "requestChunk":
       return isInteger(value.chunkY);
     case "ping":
