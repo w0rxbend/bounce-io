@@ -2002,9 +2002,21 @@ const enemyLayer  = new Container();
 const remoteLayer = new Container();
 const localLayer  = new Container();
 const effectLayer = new Container();
+const effectParticleLayer = new ParticleContainer<PixiParticle>({
+  texture: Texture.WHITE,
+  roundPixels: true,
+  dynamicProperties: {
+    vertex: true,
+    position: true,
+    rotation: false,
+    uvs: false,
+    color: true,
+  },
+});
 const hudLayer    = new Container();
 
 enemyLayer.sortableChildren = true;
+effectLayer.addChild(effectParticleLayer);
 worldLayer.addChild(backDecorationLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
 pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
 
@@ -2375,6 +2387,7 @@ function clearWorldChunks(): void {
     e.hp.destroy();
   }
   enemyEntries.clear();
+  resetEffectParticles();
 }
 
 function destroyChunkVisuals(chunkY: number): void {
@@ -4829,24 +4842,70 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
 
 // ── Particle system ───────────────────────────────────────────────────────────
 
-interface Particle { gfx: Graphics; vx: number; vy: number; life: number; max: number; gravity: number }
+interface Particle { particle: PixiParticle; vx: number; vy: number; life: number; max: number; gravity: number }
 interface WorldPulse { gfx: Graphics; wx: number; wy: number; life: number; max: number; color: number; radius: number; width: number }
 interface FloatingText { txt: Text; vx: number; vy: number; life: number; max: number }
+const MAX_PIXEL_PARTICLES = 360;
+const LOW_FPS_PIXEL_PARTICLES = 180;
 const particles:   Particle[] = [];
-const partPool:    Graphics[] = [];
+const partPool:    PixiParticle[] = [];
 const worldPulses: WorldPulse[] = [];
 const floatingTexts: FloatingText[] = [];
 let fallStreakTimer = 0;
 
+function currentPixelParticleCap(): number {
+  const fps = pixi.ticker.FPS;
+  if (fps > 0 && fps < 38) return 120;
+  if (fps > 0 && fps < 50) return LOW_FPS_PIXEL_PARTICLES;
+  return MAX_PIXEL_PARTICLES;
+}
+
+function releasePixelParticle(index: number): void {
+  const entry = particles[index];
+  if (!entry) return;
+  const lastIndex = particles.length - 1;
+  const children = effectParticleLayer.particleChildren;
+  if (index !== lastIndex) {
+    particles[index] = particles[lastIndex]!;
+    children[index] = children[lastIndex]!;
+  }
+  particles.pop();
+  children.pop();
+  entry.particle.alpha = 0;
+  if (partPool.length < MAX_PIXEL_PARTICLES) partPool.push(entry.particle);
+}
+
+function resetEffectParticles(): void {
+  for (const entry of particles) {
+    entry.particle.alpha = 0;
+    if (partPool.length < MAX_PIXEL_PARTICLES) partPool.push(entry.particle);
+  }
+  particles.length = 0;
+  effectParticleLayer.particleChildren.length = 0;
+
+  for (const pulse of worldPulses) {
+    if (!pulse.gfx.destroyed) pulse.gfx.destroy();
+  }
+  worldPulses.length = 0;
+
+  for (const floating of floatingTexts) {
+    if (!floating.txt.destroyed) floating.txt.destroy();
+  }
+  floatingTexts.length = 0;
+}
+
 function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number, color: number, size = 2, gravity = 200): void {
   if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
-  if (particles.length > 220) return;
-  const gfx = partPool.pop() ?? new Graphics();
-  gfx.clear();
-  gfx.rect(0, 0, size, size).fill(color);
-  gfx.x = wx; gfx.y = wy; gfx.alpha = 1; gfx.visible = true;
-  effectLayer.addChild(gfx);
-  particles.push({ gfx, vx, vy, life, max: life, gravity });
+  if (particles.length >= currentPixelParticleCap()) return;
+  const particle = partPool.pop() ?? new PixiParticle({ texture: Texture.WHITE });
+  particle.x = wx;
+  particle.y = wy;
+  particle.scaleX = size;
+  particle.scaleY = size;
+  particle.tint = color;
+  particle.alpha = 1;
+  effectParticleLayer.particleChildren.push(particle);
+  particles.push({ particle, vx, vy, life, max: life, gravity });
 }
 
 function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, life = 0.42, width = 2): void {
@@ -4890,16 +4949,13 @@ function updateParticles(dt: number): void {
     const p = particles[i]!;
     p.life -= dt;
     if (p.life <= 0) {
-      p.gfx.visible = false;
-      effectLayer.removeChild(p.gfx);
-      partPool.push(p.gfx);
-      particles.splice(i, 1);
+      releasePixelParticle(i);
       continue;
     }
-    p.gfx.x += p.vx * dt;
-    p.gfx.y += p.vy * dt;
+    p.particle.x += p.vx * dt;
+    p.particle.y += p.vy * dt;
     p.vy    += p.gravity * dt;
-    p.gfx.alpha = p.life / p.max;
+    p.particle.alpha = p.life / p.max;
   }
 
   for (let i = worldPulses.length - 1; i >= 0; i--) {
