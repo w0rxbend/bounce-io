@@ -112,7 +112,9 @@ const SNAPSHOT_INTERVAL_MS  = 1000 / 20; // 50 ms — matches server SNAPSHOT_RA
 const PING_HISTORY_SIZE     = 16;    // larger window for more stable jitter estimate
 let   adaptiveInterpDelayMs = 100;   // starts neutral, self-tunes each pong
 let   smoothedRttMs         = 100;   // EMA-smoothed RTT used for delay target
-const CHUNKS_KEEP_BEHIND    = 2;     // chunks to keep below player before culling
+const CHUNKS_PRELOAD_BEHIND = 3;     // keep enough below for intentional descents
+const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing forever
+const INITIAL_CHUNKS_TO_LOAD = 4;
 
 const ASSET_URLS = {
   bgMountainPanorama: "/assets/environment/backgrounds/mountain_panorama.png",
@@ -224,31 +226,6 @@ const ASSET_URLS = {
   rockCluster: "/assets/environment/rocks/rock_cluster_plain_1.png",
   rockClusterMoss: "/assets/environment/rocks/rock_cluster_moss_1.png",
   rockSpire: "/assets/environment/rocks/rock_spire_1.png",
-  midMountainPineCap: "/assets/environment/midMountains/pine_cap.png",
-  midMountainPineBody: "/assets/environment/midMountains/pine_body.png",
-  midMountainPineLeft: "/assets/environment/midMountains/pine_left.png",
-  midMountainPineRight: "/assets/environment/midMountains/pine_right.png",
-  midMountainPineBottom: "/assets/environment/midMountains/pine_bottom.png",
-  midMountainCloudCap: "/assets/environment/midMountains/cloud_cap.png",
-  midMountainCloudBody: "/assets/environment/midMountains/cloud_body.png",
-  midMountainCloudLeft: "/assets/environment/midMountains/cloud_left.png",
-  midMountainCloudRight: "/assets/environment/midMountains/cloud_right.png",
-  midMountainCloudBottom: "/assets/environment/midMountains/cloud_bottom.png",
-  midMountainSnowCap: "/assets/environment/midMountains/snow_cap.png",
-  midMountainSnowBody: "/assets/environment/midMountains/snow_body.png",
-  midMountainSnowLeft: "/assets/environment/midMountains/snow_left.png",
-  midMountainSnowRight: "/assets/environment/midMountains/snow_right.png",
-  midMountainSnowBottom: "/assets/environment/midMountains/snow_bottom.png",
-  midMountainFrozenCap: "/assets/environment/midMountains/frozen_cap.png",
-  midMountainFrozenBody: "/assets/environment/midMountains/frozen_body.png",
-  midMountainFrozenLeft: "/assets/environment/midMountains/frozen_left.png",
-  midMountainFrozenRight: "/assets/environment/midMountains/frozen_right.png",
-  midMountainFrozenBottom: "/assets/environment/midMountains/frozen_bottom.png",
-  midMountainSummitCap: "/assets/environment/midMountains/summit_cap.png",
-  midMountainSummitBody: "/assets/environment/midMountains/summit_body.png",
-  midMountainSummitLeft: "/assets/environment/midMountains/summit_left.png",
-  midMountainSummitRight: "/assets/environment/midMountains/summit_right.png",
-  midMountainSummitBottom: "/assets/environment/midMountains/summit_bottom.png",
   snowPlatform: "/assets/environment/platformVariants/platform_snow_top_inner.png",
   snowIciclePlatform: "/assets/environment/platformVariants/platform_snow_bottom_inner.png",
   frozenPlatform: "/assets/environment/platformVariants/platform_ice_top_inner.png",
@@ -412,6 +389,7 @@ interface PixelAssetManifest {
 const ASSET_MANIFEST_URL = "/assets/manifest.json";
 const manifestAssetFolders = new Map<string, AssetKey[]>();
 const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
+const PROCEDURAL_ASSET_FOLDERS = new Set(["environment/midMountains"]);
 
 const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
 type BiomeId = typeof BIOME_IDS[number];
@@ -577,6 +555,8 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
   if (manifest) {
     await Promise.all(Object.entries(manifest.assets).map(async ([relPath, meta]) => {
       try {
+        const folder = relPath.split("/").slice(0, -1).join("/");
+        if (PROCEDURAL_ASSET_FOLDERS.has(folder)) return;
         const texture = await Assets.load<Texture>(meta.png);
         const pathAlias = pathAliasForAsset(relPath);
         loaded[relPath] = texture;
@@ -885,61 +865,94 @@ type PlatformPartRole =
   | "bottom_left" | "bottom_inner" | "bottom_right"
   | "outer_left" | "outer_right";
 
-function midMountainTileAsset(biome: BiomeId, role: MidMountainTileRole): AssetKey {
-  const keysByBiome: Record<BiomeId, Record<MidMountainTileRole, AssetKey>> = {
-    pineValley: {
-      cap: "midMountainPineCap",
-      body: "midMountainPineBody",
-      left: "midMountainPineLeft",
-      right: "midMountainPineRight",
-      bottom: "midMountainPineBottom",
-    },
-    cloudRidge: {
-      cap: "midMountainCloudCap",
-      body: "midMountainCloudBody",
-      left: "midMountainCloudLeft",
-      right: "midMountainCloudRight",
-      bottom: "midMountainCloudBottom",
-    },
-    snowfallCliffs: {
-      cap: "midMountainSnowCap",
-      body: "midMountainSnowBody",
-      left: "midMountainSnowLeft",
-      right: "midMountainSnowRight",
-      bottom: "midMountainSnowBottom",
-    },
-    frozenSpires: {
-      cap: "midMountainFrozenCap",
-      body: "midMountainFrozenBody",
-      left: "midMountainFrozenLeft",
-      right: "midMountainFrozenRight",
-      bottom: "midMountainFrozenBottom",
-    },
-    celestialSummit: {
-      cap: "midMountainSummitCap",
-      body: "midMountainSummitBody",
-      left: "midMountainSummitLeft",
-      right: "midMountainSummitRight",
-      bottom: "midMountainSummitBottom",
-    },
-  };
-  return keysByBiome[biome][role];
+interface MidMountainPalette {
+  base: number;
+  shade: number;
+  edge: number;
+  ridge: number;
+  cap: number;
+  accent: number;
+  alpha: number;
 }
 
-function midMountainTint(biome: BiomeId): number {
-  if (biome === "pineValley") return 0x5a6a64;
-  if (biome === "cloudRidge") return 0x526879;
-  if (biome === "snowfallCliffs") return 0x546b80;
-  if (biome === "frozenSpires") return 0x4d6684;
-  return 0x626878;
+function midMountainPalette(biome: BiomeId): MidMountainPalette {
+  if (biome === "pineValley") {
+    return { base: 0x34465a, shade: 0x243247, edge: 0x1b2739, ridge: 0x607454, cap: 0x87a65a, accent: 0x9fb76b, alpha: 0.42 };
+  }
+  if (biome === "cloudRidge") {
+    return { base: 0x3e5874, shade: 0x2c3f5f, edge: 0x23324d, ridge: 0x6d87a6, cap: 0xa8c0d8, accent: 0xe8f0f8, alpha: 0.44 };
+  }
+  if (biome === "snowfallCliffs") {
+    return { base: 0x465f78, shade: 0x31455f, edge: 0x26354a, ridge: 0x8fa9c4, cap: 0xd7e5ee, accent: 0xf4fbff, alpha: 0.46 };
+  }
+  if (biome === "frozenSpires") {
+    return { base: 0x405e82, shade: 0x2a4264, edge: 0x213551, ridge: 0x6fa7cc, cap: 0xc7f0ff, accent: 0xeffcff, alpha: 0.48 };
+  }
+  return { base: 0x4f5878, shade: 0x363f61, edge: 0x262e4c, ridge: 0x8796c0, cap: 0xddefff, accent: 0xf8d878, alpha: 0.45 };
 }
 
-function midMountainAlpha(biome: BiomeId): number {
-  if (biome === "pineValley") return 0.48;
-  if (biome === "cloudRidge") return 0.5;
-  if (biome === "snowfallCliffs") return 0.52;
-  if (biome === "frozenSpires") return 0.54;
-  return 0.5;
+function midMountainCellNoise(chunkY: number, lx: number, ly: number, px: number, py: number): number {
+  let h = Math.imul(chunkY + 101, 374761393)
+    ^ Math.imul(lx + 17, 668265263)
+    ^ Math.imul(ly + 31, -2048144789)
+    ^ Math.imul(px + 7, -1028477379)
+    ^ Math.imul(py + 11, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+function midMountainCellVisible(role: MidMountainTileRole, px: number, py: number, noise: number): boolean {
+  if (role === "cap") {
+    if (py === 0) return px === 1 || px === 2 || noise % 7 === 0;
+    if (py === 1) return px > 0 || noise % 5 !== 0;
+  }
+  if (role === "left") {
+    if (py === 0) return px >= 1;
+    if (py === 1) return px >= (noise % 4 === 0 ? 1 : 0);
+  }
+  if (role === "right") {
+    if (py === 0) return px <= 2;
+    if (py === 1) return px <= (noise % 4 === 0 ? 2 : 3);
+  }
+  if (role === "bottom" && py === 3) {
+    return px === 1 || px === 2 || noise % 6 === 0;
+  }
+  return true;
+}
+
+function midMountainCellColor(role: MidMountainTileRole, palette: MidMountainPalette, px: number, py: number, noise: number): number {
+  if (role === "cap" && py === 0) return noise % 3 === 0 ? palette.accent : palette.cap;
+  if (role === "cap" && py === 1 && noise % 2 === 0) return palette.ridge;
+  if ((role === "left" && px === 0) || (role === "right" && px === 3)) return palette.edge;
+  if (role === "bottom" && py >= 2) return noise % 4 === 0 ? palette.edge : palette.shade;
+  if (py === 0 && noise % 5 === 0) return palette.ridge;
+  if (noise % 7 === 0) return palette.shade;
+  if (noise % 13 === 0) return palette.ridge;
+  return palette.base;
+}
+
+function drawMidMountainTile(
+  g: Graphics,
+  lx: number,
+  ly: number,
+  baseTileY: number,
+  role: MidMountainTileRole,
+  palette: MidMountainPalette,
+  chunkY: number,
+  priority: number,
+): void {
+  const pixel = 4;
+  const tileX = lx * TILE_SIZE;
+  const tileY = (baseTileY + ly) * TILE_SIZE;
+  const alpha = Math.min(0.58, palette.alpha + priority * 0.04);
+  for (let py = 0; py < TILE_SIZE / pixel; py++) {
+    for (let px = 0; px < TILE_SIZE / pixel; px++) {
+      const noise = midMountainCellNoise(chunkY, lx, ly, px, py);
+      if (!midMountainCellVisible(role, px, py, noise)) continue;
+      const color = midMountainCellColor(role, palette, px, py, noise);
+      g.rect(tileX + px * pixel, tileY + py * pixel, pixel, pixel).fill({ color, alpha });
+    }
+  }
 }
 
 function platformPartAsset(biome: BiomeId, role: PlatformPartRole, seed = 0): AssetKey {
@@ -1204,33 +1217,45 @@ function resetLocalPrediction(): void {
 // ── World management ──────────────────────────────────────────────────────────
 
 function loadChunk(cy: number): void {
+  if (cy < 0) return;
   if (loadedChunks.has(cy)) return;
   const chunk = generateVerticalChunk({ seed: serverSeed, chunkY: cy });
   loadedChunks.set(cy, chunk);
   renderChunk(chunk);
 }
 
+function chunkYForWorldY(y: number): number {
+  return Math.max(0, -Math.floor(Math.floor(y / TILE_SIZE) / CHUNK_HEIGHT_TILES));
+}
+
+function currentChunkWindow(): { min: number; max: number } | null {
+  if (!localPlayer) return null;
+  const pChunkY = chunkYForWorldY(localPlayer.position.y);
+  return {
+    min: Math.max(0, pChunkY - CHUNKS_PRELOAD_BEHIND),
+    max: pChunkY + CHUNKS_PRELOAD_AHEAD,
+  };
+}
+
 function ensureChunksAhead(): void {
   if (!localPlayer) return;
-  const pTileY  = Math.floor(localPlayer.position.y / TILE_SIZE);
-  const pChunkY = Math.max(0, -Math.floor(pTileY / CHUNK_HEIGHT_TILES));
-  for (let cy = 0; cy <= pChunkY + 3; cy++) loadChunk(cy);
+  const window = currentChunkWindow();
+  if (!window) return;
+  for (let cy = window.min; cy <= window.max; cy++) loadChunk(cy);
 
-  // Cull chunks that are too far below — they will never be needed again.
-  const disposeBelow = Math.max(0, pChunkY - CHUNKS_KEEP_BEHIND);
-  if (disposeBelow > 0) {
-    for (const cy of [...loadedChunks.keys()]) {
-      if (cy < disposeBelow) {
-        destroyChunkVisuals(cy);
-        loadedChunks.delete(cy);
-      }
+  // Sliding-window streaming. Chunks are deterministic, so disposing visuals is
+  // safe; if the player goes back down, the window above reloads them.
+  for (const cy of [...loadedChunks.keys()]) {
+    if (cy < window.min || cy > window.max) {
+      destroyChunkVisuals(cy);
+      loadedChunks.delete(cy);
     }
   }
 }
 
 function regenerateWorld(): void {
   clearWorldChunks();
-  for (let cy = 0; cy <= 3; cy++) loadChunk(cy);
+  for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
   respawnLocal();
 }
 
@@ -1695,7 +1720,9 @@ function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, w
 
 function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
   const baseTileY = chunk.worldTileY;
-  const placed = new Map<string, { sprite: Sprite; priority: number }>();
+  const placed = new Map<string, { role: MidMountainTileRole; priority: number }>();
+  const gfx = new Graphics();
+  const palette = midMountainPalette(biome);
 
   const roleForMass = (offset: number, half: number, isTop: boolean, isBottom: boolean): MidMountainTileRole => {
     if (offset === -half) return "left";
@@ -1707,23 +1734,10 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
 
   const placeTile = (lx: number, ly: number, role: MidMountainTileRole, priority = 0): void => {
     if (lx < 0 || lx >= chunk.width || ly < 0 || ly >= chunk.height) return;
-    const key = midMountainTileAsset(biome, role);
-    if (!hasAsset(key)) return;
     const placedKey = `${lx}:${ly}`;
     const existing = placed.get(placedKey);
     if (existing && existing.priority >= priority) return;
-    if (existing) {
-      target.removeChild(existing.sprite);
-      existing.sprite.destroy();
-    }
-    const tile = makeSprite(key);
-    tile.x = lx * TILE_SIZE;
-    tile.y = (baseTileY + ly) * TILE_SIZE;
-    tile.alpha = midMountainAlpha(biome);
-    tile.tint = midMountainTint(biome);
-    tile.zIndex = -6 + priority;
-    target.addChild(tile);
-    placed.set(placedKey, { sprite: tile, priority });
+    placed.set(placedKey, { role, priority });
   };
 
   // A quiet second-layer spine gives depth without reading as playable terrain.
@@ -1756,6 +1770,16 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
       }
     }
   }
+
+  for (const [placedKey, tile] of placed) {
+    const [lxRaw, lyRaw] = placedKey.split(":");
+    const lx = Number(lxRaw);
+    const ly = Number(lyRaw);
+    drawMidMountainTile(gfx, lx, ly, baseTileY, tile.role, palette, chunk.chunkY, tile.priority);
+  }
+
+  gfx.zIndex = -6;
+  target.addChild(gfx);
 }
 
 function composePlatformPartLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
@@ -3788,7 +3812,7 @@ function connectRoom(name: string): void {
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
           clearWorldChunks();
-          for (let cy = 0; cy <= 3; cy++) loadChunk(cy);
+          for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
         }
         netStatus.textContent = `Room: demo | ${localPlayerId.slice(0, 6)}`;
         { const { x, y } = getSpawnPos(); localPlayer = createPlayerState(localPlayerId, x, y); }
@@ -3963,8 +3987,11 @@ function estimatedServerTime(): number {
 
 function reqChunks(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayer) return;
-  const ci = Math.max(0, -Math.floor(Math.floor(localPlayer.position.y / TILE_SIZE) / CHUNK_HEIGHT_TILES));
-  for (let cy = ci; cy <= ci + 3; cy++) if (!loadedChunks.has(cy)) ws.send(JSON.stringify({ type: "requestChunk", chunkY: cy }));
+  const window = currentChunkWindow();
+  if (!window) return;
+  for (let cy = window.min; cy <= window.max; cy++) {
+    if (!loadedChunks.has(cy)) ws.send(JSON.stringify({ type: "requestChunk", chunkY: cy }));
+  }
 }
 
 // ── Reconciliation & remote interpolation ────────────────────────────────────
@@ -4133,7 +4160,7 @@ function drawActors(): void {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-for (let cy = 0; cy <= 3; cy++) loadChunk(cy);
+for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
 respawnLocal();
 joinBtn.addEventListener("click", () => connectRoom(nameInput.value.trim() || "Explorer"));
 

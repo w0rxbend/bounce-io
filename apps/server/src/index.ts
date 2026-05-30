@@ -49,6 +49,10 @@ const MAX_INPUTS_PER_TICK = 3;
 const MAX_QUEUED_INPUTS = 24;
 const MAX_MESSAGE_BYTES = 1024;
 const SPAWN_X_BASE = Math.floor(CHUNK_WIDTH_TILES / 2) * TILE_SIZE;
+const SERVER_CHUNKS_PRELOAD_BEHIND = 3;
+const SERVER_CHUNKS_PRELOAD_AHEAD = 4;
+const SERVER_CHUNK_REQUEST_AHEAD_LIMIT = SERVER_CHUNKS_PRELOAD_AHEAD + 2;
+const MAX_SERVER_CHUNK_Y = 200;
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
@@ -74,6 +78,7 @@ interface ServerRoom {
   sessions: Map<string, Session>;
   players: Map<string, PlayerState>;
   collectedRelics: Set<string>;
+  defeatedEnemies: Set<string>;
   chunks: Map<number, GeneratedChunk>;
   enemies: Map<string, EnemyState>;
   tick: number;
@@ -300,16 +305,14 @@ app.get(
         // ── requestChunk ─────────────────────────────────────────────────────
         if (parsed.type === "requestChunk") {
           const chunkY = parsed.chunkY;
-          if (!Number.isInteger(chunkY) || chunkY < 0 || chunkY > 200) return;
+          if (!Number.isInteger(chunkY) || chunkY < 0 || chunkY > MAX_SERVER_CHUNK_Y) return;
           const player = room.players.get(session.playerId);
-          const currentChunkY = player
-            ? Math.max(0, -Math.floor(player.position.y / TILE_SIZE / CHUNK_HEIGHT_TILES))
-            : 0;
-          if (chunkY > currentChunkY + 6) {
+          const currentChunkY = player ? chunkYForWorldY(player.position.y) : 0;
+          if (chunkY > currentChunkY + SERVER_CHUNK_REQUEST_AHEAD_LIMIT) {
             ws.send(JSON.stringify({ type: "error", code: "CHUNK_TOO_FAR", message: "chunk request too far ahead" }));
             return;
           }
-          ensureChunksLoaded(room, chunkY);
+          ensureChunkLoaded(room, chunkY);
           const chunk = room.chunks.get(chunkY);
           if (chunk) {
             ws.send(JSON.stringify({ type: "chunk", chunk }));
@@ -391,6 +394,7 @@ function getOrCreateRoom(id: string): ServerRoom {
     sessions: new Map(),
     players: new Map(),
     collectedRelics: new Set(),
+    defeatedEnemies: new Set(),
     chunks: new Map(),
     enemies: new Map(),
     tick: 0,
@@ -405,28 +409,82 @@ function getOrCreateRoom(id: string): ServerRoom {
   };
 
   ensureChunksLoaded(room, 0);
-  ensureChunksLoaded(room, 1);
 
   room.loopInterval = setInterval(() => tickRoom(room), 1000 / SERVER_TICK_RATE);
   rooms.set(id, room);
   return room;
 }
 
-function ensureChunksLoaded(room: ServerRoom, upToChunkY: number): void {
-  let loaded = false;
-  for (let cy = 0; cy <= upToChunkY + 2; cy++) {
-    if (!room.chunks.has(cy)) {
-      const chunk = generateVerticalChunk({ seed: room.seed, chunkY: cy });
-      const issues = verifyChunkReachability(chunk);
-      if (issues.length > 0) {
-        console.warn(`[room ${room.id}] chunk ${cy} reachability issues:`, issues.map(i => i.reason));
-      }
-      room.chunks.set(cy, chunk);
-      hydrateEnemiesForChunk(room, chunk);
-      loaded = true;
-    }
+function chunkYForWorldY(y: number): number {
+  return Math.max(0, -Math.floor(y / TILE_SIZE / CHUNK_HEIGHT_TILES));
+}
+
+function ensureChunkLoaded(room: ServerRoom, cy: number): void {
+  if (!Number.isInteger(cy) || cy < 0 || cy > MAX_SERVER_CHUNK_Y || room.chunks.has(cy)) return;
+  const chunk = generateVerticalChunk({ seed: room.seed, chunkY: cy });
+  const issues = verifyChunkReachability(chunk);
+  if (issues.length > 0) {
+    console.warn(`[room ${room.id}] chunk ${cy} reachability issues:`, issues.map(i => i.reason));
   }
-  if (loaded) room.tileMapDirty = true;
+  room.chunks.set(cy, chunk);
+  hydrateEnemiesForChunk(room, chunk);
+  room.tileMapDirty = true;
+}
+
+function ensureChunkRangeLoaded(room: ServerRoom, minChunkY: number, maxChunkY: number): void {
+  const min = Math.max(0, Math.floor(minChunkY));
+  const max = Math.min(MAX_SERVER_CHUNK_Y, Math.floor(maxChunkY));
+  for (let cy = min; cy <= max; cy++) ensureChunkLoaded(room, cy);
+}
+
+function ensureChunksLoaded(room: ServerRoom, centerChunkY: number): void {
+  ensureChunkRangeLoaded(
+    room,
+    centerChunkY - SERVER_CHUNKS_PRELOAD_BEHIND,
+    centerChunkY + SERVER_CHUNKS_PRELOAD_AHEAD
+  );
+}
+
+function ensureChunksForActivePlayers(room: ServerRoom): void {
+  let hadActivePlayer = false;
+  for (const [pid, session] of room.sessions) {
+    if (session.disconnectedAt !== null) continue;
+    const player = room.players.get(pid);
+    if (!player) continue;
+    hadActivePlayer = true;
+    ensureChunksLoaded(room, chunkYForWorldY(player.position.y));
+  }
+  if (!hadActivePlayer) ensureChunksLoaded(room, 0);
+}
+
+function disposeServerChunksOutsideActiveWindow(room: ServerRoom): void {
+  let minChunk = Infinity;
+  let maxChunk = 0;
+  for (const [pid, session] of room.sessions) {
+    if (session.disconnectedAt !== null) continue;
+    const player = room.players.get(pid);
+    if (!player) continue;
+    const current = chunkYForWorldY(player.position.y);
+    const checkpoint = Math.max(0, player.checkpointChunkY);
+    minChunk = Math.min(minChunk, current, checkpoint);
+    maxChunk = Math.max(maxChunk, current, checkpoint);
+  }
+
+  if (minChunk === Infinity) {
+    minChunk = 0;
+    maxChunk = 0;
+  }
+
+  const keepMin = Math.max(0, minChunk - SERVER_CHUNKS_PRELOAD_BEHIND);
+  const keepMax = Math.min(MAX_SERVER_CHUNK_Y, maxChunk + SERVER_CHUNKS_PRELOAD_AHEAD);
+  for (const cy of [...room.chunks.keys()]) {
+    if (cy >= keepMin && cy <= keepMax) continue;
+    for (const [enemyId, enemy] of room.enemies) {
+      if (enemy.chunkY === cy) room.enemies.delete(enemyId);
+    }
+    room.chunks.delete(cy);
+    room.tileMapDirty = true;
+  }
 }
 
 function enemyStats(kind: EnemyKind): { health: number; speed: number; damage: number; cooldown: number } {
@@ -453,6 +511,7 @@ function findEnemyPlatform(chunk: GeneratedChunk, spawn: EnemySpawn) {
 function hydrateEnemiesForChunk(room: ServerRoom, chunk: GeneratedChunk): void {
   for (const spawn of chunk.enemies) {
     if (room.enemies.has(spawn.id)) continue;
+    if (room.defeatedEnemies.has(spawn.id)) continue;
     const platform = findEnemyPlatform(chunk, spawn);
     if (!platform) continue;
     const stats = enemyStats(spawn.kind);
@@ -582,6 +641,7 @@ function simulateEnemies(room: ServerRoom, players: PlayerState[], dt: number): 
           damage
         });
         if (enemy.health <= 0) {
+          room.defeatedEnemies.add(enemy.id);
           const drops = makeEnemyDrops(room, enemy);
           room.enemies.delete(enemy.id);
           room.pendingEvents.push({
@@ -682,6 +742,7 @@ function tickRoom(room: ServerRoom): void {
   // ── Physics simulation ────────────────────────────────────────────────────
 
   if (room.phase === "playing") {
+    ensureChunksForActivePlayers(room);
     if (room.tileMapDirty || room.tileMapCache === null) {
       room.tileMapCache = createMultiChunkTileMap(room.chunks);
       room.tileMapDirty = false;
@@ -704,8 +765,8 @@ function tickRoom(room: ServerRoom): void {
       }
 
       // Ensure chunks ahead of this player are loaded
-      const playerChunkY = Math.max(0, -Math.floor(next.position.y / TILE_SIZE / CHUNK_HEIGHT_TILES));
-      ensureChunksLoaded(room, playerChunkY + 2);
+      const playerChunkY = chunkYForWorldY(next.position.y);
+      ensureChunksLoaded(room, playerChunkY);
       if (playerChunkY > next.checkpointChunkY) {
         next.checkpointChunkY = playerChunkY;
         room.pendingEvents.push({ type: "CHECKPOINT_REACHED", playerId: pid, chunkY: playerChunkY });
