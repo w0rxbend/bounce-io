@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 816,
+  "assetCount": 811,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -16,10 +16,6 @@
       "environment/backgrounds/cloud_tall.png",
       "environment/backgrounds/cloud_wispy.png",
       "environment/backgrounds/forest_ruins_panorama.png",
-      "environment/backgrounds/mountain_panorama.png",
-      "environment/backgrounds/mountain_tall.png",
-      "environment/backgrounds/mountain_wide.png",
-      "environment/backgrounds/mountain_wide_alt.png",
       "environment/backgrounds/sky_arches.png"
     ],
     "environment/banners": [
@@ -275,9 +271,6 @@
     ],
     "environment/mossTiles": [
       "environment/mossTiles/mossy_stone_tile.png"
-    ],
-    "environment/mountainBackgrounds": [
-      "environment/mountainBackgrounds/alpine_valley.png"
     ],
     "environment/particleEffects": [
       "environment/particleEffects/blue_rune_ring.png",
@@ -956,26 +949,6 @@
       "png": "/assets/environment/backgrounds/forest_ruins_panorama.png",
       "width": 1024,
       "height": 576
-    },
-    "environment/backgrounds/mountain_panorama.png": {
-      "png": "/assets/environment/backgrounds/mountain_panorama.png",
-      "width": 887,
-      "height": 1774
-    },
-    "environment/backgrounds/mountain_tall.png": {
-      "png": "/assets/environment/backgrounds/mountain_tall.png",
-      "width": 192,
-      "height": 384
-    },
-    "environment/backgrounds/mountain_wide.png": {
-      "png": "/assets/environment/backgrounds/mountain_wide.png",
-      "width": 1024,
-      "height": 192
-    },
-    "environment/backgrounds/mountain_wide_alt.png": {
-      "png": "/assets/environment/backgrounds/mountain_wide_alt.png",
-      "width": 1024,
-      "height": 192
     },
     "environment/backgrounds/sky_arches.png": {
       "png": "/assets/environment/backgrounds/sky_arches.png",
@@ -2111,11 +2084,6 @@
       "png": "/assets/environment/mossTiles/mossy_stone_tile.png",
       "width": 16,
       "height": 16
-    },
-    "environment/mountainBackgrounds/alpine_valley.png": {
-      "png": "/assets/environment/mountainBackgrounds/alpine_valley.png",
-      "width": 887,
-      "height": 1774
     },
     "environment/particleEffects/blue_rune_ring.png": {
       "png": "/assets/environment/particleEffects/blue_rune_ring.png",

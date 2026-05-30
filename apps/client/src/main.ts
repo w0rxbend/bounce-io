@@ -117,10 +117,6 @@ const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing for
 const INITIAL_CHUNKS_TO_LOAD = 4;
 
 const ASSET_URLS = {
-  bgMountainPanorama: "/assets/environment/backgrounds/mountain_panorama.png",
-  bgMountainWide: "/assets/environment/backgrounds/mountain_wide.png",
-  bgMountainWide2: "/assets/environment/backgrounds/mountain_wide_alt.png",
-  bgMountainTall: "/assets/environment/backgrounds/mountain_tall.png",
   aiForestRuinsPanorama: "/assets/environment/backgrounds/forest_ruins_panorama.png",
   bgCloudBank: "/assets/environment/backgrounds/cloud_bank.png",
   bgSkyArches: "/assets/environment/backgrounds/sky_arches.png",
@@ -369,15 +365,14 @@ interface PixelAssetManifest {
 const ASSET_MANIFEST_URL = "/assets/manifest.json";
 const manifestAssetFolders = new Map<string, AssetKey[]>();
 const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
-const PROCEDURAL_ASSET_FOLDERS = new Set([
-  "environment/midMountains",
-  "environment/platforms",
-  "environment/platformVariants",
-]);
+const PROCEDURAL_MOUNTAIN_FOLDERS = new Set(["environment/midMountains"]);
+const PROCEDURAL_PLATFORM_FOLDERS = new Set(["environment/platforms", "environment/platformVariants"]);
 
 function isProceduralManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
-  return PROCEDURAL_ASSET_FOLDERS.has(folder);
+  if (PROCEDURAL_MOUNTAIN_FOLDERS.has(folder)) return true;
+  if (!PROCEDURAL_PLATFORM_FOLDERS.has(folder)) return false;
+  return /^platform_[a-z]+_(top|body|bottom|outer)_(left|inner|right)\.png$/.test(relPath.split("/").pop() ?? "");
 }
 
 const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
@@ -639,6 +634,12 @@ function makeSprite(key: AssetKey): Sprite {
   return s;
 }
 
+function makeSceneSprite(key: AssetKey): Sprite {
+  const s = makeSprite(key);
+  s.scale.set(SCENE_ASSET_SCALE);
+  return s;
+}
+
 function folderAssetKeys(folder: string): AssetKey[] {
   return manifestAssetFolders.get(folder) ?? [];
 }
@@ -862,6 +863,9 @@ interface PlatformPixelPalette {
 }
 
 const PROCEDURAL_PLATFORM_PIXEL_SIZE = 2;
+const SCENE_ASSET_SCALE = 0.7;
+const COLLECTIBLE_ASSET_SCALE = 0.5;
+const COLLECTIBLE_PLATFORM_Y_OFFSET = -8;
 
 interface MidMountainPalette {
   core: number;
@@ -2042,6 +2046,40 @@ function addCoverBackdrop(container: Container, key: AssetKey, sw: number, sh: n
   container.addChild(sprite);
 }
 
+function addProceduralMountainBackdrop(container: Container, sw: number, sh: number): void {
+  const g = new Graphics();
+  const layerSpecs = [
+    { base: 0.74, amp: 0.18, step: 72, color: PAL.mountainFar, alpha: 0.34, seed: 11 },
+    { base: 0.82, amp: 0.22, step: 56, color: PAL.mountainMid, alpha: 0.42, seed: 29 },
+    { base: 0.92, amp: 0.16, step: 42, color: PAL.ruinsDark, alpha: 0.22, seed: 47 },
+  ];
+
+  for (const spec of layerSpecs) {
+    const ridge: number[] = [-80, sh + 40, -80, Math.round(sh * spec.base)];
+    for (let x = -40; x <= sw + 80; x += spec.step) {
+      const n = Math.sin((x + spec.seed * 37) * 0.013) * 0.5 + Math.sin((x + spec.seed * 17) * 0.031) * 0.5;
+      const y = Math.round(sh * spec.base - (0.45 + n * 0.5) * sh * spec.amp);
+      ridge.push(x, y);
+    }
+    ridge.push(sw + 80, sh + 40);
+    g.poly(ridge).fill({ color: spec.color, alpha: spec.alpha });
+
+    for (let x = 0; x < sw; x += spec.step) {
+      const n = Math.sin((x + spec.seed * 19) * 0.027);
+      const y = Math.round(sh * spec.base - (0.42 + n * 0.2) * sh * spec.amp);
+      const w = 18 + ((x + spec.seed) % 28);
+      g.rect(x + 6, y + 18, w, 3).fill({ color: PAL.skyHaze, alpha: spec.alpha * 0.18 });
+      if ((x / spec.step + spec.seed) % 3 < 1) {
+        g.rect(x + w * 0.4, y + 28, 2, 18).fill({ color: PAL.canopyDark, alpha: spec.alpha * 0.35 });
+        g.poly([x + w * 0.4 - 5, y + 34, x + w * 0.4 + 1, y + 21, x + w * 0.4 + 7, y + 34])
+          .fill({ color: PAL.canopyDark, alpha: spec.alpha * 0.28 });
+      }
+    }
+  }
+
+  container.addChild(g);
+}
+
 function buildSkyStatic(sw: number, sh: number): void {
   // Stars (visible at high altitude)
   starsGfx.clear();
@@ -2062,33 +2100,11 @@ function buildSkyStatic(sw: number, sh: number): void {
   sunGlowGfx.circle(sunX, sunY, 18).fill({ color: 0xfff8c0, alpha: 0.45 });
   sunGlowGfx.circle(sunX, sunY, 8).fill({ color: 0xfffff0, alpha: 0.8 });
 
-  // Mountain panorama — cover the screen, bottom-anchored so the valley shows at
-  // ground level and snowy peaks emerge as the player climbs. Falls back to the
-  // AI ruins panorama if the mountain asset hasn't loaded yet.
   aiPanoramaBack.removeChildren();
-  if (hasAsset("bgMountainPanorama")) {
-    const mSprite = makeSprite("bgMountainPanorama");
-    const texW = Math.max(1, mSprite.texture.width);
-    const texH = Math.max(1, mSprite.texture.height);
-    // Scale so the image covers the full screen width.
-    const mScale = Math.max(sw / texW, sh / texH);
-    const mW = texW * mScale;
-    const mH = texH * mScale;
-    mSprite.scale.set(mScale);
-    mSprite.x = Math.round((sw - mW) / 2);
-    // Anchor at bottom: valley floor sits at the ground-level screen bottom.
-    mSprite.y = Math.round(sh - mH);
-    mSprite.alpha = 1;
-    aiPanoramaBack.addChild(mSprite);
-  } else {
-    addCoverBackdrop(aiPanoramaBack, "aiForestRuinsPanorama", sw, sh, 0.42);
-  }
+  addProceduralMountainBackdrop(aiPanoramaBack, sw, sh);
 
   skyArchesBack.removeChildren();
   addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.12);
-  for (const [i, key] of uniqueAssetKeys(folderAssetKeys("environment/mountainBackgrounds")).entries()) {
-    addWideBackdrop(skyArchesBack, key, sw, sh * (0.18 + i * 0.12), 0.1);
-  }
 
   cloudBankBack.removeChildren();
   addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.18);
@@ -2101,7 +2117,7 @@ function buildSkyStatic(sw: number, sh: number): void {
       island.x = ((i * 89 + 23) % (sw + 110)) - 55;
       island.y = sh * 0.42 + (i * 61 % Math.round(sh * 0.36));
       const sc = 0.42 + (i % 4) * 0.12;
-      island.scale.set(sc);
+      island.scale.set(sc * SCENE_ASSET_SCALE);
       island.alpha = 0.34;
       islandsFar.addChild(island);
     }
@@ -2147,7 +2163,7 @@ function buildSkyStatic(sw: number, sh: number): void {
       const cloud = makeSprite(cloudAsset(i, "far"));
       cloud.x = ((i * 97 + 17) % (sw + 120)) - 60;
       cloud.y = sh * 0.06 + (i * 79 % Math.round(sh * 0.70));
-      cloud.scale.set(0.38 + (i % 3) * 0.08);
+      cloud.scale.set((0.38 + (i % 3) * 0.08) * SCENE_ASSET_SCALE);
       cloud.alpha = 0.38;
       cloudsFar.addChild(cloud);
     }
@@ -2169,7 +2185,7 @@ function buildSkyStatic(sw: number, sh: number): void {
       const cloud = makeSprite(cloudAsset(i, "mid"));
       cloud.x = ((i * 137 + 53) % (sw + 150)) - 70;
       cloud.y = sh * 0.04 + (i * 103 % Math.round(sh * 0.68));
-      cloud.scale.set(0.72 + (i % 3) * 0.12);
+      cloud.scale.set((0.72 + (i % 3) * 0.12) * SCENE_ASSET_SCALE);
       cloud.alpha = 0.56;
       cloudsMid.addChild(cloud);
     }
@@ -2191,7 +2207,7 @@ function buildSkyStatic(sw: number, sh: number): void {
       const cloud = makeSprite(cloudAsset(i, "front"));
       cloud.x = ((i * 173 + 31) % (sw + 200)) - 80;
       cloud.y = sh * 0.02 + (i * 127 % Math.round(sh * 0.72));
-      cloud.scale.set(1.05 + (i % 2) * 0.25);
+      cloud.scale.set((1.05 + (i % 2) * 0.25) * SCENE_ASSET_SCALE);
       cloud.alpha = 0.7;
       cloudsFront.addChild(cloud);
     }
@@ -2427,7 +2443,7 @@ function placeManifestDecoration(
   sprite.anchor.set(0.5, 1);
   sprite.x = wx + TILE_SIZE / 2 + ((seed >> 4) % 5) - 2;
   sprite.y = wy + (backLayer ? 4 : 2);
-  sprite.scale.set(scale);
+  sprite.scale.set(scale * SCENE_ASSET_SCALE);
   sprite.alpha = backLayer ? 0.5 : 0.78;
   sprite.zIndex = backLayer ? -1 : 3;
   target.addChild(sprite);
@@ -2503,13 +2519,199 @@ function placeSceneSprite(
   sprite.anchor.set(options.anchorX ?? 0.5, options.anchorY ?? 1);
   sprite.x = Math.round(wx + jitterX);
   sprite.y = Math.round(wy + (options.yOffset ?? 0));
-  sprite.scale.set(fitScale * (options.scaleMultiplier ?? 1));
+  sprite.scale.set(fitScale * (options.scaleMultiplier ?? 1) * SCENE_ASSET_SCALE);
   sprite.alpha = options.alpha ?? 0.86;
   sprite.zIndex = options.zIndex ?? 2;
   if (typeof options.tint === "number") sprite.tint = options.tint;
   if (options.addBlend) sprite.blendMode = "add";
   target.addChild(sprite);
   return sprite;
+}
+
+type ProceduralTreeShape = "round" | "straight" | "zigzag" | "deformed" | "wind" | "frostRound" | "frostPine" | "dead" | "deadZigzag" | "crystalDead";
+
+interface ProceduralTreePalette {
+  barkDark: number;
+  barkMid: number;
+  barkLight: number;
+  leafDark: number;
+  leafMid: number;
+  leafLight: number;
+  frost: number;
+  frostShade: number;
+  accent: number;
+}
+
+function biomeTreePalette(biome: BiomeId): ProceduralTreePalette {
+  if (biome === "cloudRidge") {
+    return { barkDark: 0x1d2d28, barkMid: 0x32473a, barkLight: 0x64705d, leafDark: 0x23472b, leafMid: 0x5a873f, leafLight: 0xa4bd57, frost: 0xd7edf4, frostShade: 0x8eaec0, accent: 0x9db36a };
+  }
+  if (biome === "snowfallCliffs") {
+    return { barkDark: 0x3a3948, barkMid: 0x67667b, barkLight: 0x9aa2b4, leafDark: 0x456374, leafMid: 0x7fa7b8, leafLight: 0xc4dceb, frost: 0xf3fbff, frostShade: 0xa7c7dc, accent: 0xc7e3ef };
+  }
+  if (biome === "frozenSpires") {
+    return { barkDark: 0x262b3e, barkMid: 0x4b5876, barkLight: 0x8798b6, leafDark: 0x415c78, leafMid: 0x7fa8cc, leafLight: 0xd3edff, frost: 0xf8fdff, frostShade: 0x9ebbd8, accent: 0x7fe9ff };
+  }
+  if (biome === "celestialSummit") {
+    return { barkDark: 0x232640, barkMid: 0x4a4d72, barkLight: 0x9797c6, leafDark: 0x43506f, leafMid: 0x7d8fc4, leafLight: 0xe1e7ff, frost: 0xffffff, frostShade: 0xb9c8f6, accent: 0xffeaa0 };
+  }
+  return { barkDark: 0x25331e, barkMid: PAL.barkMid, barkLight: 0x8a6634, leafDark: PAL.canopyDark, leafMid: PAL.canopyMid, leafLight: PAL.canopyLight, frost: 0xdcecf0, frostShade: 0x8fb4c4, accent: PAL.mossBright };
+}
+
+function chooseProceduralTreeShape(biome: BiomeId, seed: number): ProceduralTreeShape {
+  const roll = seed % 6;
+  if (biome === "pineValley") return roll < 2 ? "round" : roll < 4 ? "straight" : "deformed";
+  if (biome === "cloudRidge") return roll < 2 ? "wind" : roll < 4 ? "zigzag" : "round";
+  if (biome === "snowfallCliffs") return roll < 2 ? "frostRound" : roll < 4 ? "frostPine" : "dead";
+  if (biome === "frozenSpires") return roll < 2 ? "dead" : roll < 4 ? "deadZigzag" : "frostPine";
+  return roll < 2 ? "crystalDead" : roll < 4 ? "deadZigzag" : "frostRound";
+}
+
+function drawPixelLine(g: Graphics, x1: number, y1: number, x2: number, y2: number, width: number, color: number, alpha = 1): void {
+  const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 2));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = Math.round(x1 + (x2 - x1) * t);
+    const y = Math.round(y1 + (y2 - y1) * t);
+    g.rect(x - Math.floor(width / 2), y - Math.floor(width / 2), width, width).fill({ color, alpha });
+  }
+}
+
+function drawLeafBlob(g: Graphics, cx: number, cy: number, rx: number, ry: number, palette: ProceduralTreePalette, seed: number, frosted: boolean): void {
+  for (let y = -ry; y <= ry; y += 4) {
+    for (let x = -rx; x <= rx; x += 4) {
+      const n = midMountainNoise(seed, cx + x, cy + y, 1701);
+      const edge = (x * x) / (rx * rx) + (y * y) / (ry * ry);
+      if (edge > 1.06 || (edge > 0.78 && n % 5 === 0)) continue;
+      const block = 4 + (n % 2) * 2;
+      const color = frosted
+        ? (n % 7 === 0 ? palette.frost : n % 3 === 0 ? palette.leafLight : palette.leafMid)
+        : (edge > 0.74 ? palette.leafDark : n % 5 === 0 ? palette.leafLight : palette.leafMid);
+      g.rect(Math.round(cx + x), Math.round(cy + y), block, block).fill(color);
+      if (frosted && y < -ry * 0.25 && n % 4 === 0) {
+        g.rect(Math.round(cx + x), Math.round(cy + y), block, 2).fill(palette.frost);
+      }
+    }
+  }
+}
+
+function drawPineTier(g: Graphics, cx: number, cy: number, width: number, palette: ProceduralTreePalette, seed: number, frosted: boolean): void {
+  for (let row = 0; row < 4; row++) {
+    const rowW = Math.max(6, width - row * 7);
+    const x = Math.round(cx - rowW / 2 + (midMountainNoise(seed, row, width, 1803) % 3) - 1);
+    const y = cy + row * 4;
+    g.rect(x, y, rowW, 4).fill(row === 3 ? palette.leafDark : palette.leafMid);
+    if (frosted) g.rect(x + 1, y, Math.max(2, rowW - 2), 2).fill(row === 0 ? palette.frost : palette.frostShade);
+  }
+}
+
+function makeProceduralTree(biome: BiomeId, seed: number): Container {
+  const palette = biomeTreePalette(biome);
+  const shape = chooseProceduralTreeShape(biome, seed);
+  const tree = new Container();
+  const g = new Graphics();
+  const height = 48 + (seed % 18) + (shape === "round" || shape === "wind" ? 14 : 0);
+  const segments = 6;
+  const points: Array<{ x: number; y: number }> = [];
+  let x = 0;
+
+  for (let i = 0; i <= segments; i++) {
+    const n = midMountainNoise(seed, i * 13, height, 1601);
+    if (i > 0) {
+      if (shape === "zigzag" || shape === "deadZigzag") x += (i % 2 === 0 ? -1 : 1) * (4 + (n % 4));
+      else if (shape === "wind") x -= 3 + (n % 3);
+      else if (shape === "deformed" || shape === "crystalDead") x += Math.round(Math.sin(i * 1.7 + seed) * 4) + (n % 3) - 1;
+      else x += (n % 5) - 2;
+    }
+    points.push({ x, y: Math.round(-height * (i / segments)) });
+  }
+
+  g.rect(-9, -2, 18, 3).fill({ color: palette.barkDark, alpha: 0.35 });
+  g.rect(-5, -4, 4, 7).fill(palette.barkDark);
+  g.rect(2, -3, 5, 6).fill(palette.barkDark);
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    const w = Math.max(3, 8 - i);
+    drawPixelLine(g, a.x, a.y, b.x, b.y, w, palette.barkDark);
+    drawPixelLine(g, a.x + 1, a.y, b.x + 1, b.y, Math.max(2, w - 3), palette.barkMid);
+    if (i % 2 === 0) drawPixelLine(g, a.x + 2, a.y - 1, b.x + 2, b.y, 1, palette.barkLight, 0.75);
+  }
+
+  const branchTips: Array<{ x: number; y: number }> = [];
+  const branchCount = shape === "dead" || shape === "deadZigzag" || shape === "crystalDead" ? 7 : 5;
+  for (let i = 1; i <= branchCount; i++) {
+    const p = points[Math.min(points.length - 2, 2 + (i % 4))]!;
+    const n = midMountainNoise(seed, i * 29, p.y, 1637);
+    const side = (i + seed) % 2 === 0 ? -1 : 1;
+    const len = 12 + (n % 16) + (shape === "wind" ? 8 : 0);
+    const lift = 8 + (n % 12);
+    const endX = p.x + side * len + (shape === "wind" ? -10 : 0);
+    const endY = p.y - lift;
+    drawPixelLine(g, p.x, p.y, endX, endY, Math.max(2, 5 - Math.floor(i / 2)), palette.barkDark);
+    drawPixelLine(g, p.x + side, p.y, endX, endY, 1, palette.barkLight, 0.7);
+    branchTips.push({ x: endX, y: endY });
+    if ((shape === "dead" || shape === "deadZigzag" || shape === "crystalDead") && n % 3 !== 0) {
+      drawPixelLine(g, endX, endY, endX + side * (4 + n % 5), endY - 5, 2, palette.barkLight, 0.85);
+    }
+  }
+
+  const top = points[points.length - 1]!;
+  const frosted = shape === "frostRound" || shape === "frostPine" || shape === "crystalDead" || biome === "frozenSpires" || biome === "celestialSummit";
+  if (shape === "frostPine") {
+    for (let i = 0; i < 5; i++) drawPineTier(g, top.x, top.y + 6 + i * 9, 42 - i * 5, palette, seed + i * 17, true);
+  } else if (shape === "dead" || shape === "deadZigzag" || shape === "crystalDead") {
+    for (const tip of branchTips) {
+      if (frosted) g.rect(Math.round(tip.x - 2), Math.round(tip.y - 1), 5, 2).fill(shape === "crystalDead" ? palette.accent : palette.frost);
+    }
+  } else {
+    drawLeafBlob(g, top.x - 18, top.y + 3, 27, 16, palette, seed, frosted);
+    drawLeafBlob(g, top.x + 11, top.y - 3, 29, 18, palette, seed + 41, frosted);
+    drawLeafBlob(g, top.x + (shape === "wind" ? -18 : 0), top.y - 16, 25, 18, palette, seed + 83, frosted);
+    if (shape === "deformed") drawLeafBlob(g, top.x + 24, top.y + 7, 18, 13, palette, seed + 127, false);
+  }
+
+  if (frosted) {
+    for (let i = 0; i < 7; i++) {
+      const p = points[1 + (i % (points.length - 1))]!;
+      const n = midMountainNoise(seed, i * 37, p.y, 1889);
+      if (n % 2 === 0) g.rect(p.x - 2 + (n % 5), p.y - 2, 4, 2).fill(palette.frost);
+    }
+  }
+
+  tree.addChild(g);
+  tree.scale.set(SCENE_ASSET_SCALE * (0.84 + (seed % 5) * 0.04));
+  return tree;
+}
+
+function shouldPlaceProceduralTree(biome: BiomeId, seed: number): boolean {
+  const frequency: Record<BiomeId, number> = {
+    pineValley: 83,
+    cloudRidge: 97,
+    snowfallCliffs: 89,
+    frozenSpires: 109,
+    celestialSummit: 131,
+  };
+  return seed % frequency[biome] === 0;
+}
+
+function placeProceduralTreeOnPlatform(
+  target: Container,
+  chunk: GeneratedChunk,
+  platform: GeneratedChunk["platforms"][number],
+  biome: BiomeId,
+  seed: number,
+  offsetRatio: number
+): void {
+  const tree = makeProceduralTree(biome, seed);
+  const usableWidth = Math.max(0, platform.width - 2) * TILE_SIZE;
+  const edgeJitter = ((seed >> 9) % 7) - 3;
+  tree.x = Math.round(platformCenterX(platform) + usableWidth * offsetRatio + edgeJitter);
+  tree.y = platformTopY(chunk, platform) + 6;
+  tree.alpha = biome === "celestialSummit" ? 0.82 : biome === "frozenSpires" ? 0.88 : 0.94;
+  tree.zIndex = 0;
+  target.addChild(tree);
 }
 
 function platformCenterX(platform: GeneratedChunk["platforms"][number]): number {
@@ -2621,27 +2823,6 @@ function composeChunkAtmosphere(chunk: GeneratedChunk, back: Container, biome: B
   const cloudFolders = biome === "pineValley"
     ? ["environment/backgrounds"]
     : ["environment/clouds", "environment/backgrounds"];
-  const mountainKeys = uniqueAssetKeys([
-    "bgMountainTall",
-    "bgMountainWide",
-    "bgMountainWide2",
-    "bgSkyArches",
-    ...folderAssetKeys("environment/mountainBackgrounds"),
-  ]);
-
-  if (chunk.chunkY % 2 === 0 && mountainKeys.length > 0) {
-    const key = mountainKeys[seed % mountainKeys.length]!;
-    const mountain = placeSceneSprite(back, key, WORLD_WIDTH * (0.24 + (seed % 36) / 80), chunkTop + CHUNK_HEIGHT_TILES * TILE_SIZE + 18, seed, {
-      maxWidth: 210,
-      maxHeight: 150,
-      alpha: biome === "pineValley" ? 0.16 : biome === "celestialSummit" ? 0.1 : 0.13,
-      zIndex: -8,
-      xJitter: 18,
-      scaleMultiplier: biome === "celestialSummit" ? 0.82 : 1,
-    });
-    if (mountain && biome === "celestialSummit") mountain.tint = 0xddefff;
-  }
-
   for (let i = 0; i < cloudDensity; i++) {
     const cSeed = (seed + i * 7919) >>> 0;
     const cloudKey = chooseAssetFromFolders(cloudFolders, cSeed);
@@ -2779,6 +2960,21 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
   for (const platform of chunk.platforms) {
     const seed = platformSeed(chunk, platform, 503);
     const topY = platformTopY(chunk, platform);
+    if (platform.width >= 4) {
+      const treeSeed = platformSeed(chunk, platform, 1801);
+      const leftEdge = -0.43 + ((treeSeed % 9) - 4) * 0.008;
+      const rightEdge = 0.43 + (((treeSeed >> 5) % 9) - 4) * 0.008;
+      const preferLeft = treeSeed % 2 === 0;
+      placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed, preferLeft ? leftEdge : rightEdge);
+      if (platform.width >= 6) {
+        placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed ^ 0x9e3779b9, preferLeft ? rightEdge : leftEdge);
+      }
+      if (platform.width >= 9 && treeSeed % 3 !== 1) {
+        const centerDrift = ((treeSeed >> 11) % 21) / 100 - 0.1;
+        placeProceduralTreeOnPlatform(back, chunk, platform, biome, treeSeed ^ 0x85ebca6b, centerDrift);
+      }
+    }
+
     if (platform.width >= 5 && seed % 3 !== 1) {
       const mainKey = chooseAssetFromFolders(mainFolders, seed, biome);
       const frontLayer = seed % 5 !== 0;
@@ -2852,7 +3048,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         let hazardKey = hazardChoices[seed % hazardChoices.length]!;
         if (!hasAsset(hazardKey)) hazardKey = "hazardSpikes";
         if (hasAsset(hazardKey)) {
-          const hazard = makeSprite(hazardKey);
+          const hazard = makeSceneSprite(hazardKey);
           const isHanging = hazardKey === "fallingIcicle" || hazardKey === "fallingIciclesCluster" || hazardKey === "lightningHazard" || hazardKey === "lightningBlue" || hazardKey === "lightningPurple";
           const isWide = hazardKey === "magicArcPurple" || hazardKey === "magicArcBlue" || hazardKey === "runeTrapGold" || hazardKey === "runeTrapGreen" || hazardKey === "fallingIciclesCluster";
           hazard.x = wx + (isWide ? -16 : hazardKey === "spikeMachine" ? -12 : hazardKey === "spikeBall" || hazardKey === "spikeBoulder" ? -8 : 0);
@@ -2885,7 +3081,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (biome !== "frozenSpires" && biome !== "celestialSummit" && hasAsset("grassClump") && seed % 7 === 0) {
-        const grass = makeSprite("grassClump");
+        const grass = makeSceneSprite("grassClump");
         grass.x = wx + (seed % 5);
         grass.y = wy - 12;
         grass.alpha = 0.9;
@@ -2894,7 +3090,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("flowerPatch") && seed % 19 === 0) {
-        const flower = makeSprite("flowerPatch");
+        const flower = makeSceneSprite("flowerPatch");
         flower.x = wx;
         flower.y = wy - 13;
         flower.alpha = 0.92;
@@ -2903,7 +3099,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("leafCluster") && seed % 11 === 0) {
-        const leaves = makeSprite("leafCluster");
+        const leaves = makeSceneSprite("leafCluster");
         leaves.x = wx + (seed % 4);
         leaves.y = wy - 14;
         leaves.alpha = 0.84;
@@ -2912,7 +3108,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (biome !== "celestialSummit" && hasAsset("vineHanging") && seed % 17 === 0) {
-        const vine = makeSprite("vineHanging");
+        const vine = makeSceneSprite("vineHanging");
         vine.x = wx + (seed % 6);
         vine.y = wy + TILE_SIZE - 2;
         vine.alpha = 0.78;
@@ -2921,7 +3117,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("pebbleCluster") && seed % 29 === 0) {
-        const pebbles = makeSprite("pebbleCluster");
+        const pebbles = makeSceneSprite("pebbleCluster");
         pebbles.x = wx + (seed % 6);
         pebbles.y = wy + 3;
         pebbles.alpha = 0.72;
@@ -2931,7 +3127,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       const rockCapKey = seed % 89 === 0 ? chooseBiomeRockAsset(biome, seed, "cap") : null;
       if (rockCapKey && seed % 89 === 0) {
-        const cap = makeSprite(rockCapKey);
+        const cap = makeSceneSprite(rockCapKey);
         cap.x = wx - 2;
         cap.y = wy - 9;
         cap.alpha = 0.82;
@@ -2941,7 +3137,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       const rockClusterKey = seed % 127 === 0 ? chooseBiomeRockAsset(biome, seed, "cluster") : null;
       if (rockClusterKey && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const rocks = makeSprite(rockClusterKey);
+        const rocks = makeSceneSprite(rockClusterKey);
         rocks.x = wx - 6;
         rocks.y = wy - 25;
         rocks.alpha = 0.74;
@@ -2951,7 +3147,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       const rockSpireKey = seed % 193 === 0 ? chooseBiomeRockAsset(biome, seed, "spire") : null;
       if (rockSpireKey && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const spire = makeSprite(rockSpireKey);
+        const spire = makeSceneSprite(rockSpireKey);
         spire.x = wx - 5;
         spire.y = wy - 27;
         spire.alpha = 0.68;
@@ -2960,7 +3156,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("reedGrassWheat") && seed % 31 === 0) {
-        const reeds = makeSprite(seed % 3 === 0 && hasAsset("reedGrassYellow") ? "reedGrassYellow" : "reedGrassWheat");
+        const reeds = makeSceneSprite(seed % 3 === 0 && hasAsset("reedGrassYellow") ? "reedGrassYellow" : "reedGrassWheat");
         reeds.x = wx - 3;
         reeds.y = wy - 27;
         reeds.alpha = 0.84;
@@ -2969,7 +3165,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("wildflowerMixed") && seed % 37 === 0) {
-        const flowers = makeSprite(seed % 5 === 0 && hasAsset("wildflowerPink") ? "wildflowerPink" : seed % 7 === 0 && hasAsset("wildflowerYellow") ? "wildflowerYellow" : "wildflowerMixed");
+        const flowers = makeSceneSprite(seed % 5 === 0 && hasAsset("wildflowerPink") ? "wildflowerPink" : seed % 7 === 0 && hasAsset("wildflowerYellow") ? "wildflowerYellow" : "wildflowerMixed");
         flowers.x = wx - 3;
         flowers.y = wy - 19;
         flowers.alpha = 0.9;
@@ -2978,7 +3174,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (biome === "pineValley" && hasAsset("flowerPink") && seed % 61 === 0) {
-        const flower = makeSprite("flowerPink");
+        const flower = makeSceneSprite("flowerPink");
         flower.x = wx - 3;
         flower.y = wy - 27;
         flower.alpha = 0.82;
@@ -2987,7 +3183,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("runeStone") && chunk.chunkY >= 8 && seed % 53 === 0) {
-        const rune = makeSprite("runeStone");
+        const rune = makeSceneSprite("runeStone");
         rune.x = wx;
         rune.y = wy;
         rune.alpha = 0.86;
@@ -2996,7 +3192,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("signpost") && seed % 83 === 0) {
-        const sign = makeSprite("signpost");
+        const sign = makeSceneSprite("signpost");
         sign.x = wx;
         sign.y = wy - 20;
         sign.alpha = 0.9;
@@ -3005,7 +3201,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("fence") && seed % 97 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const fence = makeSprite("fence");
+        const fence = makeSceneSprite("fence");
         fence.x = wx;
         fence.y = wy - 12;
         fence.alpha = 0.86;
@@ -3014,7 +3210,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (biome !== "celestialSummit" && hasAsset("ropeBridge") && seed % 181 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const bridge = makeSprite("ropeBridge");
+        const bridge = makeSceneSprite("ropeBridge");
         bridge.x = wx;
         bridge.y = wy - 8;
         bridge.alpha = 0.72;
@@ -3023,7 +3219,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("lanternCyan") && chunk.chunkY >= 3 && seed % 67 === 0) {
-        const lantern = makeSprite("lanternCyan");
+        const lantern = makeSceneSprite("lanternCyan");
         lantern.x = wx;
         lantern.y = wy - 22;
         lantern.alpha = 0.9;
@@ -3032,7 +3228,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("stump") && seed % 109 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const stump = makeSprite("stump");
+        const stump = makeSceneSprite("stump");
         stump.x = wx - 4;
         stump.y = wy - 20;
         stump.alpha = 0.86;
@@ -3041,7 +3237,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("mushroomCluster") && seed % 43 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const mushrooms = makeSprite("mushroomCluster");
+        const mushrooms = makeSceneSprite("mushroomCluster");
         mushrooms.x = wx - 3;
         mushrooms.y = wy - 17;
         mushrooms.alpha = 0.88;
@@ -3050,7 +3246,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("ruinArchFragment") && seed % 113 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const arch = makeSprite("ruinArchFragment");
+        const arch = makeSceneSprite("ruinArchFragment");
         arch.x = wx - 6;
         arch.y = wy - 28;
         arch.alpha = 0.58;
@@ -3059,7 +3255,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("ruinColumn") && seed % 157 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const column = makeSprite("ruinColumn");
+        const column = makeSceneSprite("ruinColumn");
         column.x = wx - 4;
         column.y = wy - 36;
         column.alpha = 0.78;
@@ -3068,7 +3264,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (hasAsset("crystalMarker") && chunk.chunkY >= 4 && seed % 131 === 0) {
-        const crystal = makeSprite("crystalMarker");
+        const crystal = makeSceneSprite("crystalMarker");
         crystal.x = wx;
         crystal.y = wy - 20;
         crystal.alpha = 0.86;
@@ -3086,7 +3282,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
         let decorKey = decorChoices[(seed >> 5) % decorChoices.length]!;
         if (!hasAsset(decorKey)) decorKey = "decorSignWood";
         if (hasAsset(decorKey)) {
-          const decor = makeSprite(decorKey);
+          const decor = makeSceneSprite(decorKey);
           const tallDecor = decorKey === "decorBannerBlue" || decorKey === "decorBannerGold" || decorKey === "decorBannerGreen" || decorKey === "decorPedestalBlue" || decorKey === "decorPedestalGreen" || decorKey === "decorPedestalGold" || decorKey === "decorSkeletonMarker" || decorKey === "decorStatueStone" || decorKey === "decorStatueSnow" || decorKey === "decorCrystalTotemBlue" || decorKey === "decorCrystalTotemGreen" || decorKey === "decorCrystalTotemPurple";
           const mediumDecor = decorKey === "decorTripodRed" || decorKey === "decorTripodBlue" || decorKey === "decorTripodPurple" || decorKey === "decorSmallShrineWood" || decorKey === "decorSmallShrineSnow" || decorKey === "decorSmallShrinePurple" || decorKey === "decorSnowLampBlue" || decorKey === "decorSnowLampGold" || decorKey === "decorSnowLampPurple";
           const wideDecor = decorKey === "decorRopePosts" || decorKey === "decorRopeLanterns" || decorKey === "decorRopeGateWood" || decorKey === "decorRopeGateLit" || decorKey === "decorRopeGateIce" || decorKey === "decorSignWood" || decorKey === "decorSignRune";
@@ -3099,7 +3295,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("bush") && seed % 47 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const bush = makeSprite("bush");
+        const bush = makeSceneSprite("bush");
         bush.x = wx - 6;
         bush.y = wy - 22;
         bush.alpha = 0.86;
@@ -3107,22 +3303,17 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(bush);
       }
 
-      if ((biome === "pineValley" || biome === "cloudRidge" || biome === "snowfallCliffs") && hasAsset("tree") && seed % 139 === 0 && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, 4)) {
-        const treeKey: AssetKey =
-          biome === "snowfallCliffs" && hasAsset("snowTree") ? "snowTree" :
-          biome === "cloudRidge" && hasAsset("bentPine") ? "bentPine" :
-          "tree";
-        const tree = makeSprite(treeKey);
-        tree.anchor.set(0.5, 1);
+      if (shouldPlaceProceduralTree(biome, seed) && lx > 2 && lx < chunk.width - 4 && canPlaceDecorationSpan(chunk, lx - 1, ly, biome === "pineValley" || biome === "cloudRidge" ? 4 : 3)) {
+        const tree = makeProceduralTree(biome, seed);
         tree.x = wx + TILE_SIZE / 2;
         tree.y = wy + 6;
-        tree.alpha = 0.72;
+        tree.alpha = biome === "celestialSummit" ? 0.8 : biome === "frozenSpires" ? 0.86 : 0.92;
         tree.zIndex = 0;
         back.addChild(tree);
       }
 
       if ((biome === "cloudRidge" || biome === "snowfallCliffs") && hasAsset("climbingChain") && seed % 149 === 0) {
-        const chain = makeSprite("climbingChain");
+        const chain = makeSceneSprite("climbingChain");
         chain.x = wx;
         chain.y = wy - 3;
         chain.alpha = 0.62;
@@ -3137,7 +3328,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
           biome === "pineValley" && hasAsset("tileClusterMoss") ? "tileClusterMoss" :
           "tileClusterStone";
         if (hasAsset(clusterKey)) {
-          const cluster = makeSprite(clusterKey);
+          const cluster = makeSceneSprite(clusterKey);
           cluster.x = wx - 7;
           cluster.y = wy - 49;
           cluster.alpha = 0.46;
@@ -3147,7 +3338,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("tallPillar") && seed % 197 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const pillar = makeSprite("tallPillar");
+        const pillar = makeSceneSprite("tallPillar");
         pillar.x = wx - 8;
         pillar.y = wy - 54;
         pillar.alpha = 0.42;
@@ -3156,7 +3347,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("windZone") && seed % 167 === 0) {
-        const wind = makeSprite("windZone");
+        const wind = makeSceneSprite("windZone");
         wind.x = wx - 24;
         wind.y = wy - 36;
         wind.alpha = 0.52;
@@ -3165,7 +3356,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if ((biome === "frozenSpires" || biome === "celestialSummit") && hasAsset("rollingBoulder") && seed % 223 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const boulder = makeSprite("rollingBoulder");
+        const boulder = makeSceneSprite("rollingBoulder");
         boulder.x = wx - 4;
         boulder.y = wy - 26;
         boulder.alpha = 0.82;
@@ -3174,7 +3365,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
       }
 
       if (biome === "celestialSummit" && hasAsset("relicShrine") && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const shrine = makeSprite(seed % 2 === 0 && hasAsset("ancientBeacon") ? "ancientBeacon" : "relicShrine");
+        const shrine = makeSceneSprite(seed % 2 === 0 && hasAsset("ancientBeacon") ? "ancientBeacon" : "relicShrine");
         shrine.anchor.set(0.5, 1);
         shrine.x = wx + TILE_SIZE;
         shrine.y = wy + 2;
@@ -3329,7 +3520,7 @@ function spawnJumpPadAnim(pad: JumpPadSpawn, worldTileY: number): void {
   if (jumpPadAnims.has(pad.id)) return;
   const container = new Container();
   const aura = new Graphics();
-  const sprite = hasAsset("jumpPad") ? makeSprite("jumpPad") : null;
+  const sprite = hasAsset("jumpPad") ? makeSceneSprite("jumpPad") : null;
   const worldX = pad.x * TILE_SIZE + TILE_SIZE / 2;
   const worldY = worldTileY * TILE_SIZE + TILE_SIZE / 2;
 
@@ -3339,7 +3530,7 @@ function spawnJumpPadAnim(pad: JumpPadSpawn, worldTileY: number): void {
   container.addChild(aura);
   if (sprite) {
     sprite.anchor.set(0.5);
-    sprite.y = 1;
+    sprite.y = 2;
     sprite.blendMode = "normal";
     container.addChild(sprite);
   }
@@ -3356,9 +3547,9 @@ function updateJumpPadAnims(tSec: number): void {
     anim.aura.ellipse(0, 2, 11 + pulse * 2, 4 + pulse)
       .stroke({ color: PAL.portalGlow, alpha: 0.42 + pulse * 0.24, width: 1 });
     anim.aura.rect(-10, 5, 20, 2).fill({ color: PAL.portalGlow, alpha: 0.18 + pulse * 0.18 });
+    anim.aura.rect(-7, -9, 14, 1).fill({ color: PAL.portalGlow, alpha: 0.12 + pulse * 0.2 });
+    anim.aura.rect(-1, -12, 2, 7).fill({ color: PAL.portalGlow, alpha: 0.07 + pulse * 0.12 });
     if (anim.sprite) {
-      anim.sprite.y = 2 + Math.sin(tSec * 4.2 + anim.pad.y) * 1.2;
-      anim.sprite.scale.set(0.9 + pulse * 0.06);
       anim.sprite.tint = 0xffffff;
     }
   }
@@ -3434,7 +3625,8 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
   }
   container.addChild(sprite, gfx);
   container.x = tileX * TILE_SIZE + TILE_SIZE / 2;
-  container.y = tileY * TILE_SIZE + TILE_SIZE / 2;
+  container.y = tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET;
+  container.scale.set(COLLECTIBLE_ASSET_SCALE);
   relicLayer.addChild(container);
   relicAnims.set(id, {
     container,
@@ -3459,7 +3651,7 @@ function updateRelicAnims(tSec: number): void {
       continue;
     }
     const bob   = Math.sin(tSec * 3.0 + a.tileX * 0.8) * 2.5;
-    a.container.y = a.tileY * TILE_SIZE + TILE_SIZE / 2 + bob;
+    a.container.y = a.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
 
     const frame  = Math.floor((tSec * 5) % 4);
     const coinW  = frame === 0 ? 8 : frame === 1 ? 5 : frame === 2 ? 2 : 5;
@@ -3538,7 +3730,7 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
   if (archSprite) {
     const desiredH = ph + 12;
     const scale = desiredH / 64;
-    archSprite.scale.set(scale);
+    archSprite.scale.set(scale * SCENE_ASSET_SCALE);
   } else {
     // Static body — ancient stone arch
     // Left pillar

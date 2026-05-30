@@ -86,7 +86,7 @@ def noita_polish(img: Image.Image, rel: str) -> Image.Image:
     is_mid_mountain = "/midMountains/" in rel
     is_reward = "/collectibles/" in rel or "/ui/" in rel
     is_effect = "/effects/" in rel or "/particleEffects/" in rel
-    is_background = "/backgrounds/" in rel or "/mountainBackgrounds/" in rel or "/clouds/" in rel
+    is_background = "/backgrounds/" in rel or "/clouds/" in rel
     if is_mid_mountain:
         # The back mountain layer must read as one quiet mass. Avoid the
         # crunchy high-contrast speckle pass used by foreground props.
@@ -2067,16 +2067,28 @@ def ruin_arch() -> Image.Image:
 def portal_arch() -> Image.Image:
     img = canvas(64, 64)
     d = ImageDraw.Draw(img)
-    d.ellipse((12, 8, 52, 58), outline=PAL["cyan"], width=3)
-    d.ellipse((18, 15, 46, 55), outline=PAL["cyan_light"], width=1)
-    d.rectangle((8, 26, 18, 61), fill=PAL["stone_deep"])
-    d.rectangle((46, 26, 56, 61), fill=PAL["stone_deep"])
-    d.rectangle((11, 27, 16, 59), fill=PAL["stone_cool"])
-    d.rectangle((48, 27, 53, 59), fill=PAL["stone_cool"])
-    d.rectangle((13, 14, 51, 26), fill=PAL["stone_deep"])
-    d.rectangle((18, 12, 46, 17), fill=PAL["stone_light"])
-    for x in (24, 32, 40):
-        d.rectangle((x, 19, x + 2, 22), fill=PAL["cyan_light"])
+    d.ellipse((13, 6, 51, 58), fill=(54, 224, 232, 26), outline=PAL["cyan_dark"], width=5)
+    d.ellipse((19, 13, 45, 57), outline=PAL["cyan_light"], width=2)
+    d.rectangle((8, 26, 19, 61), fill=PAL["outline"])
+    d.rectangle((45, 26, 56, 61), fill=PAL["outline"])
+    d.rectangle((10, 28, 18, 60), fill=PAL["stone_deep"])
+    d.rectangle((47, 28, 55, 60), fill=PAL["stone_deep"])
+    d.rectangle((12, 29, 17, 58), fill=PAL["stone_cool"])
+    d.rectangle((48, 29, 53, 58), fill=PAL["stone_cool"])
+    for y in (34, 46, 56):
+        d.rectangle((9, y, 18, y + 2), fill=PAL["stone_mid"])
+        d.rectangle((46, y, 55, y + 2), fill=PAL["stone_mid"])
+    d.rectangle((11, 15, 53, 27), fill=PAL["outline"])
+    d.rectangle((14, 17, 50, 25), fill=PAL["stone_deep"])
+    d.rectangle((18, 14, 46, 18), fill=PAL["stone_light"])
+    d.polygon([(32, 4), (40, 13), (32, 22), (24, 13)], fill=PAL["cyan_dark"])
+    d.polygon([(32, 7), (37, 13), (32, 19), (27, 13)], fill=PAL["cyan_light"])
+    d.rectangle((30, 24, 34, 27), fill=PAL["gold_light"])
+    for x in (21, 43):
+        d.rectangle((x, 20, x + 3, 24), fill=PAL["cyan"])
+        d.point((x + 1, 19), fill=PAL["white"])
+    d.rectangle((6, 59, 21, 63), fill=PAL["stone_deep"])
+    d.rectangle((43, 59, 58, 63), fill=PAL["stone_deep"])
     return img
 
 
@@ -2248,10 +2260,6 @@ def sky_arches(w: int = 768, h: int = 432) -> Image.Image:
 
 def generate_environment(manifest: dict[str, dict]) -> None:
     assets: list[tuple[str, Image.Image]] = [
-        ("environment/backgrounds/mountain_panorama.png", mountain_panorama(887, 1774)),
-        ("environment/backgrounds/mountain_wide.png", mountain_panorama(1024, 192)),
-        ("environment/backgrounds/mountain_wide_alt.png", mountain_panorama(1024, 192).transpose(Image.Transpose.FLIP_LEFT_RIGHT)),
-        ("environment/backgrounds/mountain_tall.png", mountain_panorama(192, 384)),
         ("environment/backgrounds/forest_ruins_panorama.png", sky_arches(1024, 576)),
         ("environment/backgrounds/cloud_bank.png", cloud(768, 128, flat=True)),
         ("environment/backgrounds/sky_arches.png", sky_arches()),
@@ -2264,7 +2272,6 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/backgrounds/cloud_flat.png", cloud(192, 36, flat=True)),
         ("environment/backgrounds/cloud_streak.png", cloud(224, 32, flat=True)),
         ("environment/backgrounds/cloud_puff.png", cloud(112, 56)),
-        ("environment/mountainBackgrounds/alpine_valley.png", mountain_panorama(887, 1774)),
         ("environment/clouds/background_cloud_huge.png", cloud(192, 64)),
         ("environment/clouds/midground_cloud.png", cloud(112, 40)),
         ("environment/clouds/fast_cloud_streak.png", cloud(224, 32, flat=True)),
@@ -2938,12 +2945,20 @@ def rune_trap(color: str = "green") -> Image.Image:
 def jump_pad() -> Image.Image:
     img = canvas(32, 32)
     d = ImageDraw.Draw(img)
-    d.rectangle((5, 18, 27, 29), fill=PAL["stone_deep"])
-    d.rectangle((7, 16, 25, 27), fill=rgba("#4c5e78"))
-    d.rectangle((9, 12, 23, 18), fill=PAL["stone_light"])
-    d.polygon([(16, 5), (24, 14), (16, 22), (8, 14)], fill=PAL["cyan_dark"])
-    d.polygon([(16, 7), (22, 14), (16, 20), (10, 14)], fill=PAL["cyan"])
-    d.rectangle((12, 25, 20, 26), fill=PAL["cyan_light"])
+    d.ellipse((3, 25, 29, 31), fill=PAL["shadow"])
+    d.rectangle((4, 20, 28, 29), fill=PAL["outline"])
+    d.rectangle((6, 21, 26, 27), fill=PAL["stone_deep"])
+    d.rectangle((8, 19, 24, 22), fill=PAL["stone_mid"])
+    d.rectangle((10, 16, 12, 22), fill=PAL["gold_dark"])
+    d.rectangle((20, 16, 22, 22), fill=PAL["gold_dark"])
+    d.rectangle((11, 15, 13, 19), fill=PAL["gold_light"])
+    d.rectangle((19, 15, 21, 19), fill=PAL["gold_light"])
+    d.polygon([(16, 4), (28, 13), (23, 19), (9, 19), (4, 13)], fill=PAL["outline"])
+    d.polygon([(16, 6), (25, 13), (21, 17), (11, 17), (7, 13)], fill=PAL["cyan_dark"])
+    d.polygon([(16, 8), (22, 13), (19, 15), (13, 15), (10, 13)], fill=PAL["cyan"])
+    d.rectangle((13, 10, 19, 12), fill=PAL["cyan_light"])
+    d.rectangle((7, 24, 25, 25), fill=PAL["cyan"])
+    d.rectangle((11, 26, 21, 27), fill=PAL["cyan_light"])
     return img
 
 
@@ -3026,28 +3041,42 @@ def thorn_vine() -> Image.Image:
 def relic_shrine() -> Image.Image:
     img = canvas(48, 48)
     d = ImageDraw.Draw(img)
-    d.rectangle((5, 36, 43, 44), fill=PAL["stone_deep"])
-    d.rectangle((9, 29, 39, 37), fill=rgba("#b8c5d4"))
-    d.rectangle((13, 21, 35, 30), fill=PAL["stone_light"])
-    d.polygon([(24, 3), (34, 15), (24, 27), (14, 15)], fill=PAL["cyan_dark"])
-    d.polygon([(24, 5), (31, 15), (24, 24), (17, 15)], fill=PAL["cyan"])
-    d.ellipse((10, 12, 38, 34), outline=PAL["cyan_light"], width=1)
-    for x in (14, 24, 34):
-        d.rectangle((x, 33, x + 2, 36), fill=PAL["gold_light"])
+    d.ellipse((6, 40, 42, 47), fill=PAL["shadow"])
+    d.rectangle((5, 35, 43, 44), fill=PAL["outline"])
+    d.rectangle((8, 34, 40, 41), fill=PAL["stone_deep"])
+    d.rectangle((11, 28, 37, 35), fill=PAL["stone_mid"])
+    d.rectangle((14, 22, 34, 29), fill=PAL["stone_light"])
+    d.rectangle((18, 18, 30, 23), fill=PAL["stone_deep"])
+    d.ellipse((11, 10, 37, 35), outline=PAL["cyan"], width=2)
+    d.ellipse((16, 15, 32, 31), outline=PAL["cyan_light"], width=1)
+    d.polygon([(24, 2), (35, 14), (24, 26), (13, 14)], fill=PAL["outline"])
+    d.polygon([(24, 5), (31, 14), (24, 23), (17, 14)], fill=PAL["cyan_dark"])
+    d.polygon([(24, 8), (29, 14), (24, 20), (19, 14)], fill=PAL["cyan_light"])
+    for x in (13, 23, 33):
+        d.rectangle((x, 32, x + 3, 36), fill=PAL["gold_light"])
+    d.rectangle((16, 39, 32, 41), fill=PAL["cyan"])
     return img
 
 
 def ancient_beacon() -> Image.Image:
     img = canvas(40, 80)
     d = ImageDraw.Draw(img)
-    d.rectangle((13, 24, 27, 74), fill=PAL["stone_deep"])
-    d.rectangle((15, 26, 25, 72), fill=rgba("#b8c5d4"))
-    d.rectangle((9, 70, 31, 78), fill=PAL["stone_deep"])
-    d.rectangle((8, 18, 32, 26), fill=PAL["stone_light"])
-    d.polygon([(20, 0), (30, 15), (20, 25), (10, 15)], fill=PAL["cyan_dark"])
-    d.polygon([(20, 3), (27, 15), (20, 23), (13, 15)], fill=PAL["cyan_light"])
-    d.rectangle((18, 35, 22, 38), fill=PAL["gold_light"])
-    d.rectangle((17, 50, 23, 52), fill=PAL["cyan"])
+    d.ellipse((5, 72, 35, 79), fill=PAL["shadow"])
+    d.rectangle((12, 24, 28, 74), fill=PAL["outline"])
+    d.rectangle((14, 27, 26, 72), fill=PAL["stone_deep"])
+    d.rectangle((16, 29, 24, 70), fill=PAL["stone_cool"])
+    for y in (37, 51, 64):
+        d.rectangle((13, y, 27, y + 3), fill=PAL["stone_mid"])
+    d.rectangle((7, 70, 33, 78), fill=PAL["outline"])
+    d.rectangle((10, 69, 30, 74), fill=PAL["stone_deep"])
+    d.rectangle((8, 18, 32, 27), fill=PAL["outline"])
+    d.rectangle((11, 19, 29, 25), fill=PAL["stone_light"])
+    d.polygon([(20, 0), (32, 15), (20, 29), (8, 15)], fill=PAL["outline"])
+    d.polygon([(20, 3), (29, 15), (20, 26), (11, 15)], fill=PAL["cyan_dark"])
+    d.polygon([(20, 7), (26, 15), (20, 23), (14, 15)], fill=PAL["cyan_light"])
+    d.rectangle((18, 34, 22, 38), fill=PAL["gold_light"])
+    d.rectangle((17, 48, 23, 51), fill=PAL["cyan"])
+    d.rectangle((16, 59, 24, 61), fill=PAL["cyan_light"])
     return img
 
 
