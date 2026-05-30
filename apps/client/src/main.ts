@@ -3031,7 +3031,7 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
       mountainParticles.push(new PixiParticle({
         texture: Texture.WHITE,
         x: x + (jitter ? (noise % 3) - 1 : 0),
-        y: topY + localY + (jitter ? ((noise >> 4) % 3) - 1 : 0),
+        y: topY + localY + (jitter ? ((noise >>> 4) % 3) - 1 : 0),
         scaleX: size,
         scaleY: size,
         tint: midMountainParticleColor(palette, density, noise),
@@ -3054,8 +3054,8 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
           const speckNoise = midMountainNoise(chunk.chunkY, sampleX + side.ox, sampleY + side.oy, 1409 + i * 29);
           mountainParticles.push(new PixiParticle({
             texture: Texture.WHITE,
-            x: x + side.ox + ((speckNoise >> 3) % 2),
-            y: topY + localY + side.oy + ((speckNoise >> 6) % 2),
+            x: x + side.ox + ((speckNoise >>> 3) % 2),
+            y: topY + localY + side.oy + ((speckNoise >>> 6) % 2),
             scaleX: 2,
             scaleY: 2,
             tint: midMountainBorderPixelColor(palette, speckNoise, side.upward),
@@ -3064,8 +3064,8 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
           if (speckNoise % 5 === 0 && density < 0.48) {
             mountainParticles.push(new PixiParticle({
               texture: Texture.WHITE,
-              x: x + side.ox + ((speckNoise >> 10) % 3) - 1,
-              y: topY + localY + side.oy + ((speckNoise >> 13) % 3) - 1,
+              x: x + side.ox + ((speckNoise >>> 10) % 3) - 1,
+              y: topY + localY + side.oy + ((speckNoise >>> 13) % 3) - 1,
               scaleX: 1.5,
               scaleY: 1.5,
               tint: midMountainBorderPixelColor(palette, speckNoise >>> 1, side.upward),
@@ -4040,22 +4040,24 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
   const back = new Container();
   const front = new Container();
+  const backMidMountain = new Container();
   const backStatic = new Container();
   const backDynamic = new Container();
   const frontUnderDynamic = new Container();
   const frontStatic = new Container();
   const frontOverDynamic = new Container();
+  backMidMountain.sortableChildren = true;
   backStatic.sortableChildren = true;
   backDynamic.sortableChildren = true;
   frontUnderDynamic.sortableChildren = true;
   frontStatic.sortableChildren = true;
   frontOverDynamic.sortableChildren = true;
-  back.addChild(backStatic, backDynamic);
+  back.addChild(backMidMountain, backStatic, backDynamic);
   front.addChild(frontUnderDynamic, frontStatic, frontOverDynamic);
   const baseTileY = chunk.worldTileY;
   const biome = biomeForChunkY(chunk.chunkY);
   composeChunkAtmosphere(chunk, backStatic, biome);
-  composeMidMountainLayer(chunk, backStatic, biome);
+  composeMidMountainLayer(chunk, backMidMountain, biome);
   composePlatformPartLayer(chunk, frontStatic, biome);
   composeTraversalConnectors(chunk, backStatic, frontStatic, biome);
   composePlatformSceneDressing(chunk, backStatic, frontStatic, biome, backDynamic);
