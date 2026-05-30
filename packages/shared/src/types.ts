@@ -176,6 +176,7 @@ export interface PlayerInput {
 
 export interface PlayerState {
   id: PlayerId;
+  skinId?: string;
   position: Vec2;
   velocity: Vec2;
   facing: -1 | 1;

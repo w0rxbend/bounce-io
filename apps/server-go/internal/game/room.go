@@ -54,6 +54,7 @@ type session struct {
 	playerID         string
 	token            string
 	name             string
+	skinID           string
 	player           PlayerState
 	connected        bool
 	disconnectedAt   time.Time
@@ -67,6 +68,7 @@ type session struct {
 type joinCommand struct {
 	client *Client
 	name   string
+	skinID string
 	token  string
 	reply  chan joinReply
 }
@@ -113,13 +115,17 @@ func (cmd joinCommand) apply(s *roomState) {
 	playerID := newID()
 	token := newID()
 	name := sanitizeName(cmd.name)
+	skinID := sanitizeSkinID(cmd.skinID)
 	spawnX, spawnY := SpawnPosition(s.room.seed, 0)
+	player := CreatePlayerState(playerID, spawnX, spawnY)
+	player.SkinID = skinID
 	sess := &session{
 		client:           cmd.client,
 		playerID:         playerID,
 		token:            token,
 		name:             name,
-		player:           CreatePlayerState(playerID, spawnX, spawnY),
+		skinID:           skinID,
+		player:           player,
 		connected:        true,
 		inputQueue:       make([]PlayerInput, 0, s.room.cfg.MaxQueuedInputs),
 		lastReceivedSeq:  -1,
@@ -286,9 +292,9 @@ func NewRoom(cfg RoomConfig, stats *ServerMetrics, log *slog.Logger) *Room {
 	return room
 }
 
-func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token string) joinReply {
+func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID string) joinReply {
 	reply := make(chan joinReply, 1)
-	cmd := joinCommand{client: client, name: name, token: token, reply: reply}
+	cmd := joinCommand{client: client, name: name, skinID: skinID, token: token, reply: reply}
 	select {
 	case r.commands <- cmd:
 	case <-ctxDone:

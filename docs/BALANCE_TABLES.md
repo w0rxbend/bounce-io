@@ -1,4 +1,4 @@
-# Skybound Relics Balance Tables
+# Bounce IO Balance Tables
 
 All values are taken directly from `packages/shared/src/constants.ts`. The server simulation owns authoritative values; the PixiJS client mirrors them for prediction and animation only.
 

@@ -112,7 +112,7 @@ func (s *Server) Shutdown() {
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
-		"name":      "Skybound Relics Go authoritative server",
+		"name":      "Bounce IO Go authoritative server",
 		"version":   GameVersion,
 		"protocol":  ProtocolVersion,
 		"rooms":     len(s.rooms),
@@ -345,7 +345,7 @@ func (s *Server) handleJoin(ctx context.Context, client *Client, data []byte, r 
 		roomID = DefaultRoomID
 	}
 	room := s.getOrCreateRoom(roomID)
-	result := room.Join(ctx.Done(), client, join.Name, join.Token)
+	result := room.Join(ctx.Done(), client, join.Name, join.Token, join.SkinID)
 	if result.err != "" {
 		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: result.err, Message: "join failed"})
 		if result.err == "ROOM_FULL" || result.err == "ALREADY_CONNECTED" {

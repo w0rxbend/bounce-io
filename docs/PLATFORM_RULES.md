@@ -1,4 +1,4 @@
-# Skybound Relics Platform Rules
+# Bounce IO Platform Rules
 
 These rules describe the actual procedural chunk generation system and the design constraints that govern it. See `packages/shared/src/generation.ts` for the implementation and `packages/shared/src/constants.ts` for the physics values that constrain placement.
 

@@ -7,6 +7,7 @@ export type ClientMessage =
       protocol: typeof PROTOCOL_VERSION;
       version: typeof GAME_VERSION;
       name: string;
+      skinId?: string;
       token?: SessionToken;
     }
   | {

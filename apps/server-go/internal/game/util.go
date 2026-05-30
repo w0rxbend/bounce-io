@@ -40,3 +40,19 @@ func sanitizeName(value string) string {
 	}
 	return string(out)
 }
+
+func sanitizeSkinID(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "character1"
+	}
+	for _, r := range value {
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-') {
+			return "character1"
+		}
+	}
+	if len(value) > 24 {
+		return "character1"
+	}
+	return value
+}

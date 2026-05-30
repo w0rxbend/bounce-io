@@ -63,6 +63,7 @@ type ClientHello struct {
 	Protocol int    `json:"protocol"`
 	Version  string `json:"version"`
 	Name     string `json:"name"`
+	SkinID   string `json:"skinId,omitempty"`
 	Token    string `json:"token,omitempty"`
 }
 
@@ -71,6 +72,7 @@ type ClientJoin struct {
 	Protocol   int    `json:"protocol"`
 	Version    string `json:"version"`
 	Name       string `json:"name"`
+	SkinID     string `json:"skinId,omitempty"`
 	Token      string `json:"token,omitempty"`
 	ClientID   string `json:"clientId,omitempty"`
 	ClientTime int64  `json:"clientTime,omitempty"`
@@ -139,6 +141,7 @@ type Vec2 struct {
 
 type PlayerState struct {
 	ID                  string   `json:"id"`
+	SkinID              string   `json:"skinId,omitempty"`
 	Position            Vec2     `json:"position"`
 	Velocity            Vec2     `json:"velocity"`
 	Facing              int      `json:"facing"`

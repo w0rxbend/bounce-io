@@ -1,4 +1,4 @@
-# Skybound Relics Sprite Sheet Spec
+# Bounce IO Sprite Sheet Spec
 
 ## Current Approach: Procedural Pixel Art
 

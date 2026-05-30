@@ -36,12 +36,13 @@ The current migration strategy is **backend compatibility layer only**. The Pixi
   "protocol": 2,
   "version": "0.1.0",
   "name": "Explorer",
+  "skinId": "character1",
   "token": "optional-session-token"
 }
 ```
 
 Required: `type`, `protocol`, `version`, `name`.
-Optional: `token`.
+Optional: `skinId`, `token`.
 Defaults: server sanitizes `name` to `"Explorer"` if empty/invalid.
 
 #### `input`
@@ -268,9 +269,9 @@ There are no current WebSocket messages for chat, lobby listing, explicit score 
 
 | Message | Direction | Node.js Payload | PixiJS Client Contract | Go Current Payload | Status | Required Fix |
 |---|---|---|---|---|---|---|
-| `hello` | Client -> Server | `{ type, protocol, version, name, token? }` | Sends this on `open`; `protocol` must equal shared `PROTOCOL_VERSION`; `version` equals `GAME_VERSION`. | Accepts `hello`; also accepts `join` alias. | Compatible | Keep `hello` as primary client path. |
+| `hello` | Client -> Server | `{ type, protocol, version, name, skinId?, token? }` | Sends this on `open`; `protocol` must equal shared `PROTOCOL_VERSION`; `version` equals `GAME_VERSION`; `skinId` is selected in the pre-game menu. | Accepts `hello`; also accepts `join` alias; stores optional `skinId` on player state. | Compatible | Keep `hello` as primary client path. |
 | `join` | Client -> Server | Not supported. | Not sent. | Supported alias with optional `clientId`, `clientTime`. | Missing in client, harmless | Keep as backward-compatible future alias; do not require it. |
-| `welcome` | Server -> Client | `{ type, playerId, sessionToken, serverTime, tickRate, matchPhase, seed, name }` | Requires `playerId`, `sessionToken`, `serverTime`, `tickRate`, `matchPhase`, `seed`; uses `name` for scoreboard. | Same old fields. | Compatible | Keep exact old field names. |
+| `welcome` | Server -> Client | `{ type, playerId, sessionToken, serverTime, tickRate, matchPhase, seed, name }` | Requires `playerId`, `sessionToken`, `serverTime`, `tickRate`, `matchPhase`, `seed`; uses `name` for leaderboard. | Same old fields. | Compatible | Keep exact old field names. |
 | `resumed` | Server -> Client | `{ type, playerId, serverTime, matchPhase, playerState }` | Restores local player from `playerState`; resets snapshot ordering. | Same shape. | Compatible | Preserve token reconnect window. |
 | `input` | Client -> Server | `{ type, playerId, input }`; `input = { left, right, jumpPressed, jumpHeld, drop, kick, sequence }` | Sends nested old shape from `sendInput`. | Accepts nested old shape and flat Go shape. | Compatible | Validate malformed input and stale sequences. |
 | `requestChunk` | Client -> Server | `{ type, chunkY }` | Sent for missing chunks in current window. | Same shape. | Compatible | Keep bounds checks and return old `chunk` shape. |

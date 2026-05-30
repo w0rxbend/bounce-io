@@ -208,6 +208,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return value.protocol === PROTOCOL_VERSION &&
         value.version === GAME_VERSION &&
         isString(value.name) &&
+        (value.skinId === undefined || isString(value.skinId)) &&
         (value.token === undefined || isString(value.token));
     case "input":
       return isString(value.playerId) && isPlayerInput(value.input);

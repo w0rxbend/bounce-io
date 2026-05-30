@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Point, Rectangle, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -10,10 +10,13 @@ import {
   KICK_RECOVERY_SECONDS,
   KICK_WINDUP_SECONDS,
   PHYSICS_STEP_SECONDS,
+  PLAYER_BASE_DAMAGE,
+  PLAYER_MAX_HEALTH,
   PLAYER_HEIGHT,
   PLAYER_WIDTH,
   PROTOCOL_VERSION,
   RECONCILIATION_TOLERANCE_PX,
+  RELICS_PER_LEVEL,
   TILE_SIZE,
 } from "@skybound/shared";
 import {
@@ -653,31 +656,11 @@ if (!appRoot) throw new Error("Missing #app root");
 appRoot.innerHTML = `
   <main class="shell">
     <section class="game-wrap"></section>
-    <aside class="side">
-      <div class="brand"><h1>Skybound Relics</h1>
-        <p>Race upward. Collect coins. Kick rivals off ledges.</p></div>
-      <div class="panel join">
-        <h2>Room</h2>
-        <input id="player-name" value="Explorer" maxlength="16" aria-label="Player name"/>
-        <button id="join-room">Join Room</button>
-        <p id="net-status">Local mode — server optional.</p>
-      </div>
-      <div class="panel"><h2>Controls</h2>
-        <div class="controls">
-          <div class="key">A / D — run</div><div class="key">Space — jump</div>
-          <div class="key">S — drop through</div><div class="key">F — kick</div>
-          <div class="key">F1 — debug</div><div class="key">F2 — respawn</div>
-        </div>
-      </div>
-      <div class="panel"><h2>Players</h2><div id="scoreboard"></div></div>
-    </aside>
-  </main>`;
+    <input id="nickname-input" class="nickname-input" value="" maxlength="16" aria-label="Player nickname" autocomplete="off" spellcheck="false"/>
+    </main>`;
 
 const gameWrap  = appRoot.querySelector<HTMLElement>(".game-wrap")!;
-const netStatus = appRoot.querySelector<HTMLElement>("#net-status")!;
-const joinBtn   = appRoot.querySelector<HTMLButtonElement>("#join-room")!;
-const nameInput = appRoot.querySelector<HTMLInputElement>("#player-name")!;
-const scoreboard = appRoot.querySelector<HTMLElement>("#scoreboard")!;
+const nicknameInput = appRoot.querySelector<HTMLInputElement>("#nickname-input")!;
 
 // ── PixiJS init ───────────────────────────────────────────────────────────────
 
@@ -701,7 +684,7 @@ await pixi.init({
   roundPixels: true,
 });
 pixi.canvas.style.imageRendering = "pixelated";
-disableDisplayEvents(pixi.stage);
+pixi.stage.eventMode = "passive";
 gameWrap.prepend(pixi.canvas);
 
 function pathAliasForAsset(relPath: string): AssetKey {
@@ -2293,6 +2276,8 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
 const worldDebugLayer = new Container();
 const worldDebugGfx = new Graphics();
 const hudLayer    = new Container({ isRenderGroup: true });
+const menuLayer   = new Container({ isRenderGroup: true });
+menuLayer.eventMode = "passive";
 
 for (const layer of [
   skyLayer,
@@ -2318,7 +2303,7 @@ effectLayer.addChild(effectParticleLayer);
 worldDebugLayer.addChild(worldDebugGfx);
 worldDebugLayer.visible = false;
 worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer, worldDebugLayer);
-pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
+pixi.stage.addChild(skyLayer, worldLayer, hudLayer, menuLayer);
 
 const screenFlashGfx = new Graphics();
 hudLayer.addChild(screenFlashGfx);
@@ -2436,6 +2421,119 @@ let matchPhase    = "waiting";
 let reconnDelay   = 1000;
 let reconnTimeout: ReturnType<typeof setTimeout> | null = null;
 
+type AppState = "mainMenu" | "modeSelect" | "skinSelect" | "onlineNickname" | "connecting" | "game";
+type GameMode = "local" | "online";
+
+let appState: AppState = "mainMenu";
+let selectedMode: GameMode | null = null;
+let selectedSkinId: CharacterId | null = normalizeCharacterId(localStorage.getItem("bounceSkinId"));
+let nickname = localStorage.getItem("bounceNickname") ?? "";
+let menuDirty = true;
+let connectingMessage = "Connecting...";
+let menuErrorText = "";
+let nicknameInputFrame: { x: number; y: number; width: number; height: number } | null = null;
+let connectResolve: (() => void) | null = null;
+let connectReject: ((error: Error) => void) | null = null;
+let reconnectEnabled = false;
+let gameStartInFlight = false;
+interface MenuButtonHitRegion {
+  button: Container;
+  width: number;
+  height: number;
+  item: MenuInteractive;
+}
+const menuButtonHitRegions: MenuButtonHitRegion[] = [];
+
+type MenuDirection = "up" | "down" | "left" | "right";
+
+interface MenuInteractiveOptions {
+  id?: string;
+  selected?: boolean;
+  disabled?: boolean;
+  bob?: boolean;
+}
+
+interface MenuInteractive {
+  id: string;
+  button: Container;
+  width: number;
+  height: number;
+  onClick: () => void;
+  stateGfx: Graphics;
+  sparkleLayer: Container;
+  sparkles: Graphics[];
+  hover: boolean;
+  focused: boolean;
+  pressed: boolean;
+  selected: boolean;
+  disabled: boolean;
+  bob: boolean;
+  baseX: number | null;
+  baseY: number | null;
+  clickPulseUntil: number;
+  visualKey: string;
+}
+
+const menuInteractives: MenuInteractive[] = [];
+const menuBobbers: Array<{ target: Container; baseY: number | null; amplitude: number; speed: number; phase: number }> = [];
+let focusedMenuIndex = -1;
+let pendingFocusId: string | null = null;
+let menuActivationLockedUntil = 0;
+let nicknameCaretGfx: Graphics | null = null;
+
+function normalizeCharacterId(value: unknown): CharacterId {
+  return CHARACTER_IDS.includes(value as CharacterId) ? value as CharacterId : "character1";
+}
+
+function destroyMenu(): void {
+  menuButtonHitRegions.length = 0;
+  clearMenuFocusables();
+  nicknameInputFrame = null;
+  nicknameInput.style.display = "none";
+  menuLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+  if (menuLayer.parent) menuLayer.parent.removeChild(menuLayer);
+  console.info("[BounceIO] Menu destroyed");
+}
+
+function setAppState(next: AppState): void {
+  appState = next;
+  menuDirty = true;
+  nicknameInputFrame = null;
+  nicknameInput.style.display = "none";
+  if (next !== "game" && !menuLayer.parent) pixi.stage.addChild(menuLayer);
+  menuLayer.visible = next !== "game";
+  skyLayer.visible = next === "game";
+  worldLayer.visible = next === "game";
+  hudLayer.visible = next === "game";
+  if (next !== "game") {
+    destroyGameHud();
+  }
+  if (next === "game") {
+    destroyMenu();
+  }
+}
+
+function setSelectedSkin(skinId: CharacterId): void {
+  selectedSkinId = skinId;
+  localStorage.setItem("bounceSkinId", skinId);
+  menuDirty = true;
+  console.info("[BounceIO] Skin selected", selectedSkinId);
+}
+
+function currentSkinId(): CharacterId {
+  if (!selectedSkinId) selectedSkinId = "character1";
+  return selectedSkinId;
+}
+
+function applySkinId(player: PlayerState, skinId: CharacterId): PlayerState {
+  player.skinId = skinId;
+  return player;
+}
+
+function skinForPlayer(player: PlayerState | null | undefined, fallback: CharacterId = currentSkinId()): CharacterId {
+  return normalizeCharacterId(player?.skinId ?? fallback);
+}
+
 interface NetworkMetrics {
   messagesReceived: number;
   messagesSent: number;
@@ -2493,7 +2591,7 @@ let cloudDriftMid   = 0;
 let cloudDriftFront = 0;
 
 // Pre-allocated persistent graphics for local player
-const localSprite = makeCharacterSprite("character1");
+const localSprite = makeCharacterSprite(currentSkinId());
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
 localSprite.anchor.set(0.5, playerSpriteAnchorY());
@@ -2576,6 +2674,10 @@ let jumpEdge = false, kickEdge = false;
 
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
+  if (appState !== "game") {
+    handleMenuKeyDown(e);
+    return;
+  }
   held[e.code] = true;
   if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { jumpEdge = true; e.preventDefault(); }
   if (e.code === "KeyF") kickEdge = true;
@@ -2888,6 +2990,102 @@ function clearWorldChunks(): void {
   resetEffectParticles();
 }
 
+function clearRemotePlayers(): void {
+  for (const e of remotePlayers.values()) {
+    e.sprite.destroy();
+    e.crownSprite.destroy();
+    e.gfx.destroy();
+    e.label.destroy();
+  }
+  remotePlayers.clear();
+}
+
+function resetGameSession(mode: GameMode): void {
+  clearWorldChunks();
+  clearRemotePlayers();
+  collectedRelics.clear();
+  playerNames.clear();
+  localPlayer = null;
+  localVisualPosition = null;
+  localPlayerId = null;
+  predBuf.length = 0;
+  localSeq = 0;
+  serverTick = 0;
+  lastSnapshotSeq = -1;
+  matchPhase = mode === "online" ? "waiting" : "playing";
+  cameraY = 0;
+  cameraSnap = true;
+  shakeX = 0;
+  shakeY = 0;
+  pingMs = 0;
+  hasServerClock = false;
+  pingSamples.length = 0;
+  pingJitterMs = 0;
+  lastHudRegion = null;
+  lastScoreboardKey = "";
+  playerStatsHud?.reset();
+}
+
+interface StartGameOptions {
+  mode: GameMode;
+  nickname?: string;
+  skinId: CharacterId;
+}
+
+async function enterGameScene(options: {
+  mode: "local" | "online";
+  nickname?: string;
+  skinId?: string;
+}): Promise<void> {
+  if (gameStartInFlight) return;
+  gameStartInFlight = true;
+  setMenuInteractivesDisabled(true);
+  const startOptions: StartGameOptions = {
+    mode: options.mode,
+    nickname: options.nickname,
+    skinId: normalizeCharacterId(options.skinId ?? currentSkinId()),
+  };
+  console.info("[BounceIO] enterGameScene called", startOptions);
+  try {
+    const startPromise = startGame(startOptions);
+    console.info("[BounceIO] Existing game start called");
+    await startPromise;
+    console.info("[BounceIO] Stage children after game start", pixi.stage.children.length);
+  } catch (err) {
+    gameStartInFlight = false;
+    throw err;
+  }
+}
+
+async function startGame(options: StartGameOptions): Promise<void> {
+  selectedMode = options.mode;
+  setSelectedSkin(options.skinId);
+
+  if (options.mode === "local") {
+    console.info("[BounceIO] Starting local game", { skinId: options.skinId });
+    disconnectNetwork();
+    resetGameSession("local");
+    for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
+    localPlayerId = "local";
+    playerNames.set("local", "You");
+    respawnLocal();
+    setAppState("game");
+    return;
+  }
+
+  const trimmedNickname = options.nickname?.trim() ?? "";
+  const nicknameError = validateNickname(trimmedNickname);
+  if (nicknameError) throw new Error(nicknameError);
+
+  nickname = trimmedNickname;
+  localStorage.setItem("bounceNickname", nickname);
+  connectingMessage = "Connecting...";
+  menuErrorText = "";
+  console.info("[BounceIO] Connecting online game", { nickname, skinId: options.skinId });
+  setAppState("connecting");
+  await connectRoom(nickname, options.skinId);
+}
+
 function destroyChunkVisuals(chunkY: number): void {
   pendingChunkRenders.delete(chunkY);
   const oldGfx = chunkGraphics.get(chunkY);
@@ -2949,13 +3147,17 @@ function chunkEntrySurfaceY(chunkY: number): number | null {
 }
 
 function respawnLocal(): void {
-  if (!localPlayerId) { localPlayerId = "local"; playerNames.set("local", nameInput.value || "Explorer"); }
+  if (!localPlayerId) {
+    localPlayerId = "local";
+    playerNames.set("local", selectedMode === "online" ? nickname || "Explorer" : "You");
+  }
   const checkpointChunkY = Math.max(0, localPlayer?.checkpointChunkY ?? 0);
   const { x, y } = getSpawnPos(checkpointChunkY);
   if (localPlayer) {
     respawnPlayerState(localPlayer, x, y, checkpointChunkY);
+    applySkinId(localPlayer, skinForPlayer(localPlayer));
   } else {
-    localPlayer = createPlayerState(localPlayerId, x, y);
+    localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), currentSkinId());
   }
   snapLocalVisualToSimulation();
   resetLocalPrediction();
@@ -5392,7 +5594,7 @@ function makeLabel(name: string): Text {
 
 function createRemoteEntry(player: PlayerState, name: string, serverTime: number, tick = 0): RemoteEntry {
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
-  const sprite = makeCharacterSprite(characterForRemote(ci));
+  const sprite = makeCharacterSprite(skinForPlayer(player, characterForRemote(ci)));
   const crownSprite = makeSprite("crown");
   sprite.anchor.set(0.5, playerSpriteAnchorY());
   sprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.54 : 0;
@@ -5891,25 +6093,20 @@ function environmentAnimationIntervalMs(): number {
 
 // Draw a pixel-art stone panel at (x, y) with size (w, h) onto Graphics g
 function drawHudPanel(g: Graphics, x: number, y: number, w: number, h: number): void {
-  // Drop shadow
   g.rect(x + 3, y + 3, w, h).fill({ color: 0x000000, alpha: 0.5 });
-  // Dark stone body
-  g.rect(x, y, w, h).fill(0x080e18);
-  // Outer border — darkest
-  g.rect(x, y, w, 2).fill(0x040810);
-  g.rect(x, y + h - 2, w, 2).fill(0x040810);
-  g.rect(x, y, 2, h).fill(0x040810);
-  g.rect(x + w - 2, y, 2, h).fill(0x040810);
-  // Inner top-left highlight
-  g.rect(x + 2, y + 2, w - 4, 1).fill({ color: 0x2a4060, alpha: 0.7 });
-  g.rect(x + 2, y + 2, 1, h - 4).fill({ color: 0x2a4060, alpha: 0.5 });
-  // Cyan top accent strip
-  g.rect(x + 2, y, w - 4, 1).fill({ color: PAL.uiHighlight, alpha: 0.55 });
-  // Moss corner dots
-  g.rect(x + 2, y + 2, 3, 3).fill({ color: PAL.mossGreen, alpha: 0.55 });
-  g.rect(x + w - 5, y + 2, 3, 3).fill({ color: PAL.mossGreen, alpha: 0.55 });
-  g.rect(x + 2, y + h - 5, 3, 3).fill({ color: PAL.canopyDark, alpha: 0.45 });
-  g.rect(x + w - 5, y + h - 5, 3, 3).fill({ color: PAL.canopyDark, alpha: 0.45 });
+  g.rect(x, y, w, h).fill(0x06100a);
+  g.rect(x + 3, y + 3, w - 6, h - 6).fill(0x101c14);
+  g.rect(x + 5, y + 5, w - 10, h - 10).fill({ color: 0x17281b, alpha: 0.94 });
+  g.rect(x + 3, y + 3, w - 6, 3).fill(PAL.mossBright);
+  g.rect(x + 3, y + h - 6, w - 6, 3).fill(0x0a140d);
+  g.rect(x + 6, y + 8, w - 12, 1).fill({ color: PAL.stoneLight, alpha: 0.42 });
+  g.rect(x + 6, y + 9, 1, h - 18).fill({ color: PAL.stoneMid, alpha: 0.44 });
+  g.rect(x + 6, y + 6, 7, 7).fill(PAL.mossGreen);
+  g.rect(x + w - 13, y + 6, 7, 7).fill(PAL.mossGreen);
+  g.rect(x + 6, y + h - 13, 7, 7).fill({ color: PAL.canopyDark, alpha: 0.8 });
+  g.rect(x + w - 13, y + h - 13, 7, 7).fill({ color: PAL.canopyDark, alpha: 0.8 });
+  g.rect(x + 9, y + h - 17, 3, 3).fill(0xff6fcf);
+  g.rect(x + w - 17, y + 11, 3, 3).fill(PAL.coinGold);
 }
 
 // Draw a small pixel-art coin icon at (x, y) - frame 0..3 spin animation
@@ -5924,127 +6121,187 @@ function drawHudCoinIcon(g: Graphics, x: number, y: number, frame: number): void
   g.rect(cx - 1, y - 1, w + 2, 12).fill({ color: PAL.coinGlow, alpha: 0.2 });
 }
 
-// Stable scoreboard row pool — reuse elements to avoid per-frame DOM churn.
-const scoreboardRowPool: HTMLElement[] = [];
+function hudStatNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function formatHudStat(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+class PlayerStatsHud {
+  readonly container = new Container();
+  private readonly panel = new Graphics();
+  private readonly bars = new Graphics();
+  private readonly titleText = new Text({
+    text: "PLAYER",
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  private readonly hpText = new Text({
+    text: "",
+    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  private readonly xpText = new Text({
+    text: "",
+    style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  private readonly levelText = new Text({
+    text: "",
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  private readonly atkText = new Text({
+    text: "",
+    style: { fill: PAL.hazardGlow, fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  private layoutKey = "";
+  private statsKey = "";
+
+  constructor() {
+    this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.xpText, this.levelText, this.atkText);
+    disableDisplayEvents(this.container);
+  }
+
+  update(player: PlayerState, screenWidth: number): void {
+    const width = screenWidth < 440 ? 136 : 158;
+    const height = 66;
+    const x = 12;
+    const y = 12;
+    const layoutKey = `${width}|${height}|${x}|${y}`;
+    if (layoutKey !== this.layoutKey) {
+      this.layoutKey = layoutKey;
+      this.container.x = x;
+      this.container.y = y;
+      this.panel.clear();
+      drawHudPanel(this.panel, 0, 0, width, height);
+      this.titleText.x = 12;
+      this.titleText.y = 8;
+      this.hpText.x = 12;
+      this.hpText.y = 24;
+      this.xpText.x = 12;
+      this.xpText.y = 42;
+      this.levelText.x = width - 56;
+      this.levelText.y = 8;
+      this.atkText.x = width - 56;
+      this.atkText.y = 42;
+      this.statsKey = "";
+    }
+
+    const hpMax = Math.max(1, hudStatNumber(player.maxHealth, PLAYER_MAX_HEALTH));
+    const hp = Math.max(0, Math.min(hpMax, hudStatNumber(player.health, hpMax)));
+    const level = Math.max(1, Math.floor(hudStatNumber(player.level, 1)));
+    const attack = Math.max(0, hudStatNumber(player.damage, PLAYER_BASE_DAMAGE));
+    const xp = Math.max(0, Math.floor(hudStatNumber(player.relics, 0)));
+    const xpProgress = xp % RELICS_PER_LEVEL;
+    const statsKey = `${hp}|${hpMax}|${level}|${attack}|${xpProgress}|${xp}`;
+    if (statsKey === this.statsKey) return;
+    this.statsKey = statsKey;
+
+    const hpRatio = Math.max(0, Math.min(1, hp / hpMax));
+    const xpRatio = Math.max(0, Math.min(1, xpProgress / RELICS_PER_LEVEL));
+    const hpBarW = width - 86;
+    const xpBarW = width - 86;
+    this.bars.clear();
+    this.bars.rect(42, 28, hpBarW, 5).fill(PAL.hazardRed);
+    this.bars.rect(42, 28, Math.round(hpBarW * hpRatio), 5).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
+    this.bars.rect(42, 30, Math.round(hpBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
+    this.bars.rect(42, 46, xpBarW, 4).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+    this.bars.rect(42, 46, Math.round(xpBarW * xpRatio), 4).fill(PAL.portalBlue);
+    this.bars.rect(width - 62, 25, 44, 14).fill(0x06100a);
+    this.bars.rect(width - 59, 28, 38, 8).fill({ color: PAL.mossGreen, alpha: 0.86 });
+    this.bars.rect(width - 57, 45, 5, 5).fill(PAL.hazardGlow);
+    this.bars.rect(width - 54, 42, 2, 11).fill(PAL.hazardGlow);
+    this.bars.rect(width - 51, 48, 6, 2).fill(PAL.hazardGlow);
+
+    this.hpText.text = `HP ${Math.ceil(hp)}/${Math.ceil(hpMax)}`;
+    this.xpText.text = `XP ${xpProgress}/${RELICS_PER_LEVEL}`;
+    this.levelText.text = `LVL ${level}`;
+    this.atkText.text = `ATK ${formatHudStat(attack)}`;
+  }
+
+  reset(): void {
+    this.statsKey = "";
+    this.layoutKey = "";
+    this.panel.clear();
+    this.bars.clear();
+  }
+
+  destroy(): void {
+    this.container.destroy({ children: true });
+  }
+}
+
 let lastScoreboardKey = "";
 
 let hudBuilt   = false;
-let hudPanelGfx: Graphics;
-let hudIconGfx:  Graphics;   // animated icons — cleared each frame
-let hudPanelSprite: Sprite | null = null;
-let hudCoinSprite: Sprite | null = null;
-let hudHeightSprite: Sprite | null = null;
-let hudCoinTxt:  Text;
-let hudHeightTxt:Text;
-let hudHealthTxt:Text;
-let hudLevelTxt: Text;
+let hudLeaderboardGfx: Graphics;
+let hudLegendGfx: Graphics;
 let hudPhaseTxt: Text;
-let hudPingTxt:  Text;
-let hudRankTxt:  Text;
+let playerStatsHud: PlayerStatsHud | null = null;
+const hudRowTexts: Text[] = [];
+const hudLegendTexts: Text[] = [];
 let lastHudRegion: number | null = null;
+let lastHudLayoutKey = "";
 
-function buildHudPanels(): void {
-  if (hudPanelGfx) hudPanelGfx.destroy();
-  if (hudPanelSprite) hudPanelSprite.destroy();
-  hudPanelGfx = new Graphics();
-  hudPanelSprite = null;
-  if (hasAsset("hudPanel")) {
-    hudPanelSprite = makeSprite("hudPanel");
-    hudPanelSprite.x = 2;
-    hudPanelSprite.y = 2;
-    hudPanelSprite.width = 90;
-    hudPanelSprite.height = 78;
-    hudLayer.addChildAt(hudPanelSprite, 0);
-  } else {
-    // Left stat panel — tall enough to include rank and ping rows
-    drawHudPanel(hudPanelGfx, 6, 6, 82, 72);
-    hudLayer.addChildAt(hudPanelGfx, 0);
-  }
+function destroyGameHud(): void {
+  if (!hudBuilt) return;
+  playerStatsHud?.destroy();
+  playerStatsHud = null;
+  hudLeaderboardGfx.destroy();
+  hudLegendGfx.destroy();
+  hudPhaseTxt.destroy();
+  hudRowTexts.splice(0).forEach((txt) => txt.destroy());
+  hudLegendTexts.splice(0).forEach((txt) => txt.destroy());
+  hudBuilt = false;
+  lastHudLayoutKey = "";
+  lastScoreboardKey = "";
 }
 
 function ensureHud(): void {
   if (hudBuilt) return;
   hudBuilt = true;
-  const base = { fontFamily: "monospace", fontSize: 9 };
-  hudCoinTxt   = new Text({ text: "0",    style: { ...base, fill: PAL.coinGold,     fontWeight: "900" } });
-  hudHeightTxt = new Text({ text: "0m",   style: { ...base, fill: PAL.uiParchment,  fontSize: 10, fontWeight: "700" } });
-  hudHealthTxt = new Text({ text: "HP 5/5", style: { ...base, fill: PAL.hazardRed,   fontSize: 9, fontWeight: "900" } });
-  hudLevelTxt  = new Text({ text: "L1",    style: { ...base, fill: PAL.portalBlue,   fontSize: 9, fontWeight: "900" } });
-  hudPhaseTxt  = new Text({ text: "",     style: { ...base, fill: PAL.uiHighlight,  fontSize: 11, fontWeight: "900" } });
-  hudPingTxt   = new Text({ text: "",     style: { ...base, fill: 0x486878,         fontSize: 8 } });
-  hudRankTxt   = new Text({ text: "",     style: { ...base, fill: PAL.uiParchment,  fontSize: 8 } });
-  hudIconGfx   = new Graphics();
-  hudCoinSprite = hasAsset("coin") ? makeSprite("coin") : null;
-  hudHeightSprite = hasAsset("heightArrow") ? makeSprite("heightArrow") : null;
-  if (hudCoinSprite) {
-    hudCoinSprite.anchor.set(0.5);
-    hudCoinSprite.x = 14;
-    hudCoinSprite.y = 16;
-  }
-  if (hudHeightSprite) {
-    hudHeightSprite.x = 7;
-    hudHeightSprite.y = 24;
-    hudHeightSprite.scale.set(0.72);
+  playerStatsHud = new PlayerStatsHud();
+  hudLeaderboardGfx = new Graphics();
+  hudLegendGfx = new Graphics();
+  hudPhaseTxt = new Text({
+    text: "",
+    style: { fill: PAL.uiHighlight, fontFamily: "monospace", fontSize: 11, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  hudLayer.addChild(playerStatsHud.container, hudLeaderboardGfx, hudLegendGfx, hudPhaseTxt);
+
+  for (let i = 0; i < 6; i++) {
+    const txt = new Text({
+      text: "",
+      style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    });
+    hudRowTexts.push(txt);
+    hudLayer.addChild(txt);
   }
 
-  hudCoinTxt.x   = 28; hudCoinTxt.y   = 10;
-  hudHeightTxt.x = 28; hudHeightTxt.y = 26;
-  hudHealthTxt.x = 10; hudHealthTxt.y = 42;
-  hudLevelTxt.x  = 54; hudLevelTxt.y  = 42;
-  hudPingTxt.x   = 10; hudPingTxt.y   = 66;
-  hudRankTxt.x   = 10; hudRankTxt.y   = 58;
-
-  buildHudPanels();
-  if (hudCoinSprite) hudLayer.addChild(hudCoinSprite);
-  if (hudHeightSprite) hudLayer.addChild(hudHeightSprite);
-  hudLayer.addChild(hudIconGfx, hudCoinTxt, hudHeightTxt, hudHealthTxt, hudLevelTxt, hudPhaseTxt, hudPingTxt, hudRankTxt);
-
-  window.addEventListener("resize", () => setTimeout(buildHudPanels, 80));
+  const tips = ["HOW TO PLAY", "A/D MOVE", "SPACE JUMP", "S DROP", "F KICK"];
+  for (const tip of tips) {
+    const txt = new Text({
+      text: tip,
+      style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    });
+    hudLegendTexts.push(txt);
+    hudLayer.addChild(txt);
+  }
 }
 
 function updateHud(tSec: number): void {
+  void tSec;
   if (!localPlayer) return;
   ensureHud();
+  playerStatsHud?.update(localPlayer, pixi.screen.width);
 
   const hm    = Math.max(0, Math.round(-localPlayer.position.y / 32));
   const coins = localPlayer.coins;
-
-  // Animated coin icon
-  hudIconGfx.clear();
-  const coinFrame = Math.floor(tSec * 4) % 4;
-  if (hudCoinSprite) {
-    hudCoinSprite.scale.x = coinFrame === 0 ? 0.72 : coinFrame === 1 ? 0.48 : coinFrame === 2 ? 0.22 : 0.48;
-    hudCoinSprite.scale.y = 0.72;
-    hudCoinSprite.texture = assetTexture(coinFrameAsset(coinFrame));
-    hudCoinSprite.scale.set(0.72);
-  } else {
-    drawHudCoinIcon(hudIconGfx, 10, 10, coinFrame);
-  }
-  if (!hudHeightSprite) {
-    // Height icon: upward arrow
-    hudIconGfx.rect(10, 28, 2, 8).fill(PAL.uiHighlight);
-    hudIconGfx.rect(8,  28, 6, 2).fill(PAL.uiHighlight);
-    hudIconGfx.rect(9,  26, 4, 2).fill(PAL.uiHighlight);
-  }
-
-  hudCoinTxt.text   = String(coins);
-  hudHeightTxt.text = `${hm}m`;
-  hudHealthTxt.text = `HP ${Math.max(0, Math.ceil(localPlayer.health))}/${localPlayer.maxHealth}`;
-  hudLevelTxt.text  = `L${localPlayer.level}`;
-
-  // Rank + ping in lower part of panel
   const rows: Array<{ name: string; h: number; coins: number; local: boolean }> = [];
   if (localPlayerId) rows.push({ name: playerNames.get(localPlayerId) ?? "You", h: hm, coins, local: true });
   for (const [pid, e] of remotePlayers) {
     rows.push({ name: playerNames.get(pid) ?? "?", h: Math.max(0, Math.round(-e.current.position.y / 32)), coins: e.current.coins, local: false });
   }
   rows.sort((a, b) => b.h - a.h);
-  const myRank = rows.findIndex((r) => r.local);
-  hudRankTxt.text = myRank >= 0 ? `#${myRank + 1} / ${rows.length}` : "";
-  hudPingTxt.text = pingMs > 0 ? `${pingMs}ms` : "";
-  hudPingTxt.x    = 6 + 82 - hudPingTxt.width - 6;
-  hudPingTxt.y    = 66;
-  hudRankTxt.y    = 58;
 
   const currentChunkY = Math.max(0, -Math.floor(localPlayer.position.y / (CHUNK_HEIGHT_TILES * TILE_SIZE)));
   const currentBiome = biomeForChunkY(currentChunkY);
@@ -6056,7 +6313,6 @@ function updateHud(tSec: number): void {
     lastHudRegion = currentRegion;
   }
 
-  // Center phase / biome banner
   const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : regionDisplayNameForChunkY(currentChunkY);
   hudPhaseTxt.text = phText;
   if (phText) {
@@ -6065,37 +6321,54 @@ function updateHud(tSec: number): void {
     hudPhaseTxt.alpha = matchPhase === "playing" ? 0.76 : 1;
   }
 
-  // HTML scoreboard — diff-update to avoid per-frame DOM churn causing flash artifacts.
-  const scoreKey = rows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";");
-  if (scoreKey !== lastScoreboardKey) {
-    lastScoreboardKey = scoreKey;
-    // Grow pool if needed.
-    while (scoreboardRowPool.length < rows.length) {
-      const row = document.createElement("div");
-      const rank  = document.createElement("span"); rank.className  = "rank";
-      const name_ = document.createElement("span"); name_.className = "name";
-      const b     = document.createElement("b");    name_.append(b);
-      const stat  = document.createElement("span"); stat.className  = "stat";
-      const ht    = document.createElement("strong");
-      row.append(rank, name_, stat, ht);
-      scoreboard.append(row);
-      scoreboardRowPool.push(row);
-    }
-    // Hide excess rows.
-    for (let i = rows.length; i < scoreboardRowPool.length; i++) {
-      scoreboardRowPool[i]!.style.display = "none";
-    }
-    // Update visible rows in-place.
-    for (const [i, r] of rows.entries()) {
-      const row = scoreboardRowPool[i]!;
-      row.style.display = "";
-      row.className = `score-row${r.local ? " local" : ""}`;
-      (row.children[0] as HTMLElement).textContent = String(i + 1);
-      (row.children[1]!.children[0] as HTMLElement).textContent = r.name;
-      (row.children[2] as HTMLElement).textContent = `◆${r.coins}`;
-      (row.children[3] as HTMLElement).textContent = `${r.h}m`;
+  const leaderboardW = Math.min(214, Math.max(164, Math.floor(pixi.screen.width * 0.28)));
+  const visibleRows = rows.slice(0, 5);
+  const leaderboardH = 24 + visibleRows.length * 18;
+  const leaderboardX = Math.max(10, pixi.screen.width - leaderboardW - 12);
+  const leaderboardY = 12;
+  const legendW = Math.min(188, Math.max(142, Math.floor(pixi.screen.width * 0.25)));
+  const legendH = 78;
+  const legendX = Math.max(10, pixi.screen.width - legendW - 12);
+  const legendY = Math.max(leaderboardY + leaderboardH + 10, pixi.screen.height - legendH - 12);
+  const layoutKey = `${pixi.screen.width}|${pixi.screen.height}|${leaderboardW}|${leaderboardH}|${legendW}`;
+  if (layoutKey !== lastHudLayoutKey) {
+    lastHudLayoutKey = layoutKey;
+    hudLeaderboardGfx.clear();
+    drawHudPanel(hudLeaderboardGfx, leaderboardX, leaderboardY, leaderboardW, leaderboardH);
+    hudLegendGfx.clear();
+    drawHudPanel(hudLegendGfx, legendX, legendY, legendW, legendH);
+    const legendTitle = hudLegendTexts[0]!;
+    legendTitle.x = legendX + 12;
+    legendTitle.y = legendY + 12;
+    for (let i = 1; i < hudLegendTexts.length; i++) {
+      const tip = hudLegendTexts[i]!;
+      tip.x = legendX + 12;
+      tip.y = legendY + 12 + i * 14;
     }
   }
+
+  const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}`;
+  if (scoreKey !== lastScoreboardKey) {
+    lastScoreboardKey = scoreKey;
+    hudRowTexts.forEach((txt) => { txt.visible = false; });
+    const title = hudRowTexts[0]!;
+    title.visible = true;
+    title.text = "LEADERBOARD";
+    title.style.fill = PAL.coinGold;
+    title.x = leaderboardX + 10;
+    title.y = leaderboardY + 8;
+    for (const [i, r] of visibleRows.entries()) {
+      const txt = hudRowTexts[i + 1]!;
+      txt.visible = true;
+      txt.text = `${i + 1}. ${r.name.slice(0, 10)}  ${r.h}m  ${r.coins}`;
+      txt.style.fill = r.local ? PAL.coinGold : PAL.uiParchment;
+      txt.x = leaderboardX + 10;
+      txt.y = leaderboardY + 27 + i * 18;
+    }
+  }
+
+  hudLegendTexts[0]!.text = "HOW TO PLAY";
+  hudLegendTexts[0]!.style.fill = PAL.coinGold;
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -6353,6 +6626,791 @@ function updateDebug(): void {
     `dropped snapshots ${netMetrics.droppedOutOfOrderSnapshots}`;
 }
 
+// ── Pixi menu flow ────────────────────────────────────────────────────────────
+
+const MENU_COLORS = {
+  ink: 0x06100a,
+  panel: 0x142319,
+  panelHi: 0x2f4b33,
+  panelDark: 0x0b170f,
+  moss: 0x65a943,
+  mossBright: 0x9fd66d,
+  grass: 0x87c95a,
+  stone: 0x596157,
+  stoneLight: 0x9ca28c,
+  gold: 0xf3c64b,
+  goldDark: 0xb87224,
+  parchment: 0xefe8c9,
+  rune: 0x5bd4dd,
+  skyText: 0xd8f7ff,
+};
+
+let connectingDotsText: Text | null = null;
+
+function menuText(text: string, size: number, color = MENU_COLORS.parchment, weight: "700" | "900" = "700"): Text {
+  return new Text({
+    text,
+    style: {
+      fill: color,
+      fontFamily: "monospace",
+      fontSize: size,
+      fontWeight: weight,
+      align: "center",
+      stroke: { color: MENU_COLORS.ink, width: Math.max(1, Math.floor(size / 8)) },
+    },
+  });
+}
+
+function drawPixelPanel(g: Graphics, x: number, y: number, w: number, h: number, selected = false): void {
+  g.rect(x + 5, y + 6, w, h).fill({ color: 0x000000, alpha: 0.42 });
+  g.rect(x, y, w, h).fill(MENU_COLORS.ink);
+  g.rect(x + 4, y + 4, w - 8, h - 8).fill(selected ? 0x1d3d26 : MENU_COLORS.panel);
+  g.rect(x + 4, y + 4, w - 8, 4).fill(selected ? MENU_COLORS.mossBright : MENU_COLORS.panelHi);
+  g.rect(x + 4, y + h - 8, w - 8, 4).fill(MENU_COLORS.panelDark);
+  g.rect(x + 8, y + 8, w - 16, 2).fill({ color: MENU_COLORS.stoneLight, alpha: 0.45 });
+  g.rect(x + 8, y + 10, 2, h - 20).fill({ color: MENU_COLORS.stone, alpha: 0.5 });
+  const accent = selected ? MENU_COLORS.gold : MENU_COLORS.moss;
+  g.rect(x + 8, y + 8, 8, 8).fill(accent);
+  g.rect(x + w - 16, y + 8, 8, 8).fill(accent);
+  g.rect(x + 8, y + h - 16, 8, 8).fill({ color: accent, alpha: 0.8 });
+  g.rect(x + w - 16, y + h - 16, 8, 8).fill({ color: accent, alpha: 0.8 });
+  drawPanelVines(g, x, y, w, h, selected);
+}
+
+function drawPanelVines(g: Graphics, x: number, y: number, w: number, h: number, selected = false): void {
+  const leaf = selected ? MENU_COLORS.mossBright : MENU_COLORS.moss;
+  const flower = selected ? MENU_COLORS.gold : 0xff6fcf;
+  for (let i = 0; i < 4; i++) {
+    g.rect(x + 2 + i * 5, y + 2, 3, 3).fill(leaf);
+    g.rect(x + w - 5 - i * 5, y + h - 5, 3, 3).fill({ color: leaf, alpha: 0.85 });
+  }
+  g.rect(x + 4, y + h - 18, 3, 3).fill(flower);
+  g.rect(x + 7, y + h - 15, 2, 2).fill(MENU_COLORS.parchment);
+  g.rect(x + w - 12, y + 12, 3, 3).fill(flower);
+  g.rect(x + w - 15, y + 15, 2, 2).fill(MENU_COLORS.parchment);
+}
+
+function drawMenuIsland(g: Graphics, x: number, y: number, w: number, h = 34): void {
+  const grassH = 9;
+  g.rect(x + 8, y + 4, w - 16, grassH).fill(MENU_COLORS.grass);
+  g.rect(x + 4, y + 9, w - 8, 5).fill(MENU_COLORS.mossBright);
+  g.rect(x, y + 13, w, 7).fill(0x5b3c24);
+  g.rect(x + 5, y + 20, w - 10, h - 18).fill(0x372315);
+  g.rect(x + 10, y + 20, w - 20, 4).fill(0x6b4a31);
+  for (let i = 0; i < Math.max(5, Math.floor(w / 20)); i++) {
+    const px = x + 8 + i * 18;
+    g.rect(px, y + 16 + (i % 2), 5, 5).fill(0x23150d);
+    g.rect(px + 3, y + 24, 3, 10 + (i % 3) * 4).fill({ color: 0x182514, alpha: 0.78 });
+  }
+  g.rect(x + 18, y + 2, 4, 4).fill(0xff6fcf);
+  g.rect(x + w - 26, y + 5, 4, 4).fill(0xffd86a);
+  g.rect(x + w - 20, y + 3, 7, 3).fill(MENU_COLORS.mossBright);
+}
+
+function makeBounceTitle(size: number): Container {
+  const group = new Container();
+  const bounce = menuText("Bounce", size, MENU_COLORS.skyText, "900");
+  const io = menuText("IO", size, MENU_COLORS.gold, "900");
+  bounce.style.stroke = { color: 0x071014, width: Math.max(4, Math.floor(size / 9)) };
+  io.style.stroke = { color: 0x4b2c11, width: Math.max(4, Math.floor(size / 9)) };
+  bounce.text = "BOUNCE";
+  io.text = "IO";
+  bounce.x = 0;
+  bounce.y = 0;
+  io.x = Math.round(bounce.width - 4);
+  io.y = 0;
+  const shadow = new Graphics();
+  shadow.rect(5, Math.round(size * 0.82), Math.round(bounce.width + io.width - 8), 8).fill({ color: 0x000000, alpha: 0.38 });
+  group.addChild(shadow, bounce, io);
+  group.pivot.set(Math.round((bounce.width + io.width) / 2), Math.round(size / 2));
+  return group;
+}
+
+function drawSmallPlayIcon(g: Graphics, x: number, y: number, color: number): void {
+  g.poly([x, y, x, y + 18, x + 16, y + 9]).fill(color);
+  g.poly([x + 3, y + 4, x + 3, y + 14, x + 12, y + 9]).fill(0xeaffdf);
+}
+
+function drawMenuBackdrop(g: Graphics, w: number, h: number): void {
+  g.rect(0, 0, w, h).fill(0x0b1420);
+  g.rect(0, 0, w, Math.round(h * 0.45)).fill({ color: 0x4f7fa6, alpha: 0.85 });
+  g.rect(0, Math.round(h * 0.45), w, h).fill({ color: 0x142319, alpha: 0.94 });
+  for (let i = 0; i < 16; i++) {
+    const x = Math.round((i * 173) % Math.max(1, w));
+    const y = Math.round(h * 0.16 + ((i * 67) % Math.max(1, h * 0.25)));
+    drawBgIsland(g, x - 28, y, 56 + (i % 5) * 12, 8 + (i % 3) * 3, i % 2 === 0 ? 0x304068 : 0x28385a);
+  }
+  for (let i = 0; i < 24; i++) {
+    const x = Math.round((i * 97) % Math.max(1, w));
+    const y = Math.round(30 + ((i * 43) % Math.max(1, h * 0.35)));
+    drawPixelCloud(g, x, y, 36 + (i % 4) * 18, PAL.cloudBright, PAL.cloudShadow, 0.16 + (i % 3) * 0.05);
+  }
+  drawMenuIsland(g, Math.round(w * 0.5 - 190), Math.round(h * 0.56), 380, 96);
+  g.rect(Math.round(w * 0.5 - 18), Math.round(h * 0.56 - 68), 36, 68).fill({ color: 0x1b3325, alpha: 0.72 });
+  g.rect(Math.round(w * 0.5 - 50), Math.round(h * 0.56 - 72), 100, 16).fill({ color: MENU_COLORS.moss, alpha: 0.82 });
+  g.rect(Math.round(w * 0.5 - 36), Math.round(h * 0.56 - 82), 72, 12).fill({ color: MENU_COLORS.grass, alpha: 0.8 });
+}
+
+function clearMenuFocusables(): void {
+  menuInteractives.length = 0;
+  menuButtonHitRegions.length = 0;
+  menuBobbers.length = 0;
+  focusedMenuIndex = -1;
+  nicknameCaretGfx = null;
+}
+
+function menuInteractiveVisualKey(item: MenuInteractive): string {
+  return [
+    item.hover ? "h" : "",
+    item.focused ? "f" : "",
+    item.pressed ? "p" : "",
+    item.selected ? "s" : "",
+    item.disabled ? "d" : "",
+  ].join("|");
+}
+
+function drawMenuInteractiveState(item: MenuInteractive): void {
+  const g = item.stateGfx;
+  const key = menuInteractiveVisualKey(item);
+  if (key === item.visualKey) return;
+  item.visualKey = key;
+  g.clear();
+
+  const active = item.hover || item.focused;
+  if (item.selected) {
+    g.rect(-2, -2, item.width + 4, 4).fill(MENU_COLORS.gold);
+    g.rect(-2, item.height - 2, item.width + 4, 4).fill(MENU_COLORS.goldDark);
+    g.rect(-2, -2, 4, item.height + 4).fill(MENU_COLORS.gold);
+    g.rect(item.width - 2, -2, 4, item.height + 4).fill(MENU_COLORS.goldDark);
+    g.rect(item.width - 26, 10, 16, 16).fill(MENU_COLORS.ink);
+    g.rect(item.width - 23, 13, 10, 10).fill(MENU_COLORS.gold);
+    g.rect(item.width - 20, 17, 3, 5).fill(MENU_COLORS.ink);
+    g.rect(item.width - 17, 20, 7, 3).fill(MENU_COLORS.ink);
+  }
+
+  if (active && !item.disabled) {
+    const color = item.focused ? MENU_COLORS.rune : MENU_COLORS.mossBright;
+    g.rect(-5, -5, item.width + 10, 3).fill({ color, alpha: item.focused ? 0.95 : 0.72 });
+    g.rect(-5, item.height + 2, item.width + 10, 3).fill({ color, alpha: item.focused ? 0.82 : 0.56 });
+    g.rect(-5, -5, 3, item.height + 10).fill({ color, alpha: item.focused ? 0.9 : 0.6 });
+    g.rect(item.width + 2, -5, 3, item.height + 10).fill({ color, alpha: item.focused ? 0.9 : 0.6 });
+    for (let i = 0; i < 4; i++) {
+      const x = i % 2 === 0 ? -9 : item.width + 6;
+      const y = i < 2 ? 8 : item.height - 12;
+      g.rect(x, y, 5, 5).fill({ color, alpha: 0.9 });
+    }
+  }
+
+  if (item.pressed && !item.disabled) {
+    g.rect(5, 5, item.width - 10, item.height - 10).fill({ color: 0x000000, alpha: 0.18 });
+    g.rect(6, item.height - 9, item.width - 12, 3).fill({ color: MENU_COLORS.parchment, alpha: 0.22 });
+  }
+
+  if (item.disabled) {
+    g.rect(0, 0, item.width, item.height).fill({ color: 0x000000, alpha: 0.42 });
+  }
+}
+
+function setMenuInteractiveFocused(item: MenuInteractive | null): void {
+  const nextIndex = item ? menuInteractives.indexOf(item) : -1;
+  if (nextIndex === focusedMenuIndex) return;
+  const old = menuInteractives[focusedMenuIndex];
+  if (old) {
+    old.focused = false;
+    drawMenuInteractiveState(old);
+  }
+  focusedMenuIndex = nextIndex;
+  const next = menuInteractives[focusedMenuIndex];
+  if (next) {
+    next.focused = true;
+    drawMenuInteractiveState(next);
+  }
+  console.info("[BounceIO] Focus changed", { screen: appState, focusedIndex: focusedMenuIndex });
+}
+
+function captureMenuInteractiveBase(item: MenuInteractive): void {
+  if (item.baseX === null) item.baseX = item.button.x;
+  if (item.baseY === null) item.baseY = item.button.y;
+}
+
+function activateMenuInteractive(item: MenuInteractive): void {
+  if (item.disabled || gameStartInFlight) return;
+  const now = performance.now();
+  if (now < menuActivationLockedUntil) return;
+  menuActivationLockedUntil = now + 180;
+  item.clickPulseUntil = now + 130;
+  item.pressed = false;
+  drawMenuInteractiveState(item);
+  console.info("[BounceIO] Activated menu item", { screen: appState, id: item.id });
+  item.onClick();
+}
+
+function registerMenuInteractive(item: MenuInteractive): void {
+  menuInteractives.push(item);
+  menuButtonHitRegions.push({ button: item.button, width: item.width, height: item.height, item });
+  drawMenuInteractiveState(item);
+}
+
+function setMenuInteractivesDisabled(disabled: boolean): void {
+  for (const item of menuInteractives) {
+    item.disabled = disabled;
+    item.button.cursor = disabled ? "default" : "pointer";
+    item.button.eventMode = disabled ? "none" : "static";
+    drawMenuInteractiveState(item);
+  }
+}
+
+function finalizeMenuFocus(): void {
+  if (menuInteractives.length === 0) {
+    setMenuInteractiveFocused(null);
+    pendingFocusId = null;
+    return;
+  }
+  const byPendingId = pendingFocusId
+    ? menuInteractives.find((item) => item.id === pendingFocusId && !item.disabled)
+    : null;
+  const selected = menuInteractives.find((item) => item.selected && !item.disabled);
+  const first = menuInteractives.find((item) => !item.disabled) ?? null;
+  setMenuInteractiveFocused(byPendingId ?? selected ?? first);
+  pendingFocusId = null;
+}
+
+function menuItemCenter(item: MenuInteractive): { x: number; y: number } {
+  captureMenuInteractiveBase(item);
+  return {
+    x: (item.baseX ?? item.button.x) + item.width / 2,
+    y: (item.baseY ?? item.button.y) + item.height / 2,
+  };
+}
+
+function moveMenuFocus(direction: MenuDirection): void {
+  const current = menuInteractives[focusedMenuIndex] ?? menuInteractives.find((item) => !item.disabled);
+  if (!current) return;
+  const origin = menuItemCenter(current);
+  let best: MenuInteractive | null = null;
+  let bestScore = Infinity;
+
+  for (const candidate of menuInteractives) {
+    if (candidate === current || candidate.disabled) continue;
+    const center = menuItemCenter(candidate);
+    const dx = center.x - origin.x;
+    const dy = center.y - origin.y;
+    const inDirection =
+      (direction === "left" && dx < -4) ||
+      (direction === "right" && dx > 4) ||
+      (direction === "up" && dy < -4) ||
+      (direction === "down" && dy > 4);
+    if (!inDirection) continue;
+    const primary = direction === "left" || direction === "right" ? Math.abs(dx) : Math.abs(dy);
+    const secondary = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+    const score = primary * 10 + secondary;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  if (!best) {
+    const enabled = menuInteractives.filter((item) => !item.disabled);
+    const index = enabled.indexOf(current);
+    const delta = direction === "left" || direction === "up" ? -1 : 1;
+    best = enabled[(index + delta + enabled.length) % enabled.length] ?? null;
+  }
+
+  setMenuInteractiveFocused(best);
+}
+
+function goBackFromMenu(): void {
+  if (gameStartInFlight || appState === "connecting") return;
+  if (appState === "modeSelect") setAppState("mainMenu");
+  else if (appState === "skinSelect") setAppState("modeSelect");
+  else if (appState === "onlineNickname") setAppState("skinSelect");
+}
+
+function handleMenuKeyDown(e: KeyboardEvent): void {
+  if (appState === "game") return;
+  if (e.code === "ArrowUp" || e.code === "KeyW") {
+    e.preventDefault();
+    moveMenuFocus("up");
+  } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+    e.preventDefault();
+    moveMenuFocus("down");
+  } else if (e.code === "ArrowLeft" || e.code === "KeyA") {
+    e.preventDefault();
+    moveMenuFocus("left");
+  } else if (e.code === "ArrowRight" || e.code === "KeyD") {
+    e.preventDefault();
+    moveMenuFocus("right");
+  } else if (e.code === "Enter" || e.code === "Space") {
+    e.preventDefault();
+    const focused = menuInteractives[focusedMenuIndex];
+    if (focused) activateMenuInteractive(focused);
+  } else if (e.code === "Escape" || e.code === "Backspace") {
+    e.preventDefault();
+    goBackFromMenu();
+  }
+}
+
+function updateMenuDecorations(tSec: number): void {
+  for (const bobber of menuBobbers) {
+    if (bobber.baseY === null) bobber.baseY = bobber.target.y;
+    const step = Math.round(Math.sin(tSec * bobber.speed + bobber.phase) * bobber.amplitude);
+    bobber.target.y = bobber.baseY + step;
+  }
+
+  for (const item of menuInteractives) {
+    captureMenuInteractiveBase(item);
+    const now = performance.now();
+    const pulse = Math.max(0, item.clickPulseUntil - now) / 130;
+    const targetScale = item.disabled
+      ? 0.98
+      : item.pressed
+        ? 0.96
+        : item.focused || item.hover
+          ? 1.035
+          : item.selected
+            ? 1.015
+            : 1;
+    const pulseScale = pulse > 0 ? Math.sin(pulse * Math.PI) * 0.035 : 0;
+    const scale = targetScale + pulseScale;
+    const bob = item.bob || item.selected || item.focused
+      ? Math.round(Math.sin(tSec * 5 + menuInteractives.indexOf(item) * 0.7) * 2)
+      : 0;
+    const baseX = item.baseX ?? item.button.x;
+    const baseY = item.baseY ?? item.button.y;
+    item.button.scale.set(scale);
+    item.button.x = Math.round(baseX + item.width * (1 - scale) / 2);
+    item.button.y = Math.round(baseY + item.height * (1 - scale) / 2 + bob);
+    item.button.alpha = item.disabled ? 0.58 : item.hover || item.focused ? 1 : 0.96;
+
+    const sparkleOn = (item.selected || item.focused) && !item.disabled;
+    item.sparkleLayer.visible = sparkleOn;
+    if (sparkleOn) {
+      for (let i = 0; i < item.sparkles.length; i++) {
+        const sp = item.sparkles[i]!;
+        const edge = i % 4;
+        const travel = (Math.floor(tSec * 8 + i * 3) % 12) / 11;
+        sp.alpha = 0.28 + ((Math.floor(tSec * 6 + i) % 2) * 0.55);
+        sp.x = edge < 2 ? Math.round(travel * item.width) : (edge === 2 ? -8 : item.width + 6);
+        sp.y = edge >= 2 ? Math.round(travel * item.height) : (edge === 0 ? -8 : item.height + 6);
+      }
+    }
+  }
+
+  if (nicknameCaretGfx && nicknameInputFrame && appState === "onlineNickname") {
+    const typedWidth = Math.min(nicknameInputFrame.width - 10, nicknameInput.value.length * 9);
+    nicknameCaretGfx.x = nicknameInputFrame.x + 4 + typedWidth;
+    nicknameCaretGfx.y = nicknameInputFrame.y + 4;
+    nicknameCaretGfx.alpha = Math.floor(tSec * 2) % 2 === 0 ? 1 : 0.18;
+  }
+}
+
+function makePixelButton(
+  label: string,
+  w: number,
+  h: number,
+  onClick: () => void,
+  selected = false,
+  options: MenuInteractiveOptions = {},
+): Container {
+  const btn = new Container();
+  const bg = new Graphics();
+  btn.sortableChildren = true;
+  drawPixelPanel(bg, 0, 0, w, h, selected);
+  bg.cacheAsTexture(PIXEL_CACHE_OPTIONS);
+  const txt = menuText(label, Math.min(18, Math.max(12, Math.floor(h * 0.32))), selected ? MENU_COLORS.gold : MENU_COLORS.parchment, "900");
+  txt.anchor.set(0.5);
+  txt.x = Math.round(w / 2);
+  txt.y = Math.round(h / 2);
+  const stateGfx = new Graphics();
+  const sparkleLayer = new Container();
+  const sparkles: Graphics[] = [];
+  stateGfx.zIndex = 20;
+  sparkleLayer.zIndex = 30;
+  for (let i = 0; i < 6; i++) {
+    const sp = new Graphics();
+    sp.rect(0, 0, i % 2 === 0 ? 4 : 3, i % 2 === 0 ? 4 : 3).fill(i % 2 === 0 ? MENU_COLORS.gold : MENU_COLORS.rune);
+    sparkles.push(sp);
+    sparkleLayer.addChild(sp);
+  }
+  sparkleLayer.visible = false;
+  btn.addChild(bg, txt, stateGfx, sparkleLayer);
+  btn.eventMode = "static";
+  btn.cursor = "pointer";
+  btn.hitArea = new Rectangle(0, 0, w, h);
+  const item: MenuInteractive = {
+    id: options.id ?? (label.trim().toLowerCase().replace(/\s+/g, "-") || `item-${menuInteractives.length}`),
+    button: btn,
+    width: w,
+    height: h,
+    onClick,
+    stateGfx,
+    sparkleLayer,
+    sparkles,
+    hover: false,
+    focused: false,
+    pressed: false,
+    selected: options.selected ?? selected,
+    disabled: !!options.disabled,
+    bob: !!options.bob,
+    baseX: null,
+    baseY: null,
+    clickPulseUntil: 0,
+    visualKey: "",
+  };
+  btn.on("pointerover", () => {
+    if (item.disabled) return;
+    item.hover = true;
+    setMenuInteractiveFocused(item);
+    drawMenuInteractiveState(item);
+  });
+  btn.on("pointerout", () => {
+    item.hover = false;
+    item.pressed = false;
+    drawMenuInteractiveState(item);
+  });
+  btn.on("pointerdown", () => {
+    if (item.disabled || gameStartInFlight) return;
+    item.pressed = true;
+    drawMenuInteractiveState(item);
+  });
+  btn.on("pointerup", () => {
+    item.pressed = false;
+    drawMenuInteractiveState(item);
+  });
+  btn.on("pointerupoutside", () => {
+    item.pressed = false;
+    drawMenuInteractiveState(item);
+  });
+  btn.on("pointertap", (event) => {
+    event.stopPropagation();
+    activateMenuInteractive(item);
+  });
+  if (item.disabled) {
+    btn.eventMode = "none";
+    btn.cursor = "default";
+  }
+  btn.alpha = item.disabled ? 0.58 : 0.96;
+  registerMenuInteractive(item);
+  return btn;
+}
+
+function setNicknameInputFrame(x: number, y: number, width: number, height: number): void {
+  nicknameInputFrame = { x, y, width, height };
+  syncNicknameInput();
+}
+
+function syncNicknameInput(): void {
+  if (appState !== "onlineNickname" || !nicknameInputFrame) {
+    nicknameInput.style.display = "none";
+    return;
+  }
+  const canvasRect = pixi.canvas.getBoundingClientRect();
+  const sx = canvasRect.width / Math.max(1, pixi.screen.width);
+  const sy = canvasRect.height / Math.max(1, pixi.screen.height);
+  nicknameInput.style.display = "block";
+  nicknameInput.style.left = `${canvasRect.left + nicknameInputFrame.x * sx}px`;
+  nicknameInput.style.top = `${canvasRect.top + nicknameInputFrame.y * sy}px`;
+  nicknameInput.style.width = `${nicknameInputFrame.width * sx}px`;
+  nicknameInput.style.height = `${nicknameInputFrame.height * sy}px`;
+}
+
+function validateNickname(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Nickname is required.";
+  if (trimmed.length < 3 || trimmed.length > 16) return "Use 3-16 characters.";
+  if (/[\x00-\x1f\x7f]/.test(trimmed)) return "Control characters are not allowed.";
+  if (!/^[\p{L}\p{N}_ -]+$/u.test(trimmed)) return "Use letters, numbers, spaces, _ or -.";
+  return null;
+}
+
+function renderMainMenu(sw: number, sh: number): void {
+  const title = makeBounceTitle(Math.max(34, Math.min(76, Math.floor(sw / 10))));
+  title.x = Math.round(sw / 2);
+  title.y = Math.round(sh * 0.24);
+  menuBobbers.push({ target: title, baseY: null, amplitude: 3, speed: 3, phase: 0 });
+  const subtitle = menuText("Race upward. Collect coins. Kick rivals off ledges.", 13, 0xd7f0cc, "700");
+  subtitle.anchor.set(0.5);
+  subtitle.x = title.x;
+  subtitle.y = title.y + 58;
+  const island = new Graphics();
+  drawMenuIsland(island, Math.round(sw / 2 - 160), Math.round(sh * 0.34), 320, 76);
+  const play = makePixelButton("  PLAY", 230, 58, () => {
+    console.info("[BounceIO] Play clicked");
+    setAppState("modeSelect");
+  }, true, { id: "play", bob: true });
+  const playIcon = new Graphics();
+  drawSmallPlayIcon(playIcon, 38, 20, MENU_COLORS.mossBright);
+  play.addChild(playIcon);
+  play.x = Math.round(sw / 2 - 115);
+  play.y = Math.round(sh * 0.54);
+  const version = menuText(`v${GAME_VERSION}`, 9, 0xd7f0cc, "700");
+  version.x = 18;
+  version.y = sh - 28;
+  menuLayer.addChild(island, title, subtitle, play, version);
+}
+
+function renderModeSelect(sw: number, sh: number): void {
+  const title = menuText("Choose Mode", 30, MENU_COLORS.gold, "900");
+  title.anchor.set(0.5);
+  title.x = Math.round(sw / 2);
+  title.y = Math.round(sh * 0.18);
+  const cardW = Math.min(240, Math.max(170, Math.floor(sw * 0.34)));
+  const gap = 18;
+  const startX = Math.round(sw / 2 - cardW - gap / 2);
+  const y = Math.round(sh * 0.36);
+  const local = makeModeCard("Local", "Play offline", cardW, 178, () => {
+    selectedMode = "local";
+    console.info("[BounceIO] Mode selected", selectedMode);
+    setAppState("skinSelect");
+  }, "local");
+  const online = makeModeCard("Online", "Compete online", cardW, 178, () => {
+    selectedMode = "online";
+    console.info("[BounceIO] Mode selected", selectedMode);
+    setAppState("skinSelect");
+  }, "online");
+  local.x = startX;
+  online.x = startX + cardW + gap;
+  if (sw < 560) {
+    local.x = Math.round(sw / 2 - cardW / 2);
+    online.x = local.x;
+    online.y = y + 196;
+  }
+  local.y = y;
+  online.y ||= y;
+  const back = makePixelButton("BACK", 112, 40, () => setAppState("mainMenu"), false, { id: "back" });
+  back.x = 18;
+  back.y = 18;
+  menuLayer.addChild(title, local, online, back);
+}
+
+function makeModeCard(title: string, body: string, w: number, h: number, onClick: () => void, mode: GameMode): Container {
+  const card = makePixelButton("", w, h, onClick, mode === selectedMode, { id: `mode-${mode}`, selected: mode === selectedMode, bob: mode === selectedMode });
+  const titleText = menuText(title, 22, MENU_COLORS.gold, "900");
+  titleText.anchor.set(0.5);
+  titleText.x = Math.round(w / 2);
+  titleText.y = 34;
+  const bodyText = menuText(body, 12, 0xd7f0cc, "700");
+  bodyText.anchor.set(0.5);
+  bodyText.x = titleText.x;
+  bodyText.y = 142;
+  const art = new Graphics();
+  drawMenuIsland(art, Math.round(w / 2 - 62), 91, 124, 40);
+  if (mode === "online") {
+    art.rect(Math.round(w / 2 - 13), 66, 26, 22).fill(MENU_COLORS.stone);
+    art.rect(Math.round(w / 2 - 8), 56, 16, 14).fill(0x293a47);
+    art.circle(Math.round(w / 2), 55, 13).fill(0x432a75);
+    art.circle(Math.round(w / 2), 55, 7).fill(MENU_COLORS.rune);
+    art.circle(Math.round(w / 2), 55, 3).fill(0xf8f0ff);
+  } else {
+    art.rect(Math.round(w / 2 - 10), 57, 20, 24).fill(0x1d1b22);
+    art.rect(Math.round(w / 2 - 8), 45, 16, 13).fill(0xffd090);
+    art.rect(Math.round(w / 2 - 11), 39, 22, 9).fill(MENU_COLORS.gold);
+    art.rect(Math.round(w / 2 - 7), 34, 4, 8).fill(MENU_COLORS.gold);
+    art.rect(Math.round(w / 2 - 1), 31, 4, 11).fill(MENU_COLORS.gold);
+    art.rect(Math.round(w / 2 + 5), 34, 4, 8).fill(MENU_COLORS.gold);
+  }
+  card.addChild(titleText, art, bodyText);
+  return card;
+}
+
+function renderSkinSelect(sw: number, sh: number): void {
+  const title = menuText("Select Skin", 29, MENU_COLORS.gold, "900");
+  title.anchor.set(0.5);
+  title.x = Math.round(sw / 2);
+  title.y = Math.round(sh * 0.14);
+  const cols = sw < 620 ? 2 : 4;
+  const cardW = sw < 620 ? 116 : 130;
+  const cardH = 118;
+  const gap = 12;
+  const rows = Math.ceil(CHARACTER_IDS.length / cols);
+  const gridW = cols * cardW + (cols - 1) * gap;
+  const startX = Math.round(sw / 2 - gridW / 2);
+  const startY = Math.round(sh * 0.24);
+  const cards: Container[] = [];
+  CHARACTER_IDS.forEach((skinId, index) => {
+    const card = makeSkinCard(skinId, cardW, cardH);
+    card.x = startX + (index % cols) * (cardW + gap);
+    card.y = startY + Math.floor(index / cols) * (cardH + gap);
+    cards.push(card);
+  });
+  const continueText = selectedMode === "online" ? "NICKNAME" : "START";
+  const cont = makePixelButton(continueText, 172, 48, () => {
+    if (selectedMode === "online") setAppState("onlineNickname");
+    else void enterGameScene({ mode: "local", skinId: currentSkinId() });
+  }, false, { id: selectedMode === "online" ? "nickname" : "start", disabled: gameStartInFlight });
+  cont.x = Math.round(sw / 2 - 86);
+  cont.y = Math.min(sh - 70, startY + rows * (cardH + gap) + 16);
+  const back = makePixelButton("BACK", 112, 40, () => setAppState("modeSelect"), false, { id: "back", disabled: gameStartInFlight });
+  back.x = 18;
+  back.y = 18;
+  menuLayer.addChild(title, ...cards, cont, back);
+}
+
+function makeSkinCard(skinId: CharacterId, w: number, h: number): Container {
+  const selected = skinId === selectedSkinId;
+  const card = makePixelButton("", w, h, () => setSelectedSkin(skinId), selected, { id: `skin-${skinId}`, selected, bob: selected });
+  const island = new Graphics();
+  drawMenuIsland(island, Math.round(w / 2 - 44), 62, 88, 30);
+  const sprite = makeCharacterSprite(skinId);
+  sprite.anchor.set(0.5, 1);
+  sprite.x = Math.round(w / 2);
+  sprite.y = 78;
+  sprite.scale.set(1.22);
+  sprite.alpha = hasCharacterAnimationAssets(skinId) ? 1 : 0.85;
+  const label = menuText(skinId.replace("character", "Skin "), 12, selected ? MENU_COLORS.gold : 0xd7f0cc, "900");
+  label.anchor.set(0.5);
+  label.x = Math.round(w / 2);
+  label.y = h - 26;
+  card.addChild(island, sprite, label);
+  return card;
+}
+
+function renderOnlineNickname(sw: number, sh: number): void {
+  const panelW = Math.min(440, sw - 34);
+  const panelH = 250;
+  const px = Math.round(sw / 2 - panelW / 2);
+  const py = Math.round(sh / 2 - panelH / 2);
+  const panel = new Graphics();
+  drawPixelPanel(panel, px, py, panelW, panelH);
+  const title = menuText("Online Player", 28, MENU_COLORS.gold, "900");
+  title.anchor.set(0.5);
+  title.x = Math.round(sw / 2);
+  title.y = py + 42;
+  const preview = new Graphics();
+  drawMenuIsland(preview, px + panelW - 102, py + 61, 70, 28);
+  const sprite = makeCharacterSprite(currentSkinId());
+  sprite.anchor.set(0.5, 1);
+  sprite.x = px + panelW - 67;
+  sprite.y = py + 80;
+  sprite.scale.set(0.92);
+  const label = menuText("Nickname", 12, 0xd7f0cc, "900");
+  label.x = px + 44;
+  label.y = py + 82;
+  const inputFrame = new Graphics();
+  const inputX = px + 42;
+  const inputY = py + 108;
+  const inputW = panelW - 84;
+  const inputH = 42;
+  drawPixelPanel(inputFrame, inputX, inputY, inputW, inputH, true);
+  setNicknameInputFrame(inputX + 8, inputY + 7, inputW - 16, inputH - 14);
+  if (nicknameInput.value !== nickname) nicknameInput.value = nickname;
+  nicknameCaretGfx = new Graphics();
+  nicknameCaretGfx.rect(0, 0, 2, inputH - 16).fill(MENU_COLORS.ink);
+  const validation = menuErrorText ? menuText(menuErrorText, 11, 0xffb0a6, "700") : null;
+  if (validation) {
+    validation.anchor.set(0.5);
+    validation.x = Math.round(sw / 2);
+    validation.y = py + 166;
+  }
+  const join = makePixelButton("JOIN GAME", 172, 44, () => {
+    const err = validateNickname(nicknameInput.value);
+    if (err) {
+      menuErrorText = err;
+      menuDirty = true;
+      return;
+    }
+    void joinOnlineGame(nicknameInput.value.trim());
+  }, false, { id: "join-game", disabled: gameStartInFlight });
+  join.x = Math.round(sw / 2 - 86);
+  join.y = py + 186;
+  const back = makePixelButton("BACK", 112, 40, () => setAppState("skinSelect"), false, { id: "back", disabled: gameStartInFlight });
+  back.x = 18;
+  back.y = 18;
+  const hint = menuText("3 - 16 characters", 10, 0xbfd7d9, "700");
+  hint.anchor.set(0.5);
+  hint.x = Math.round(sw / 2);
+  hint.y = inputY + inputH + 22;
+  menuLayer.addChild(panel, inputFrame, title, preview, sprite, label, hint, nicknameCaretGfx, join, back);
+  if (validation) menuLayer.addChild(validation);
+}
+
+function renderConnecting(sw: number, sh: number): void {
+  const panelW = Math.min(360, sw - 34);
+  const panelH = 230;
+  const px = Math.round(sw / 2 - panelW / 2);
+  const py = Math.round(sh / 2 - panelH / 2);
+  const panel = new Graphics();
+  drawPixelPanel(panel, px, py, panelW, panelH);
+  drawMenuIsland(panel, px + 54, py + 120, panelW - 108, 70);
+  panel.rect(px + panelW / 2 - 58, py + 88, 42, 42).fill(MENU_COLORS.stone);
+  panel.rect(px + panelW / 2 - 48, py + 64, 22, 28).fill(0x293a47);
+  panel.circle(px + panelW / 2 - 37, py + 63, 18).fill(0x432a75);
+  panel.circle(px + panelW / 2 - 37, py + 63, 9).fill(MENU_COLORS.rune);
+  const sprite = makeCharacterSprite(currentSkinId());
+  sprite.anchor.set(0.5, 1);
+  sprite.x = Math.round(px + panelW / 2 - 90);
+  sprite.y = py + 132;
+  sprite.scale.set(1.05);
+  const label = menuText(connectingMessage, 22, MENU_COLORS.gold, "900");
+  label.anchor.set(0.5);
+  label.x = Math.round(sw / 2);
+  label.y = py + 46;
+  connectingDotsText = menuText("", 20, MENU_COLORS.rune, "900");
+  connectingDotsText.anchor.set(0.5);
+  connectingDotsText.x = Math.round(sw / 2);
+  connectingDotsText.y = py + 176;
+  menuLayer.addChild(panel, sprite, label, connectingDotsText);
+}
+
+function renderMenu(): void {
+  if (!menuDirty) {
+    syncNicknameInput();
+    return;
+  }
+  menuDirty = false;
+  connectingDotsText = null;
+  pendingFocusId = menuInteractives[focusedMenuIndex]?.id ?? pendingFocusId;
+  clearMenuFocusables();
+  menuLayer.removeChildren().forEach((child) => child.destroy({ children: true }));
+  const sw = pixi.screen.width;
+  const sh = pixi.screen.height;
+  const bg = new Graphics();
+  drawMenuBackdrop(bg, sw, sh);
+  menuLayer.addChild(bg);
+  if (appState === "mainMenu") renderMainMenu(sw, sh);
+  else if (appState === "modeSelect") renderModeSelect(sw, sh);
+  else if (appState === "skinSelect") renderSkinSelect(sw, sh);
+  else if (appState === "onlineNickname") renderOnlineNickname(sw, sh);
+  else if (appState === "connecting") renderConnecting(sw, sh);
+  finalizeMenuFocus();
+  syncNicknameInput();
+}
+
+function updateMenu(tSec: number): void {
+  renderMenu();
+  if (connectingDotsText) connectingDotsText.text = ".".repeat((Math.floor(tSec * 2) % 3) + 1);
+  updateMenuDecorations(tSec);
+}
+
+function handleMenuCanvasPointerDown(event: PointerEvent): void {
+  if (appState === "game" || menuButtonHitRegions.length === 0) return;
+  const rect = pixi.canvas.getBoundingClientRect();
+  const screenX = (event.clientX - rect.left) * pixi.screen.width / Math.max(1, rect.width);
+  const screenY = (event.clientY - rect.top) * pixi.screen.height / Math.max(1, rect.height);
+  const screenPoint = new Point(screenX, screenY);
+  for (let i = menuButtonHitRegions.length - 1; i >= 0; i--) {
+    const region = menuButtonHitRegions[i]!;
+    if (region.button.destroyed || !region.button.visible || !region.button.parent) continue;
+    const local = region.button.toLocal(screenPoint);
+    if (local.x >= 0 && local.x <= region.width && local.y >= 0 && local.y <= region.height) {
+      event.preventDefault();
+      setMenuInteractiveFocused(region.item);
+      activateMenuInteractive(region.item);
+      return;
+    }
+  }
+}
+
+async function joinOnlineGame(value: string): Promise<void> {
+  try {
+    await enterGameScene({ mode: "online", nickname: value.trim(), skinId: currentSkinId() });
+  } catch (err) {
+    menuErrorText = err instanceof Error ? err.message : "Could not connect.";
+    setAppState("onlineNickname");
+  }
+}
+
 // ── Networking ────────────────────────────────────────────────────────────────
 
 function byteLength(value: string): number {
@@ -6406,19 +7464,52 @@ function recordSnapshotDelay(serverTime: number): void {
   netMetrics.lastSnapshotDelayMs = delay;
 }
 
-function connectRoom(name: string): void {
-  if (ws && ws.readyState === WebSocket.CONNECTING) return;
+function disconnectNetwork(): void {
+  reconnectEnabled = false;
+  if (reconnTimeout) {
+    clearTimeout(reconnTimeout);
+    reconnTimeout = null;
+  }
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+    ws.close();
+  }
+  ws = null;
+}
+
+function resolveConnect(): void {
+  connectResolve?.();
+  connectResolve = null;
+  connectReject = null;
+}
+
+function rejectConnect(message: string): void {
+  connectReject?.(new Error(message));
+  connectResolve = null;
+  connectReject = null;
+}
+
+function connectRoom(name: string, skinId: CharacterId, preserveSession = false): Promise<void> {
+  if (ws && ws.readyState === WebSocket.CONNECTING) return Promise.reject(new Error("Connection already in progress."));
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+  reconnectEnabled = true;
+  if (!preserveSession) {
+    resetGameSession("online");
+    sessionToken = null;
+  }
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const configuredUrl = import.meta.env.VITE_WS_URL?.trim();
   const wsUrl = new URL(configuredUrl || `${proto}://${location.host}/ws`);
   wsUrl.searchParams.set("room", "demo");
   ws = new WebSocket(wsUrl.toString());
 
+  const connectPromise = new Promise<void>((resolve, reject) => {
+    connectResolve = resolve;
+    connectReject = reject;
+  });
+
   ws.addEventListener("open", () => {
     reconnDelay = 1000;
-    netStatus.textContent = "Connecting…";
-    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", token: sessionToken ?? undefined });
+    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", skinId, token: sessionToken ?? undefined });
     lastPingTime = Date.now();
     sendWsMessage({ type: "ping", clientTime: lastPingTime });
   });
@@ -6435,25 +7526,32 @@ function connectRoom(name: string): void {
         // Bootstrap clock from welcome only once; pong NTP updates refine it from then on.
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
-        // Store our own sanitized name so the scoreboard shows it correctly.
+        // Store our own sanitized name so the leaderboard shows it correctly.
         playerNames.set(localPlayerId, parsed.name);
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
           clearWorldChunks();
           for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy);
+        } else if (loadedChunks.size === 0) {
+          for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
         }
-        netStatus.textContent = `Room: demo | ${localPlayerId.slice(0, 6)}`;
-        { const { x, y } = getSpawnPos(); localPlayer = createPlayerState(localPlayerId, x, y); }
+        { const { x, y } = getSpawnPos(); localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), skinId); }
         serverTick = 0; lastSnapshotSeq = -1;
         snapLocalVisualToSimulation();
         resetLocalPrediction(); cameraSnap = true;
+        console.info("[BounceIO] Joined online game");
+        setAppState("game");
+        resolveConnect();
         break;
       case "resumed":
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
-        netStatus.textContent = "Reconnected.";
         serverTick = 0; lastSnapshotSeq = -1;
-        localPlayer = clonePlayerState(parsed.playerState); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
+        localPlayer = applySkinId(clonePlayerState(parsed.playerState), skinForPlayer(parsed.playerState, skinId)); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
+        if (loadedChunks.size === 0) for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
+        console.info("[BounceIO] Joined online game");
+        setAppState("game");
+        resolveConnect();
         break;
       case "snapshot":
         if (parsed.snapshotSeq <= lastSnapshotSeq || parsed.tick <= serverTick) {
@@ -6566,16 +7664,36 @@ function connectRoom(name: string): void {
         if (parsed.phase === "countdown") pushNotification("GET READY!", PAL.uiParchment);
         else if (parsed.phase === "playing") pushNotification("GO!", PAL.coinGold);
         break;
+      case "error":
+        rejectConnect(parsed.message || parsed.code || "Server rejected the join.");
+        break;
     }
   });
 
-  ws.addEventListener("close", () => { netStatus.textContent = `Disconnected. Retrying in ${reconnDelay / 1000}s…`; schedReconn(name); });
-  ws.addEventListener("error", () => { netStatus.textContent = "Server unavailable. Local mode active."; });
+  ws.addEventListener("close", () => {
+    if (appState !== "game") {
+      rejectConnect("Could not connect to the multiplayer server.");
+      return;
+    }
+    if (reconnectEnabled) {
+      pushNotification(`Disconnected. Retrying in ${reconnDelay / 1000}s`, PAL.uiGray);
+      schedReconn(name, skinId);
+    }
+  });
+  ws.addEventListener("error", () => {
+    if (appState !== "game") rejectConnect("Server unavailable. Check that the multiplayer server is running.");
+  });
+
+  return connectPromise;
 }
 
-function schedReconn(name: string): void {
+function schedReconn(name: string, skinId: CharacterId): void {
   if (reconnTimeout) return;
-  reconnTimeout = setTimeout(() => { reconnTimeout = null; reconnDelay = Math.min(reconnDelay * 2, 30_000); connectRoom(name); }, reconnDelay);
+  reconnTimeout = setTimeout(() => {
+    reconnTimeout = null;
+    reconnDelay = Math.min(reconnDelay * 2, 30_000);
+    void connectRoom(name, skinId, true);
+  }, reconnDelay);
 }
 
 function sendInput(inp: PlayerInput): void {
@@ -6780,9 +7898,10 @@ function drawActors(): void {
 
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
-    const characterId = characterForRemote(e.colorIndex);
+    const characterId = skinForPlayer(e.current, characterForRemote(e.colorIndex));
     e.sprite.visible = hasAsset("playerExplorer") && !(e.current.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
     if (hasCharacterAnimationAssets(characterId)) e.sprite.texture = playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs));
+    else e.sprite.texture = characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
     e.sprite.x = Math.round(e.current.position.x + PLAYER_WIDTH / 2);
     e.sprite.y = Math.round(e.current.position.y + PLAYER_HEIGHT + 2);
     e.sprite.scale.x = (e.current.facing < 0 ? -1 : 1) * playerSpriteScale();
@@ -6801,7 +7920,9 @@ function drawActors(): void {
     const renderPos = getLocalRenderPosition();
     const drawPosition = renderPos ?? localPlayer.position;
     localSprite.visible = hasAsset("playerExplorer") && !(localPlayer.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
-    if (hasPlayerAnimationAssets()) localSprite.texture = playerAnimationTexture(localPlayer, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(localPlayer, elapsedMs));
+    const localSkinId = skinForPlayer(localPlayer);
+    if (hasCharacterAnimationAssets(localSkinId)) localSprite.texture = playerAnimationTexture(localPlayer, elapsedMs, localSkinId) ?? assetTexture(fallbackPlayerAnimationAsset(localPlayer, elapsedMs));
+    else localSprite.texture = characterRigs[localSkinId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
     localSprite.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2);
     localSprite.y = Math.round(drawPosition.y + PLAYER_HEIGHT + 2);
     localSprite.scale.x = (localPlayer.facing < 0 ? -1 : 1) * playerSpriteScale();
@@ -6819,9 +7940,35 @@ function drawActors(): void {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 prewarmParticlePools();
-for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
-respawnLocal();
-joinBtn.addEventListener("click", () => connectRoom(nameInput.value.trim() || "Explorer"));
+nicknameInput.value = nickname;
+pixi.canvas.addEventListener("pointerdown", handleMenuCanvasPointerDown);
+nicknameInput.addEventListener("input", () => {
+  nickname = nicknameInput.value;
+  if (menuErrorText) {
+    menuErrorText = "";
+    menuDirty = true;
+  }
+});
+nicknameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && appState === "onlineNickname") {
+    setAppState("skinSelect");
+  } else if (e.key === "Enter" && appState === "onlineNickname") {
+    const err = validateNickname(nicknameInput.value);
+    if (err) {
+      menuErrorText = err;
+      menuDirty = true;
+      return;
+    }
+    void joinOnlineGame(nicknameInput.value.trim());
+  }
+  e.stopPropagation();
+});
+window.addEventListener("resize", () => {
+  menuDirty = true;
+  lastHudLayoutKey = "";
+  syncNicknameInput();
+});
+setAppState("mainMenu");
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
 
@@ -6832,6 +7979,10 @@ pixi.ticker.add((ticker) => {
   const dt   = Math.min(dtMs / 1000, 1 / 30);
   elapsedMs += dtMs;
   const tSec  = elapsedMs / 1000;
+  if (appState !== "game") {
+    updateMenu(tSec);
+    return;
+  }
   const scale = getScale();
 
   const renderPrepStart = performance.now();

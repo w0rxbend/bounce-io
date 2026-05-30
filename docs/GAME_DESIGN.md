@@ -1,4 +1,4 @@
-# Skybound Relics — Game Design
+# Bounce IO — Game Design
 
 ## Pillars
 

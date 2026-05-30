@@ -40,7 +40,7 @@ func main() {
 	}
 
 	go func() {
-		log.Info("Skybound Relics Go server listening", "addr", srv.Addr(), "tickRate", cfg.TickRate, "snapshotRate", cfg.SnapshotRate)
+		log.Info("Bounce IO Go server listening", "addr", srv.Addr(), "tickRate", cfg.TickRate, "snapshotRate", cfg.SnapshotRate)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server failed", "error", err)
 			os.Exit(1)
