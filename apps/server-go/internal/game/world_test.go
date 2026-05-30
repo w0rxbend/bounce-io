@@ -108,6 +108,34 @@ func TestKickHitDamagesTargetAndEmitsEvent(t *testing.T) {
 	}
 }
 
+func TestDeathRespawnEmitsClientCompatibleEvents(t *testing.T) {
+	seed := HashString("demo")
+	state := &roomState{
+		room:          &Room{seed: seed},
+		pendingEvents: []MatchEvent{},
+		sessions: map[string]*session{
+			"p1": {
+				playerID:  "p1",
+				connected: true,
+				player:    CreatePlayerState("p1", 100, 100),
+			},
+		},
+	}
+	state.sessions["p1"].player.Health = 0
+
+	state.handleDeaths()
+
+	player := state.sessions["p1"].player
+	if player.Health != player.MaxHealth {
+		t.Fatalf("expected respawned player to be healed, got %d/%d", player.Health, player.MaxHealth)
+	}
+	if len(state.pendingEvents) != 2 ||
+		state.pendingEvents[0]["type"] != "PLAYER_DIED" ||
+		state.pendingEvents[1]["type"] != "PLAYER_RESPAWNED" {
+		t.Fatalf("expected death and respawn events, got %#v", state.pendingEvents)
+	}
+}
+
 func hasReachableLowerPlatform(target PlatformSpan, platforms []PlatformSpan) bool {
 	for _, lower := range platforms {
 		verticalGap := lower.Y - target.Y
