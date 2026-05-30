@@ -125,9 +125,7 @@ const VISUAL_RETAIN_MARGIN_PX = CHUNK_PIXEL_HEIGHT * 1.25;
 const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 
 const ASSET_URLS = {
-  aiForestRuinsPanorama: "/assets/environment/backgrounds/forest_ruins_panorama.png",
   bgCloudBank: "/assets/environment/backgrounds/cloud_bank.png",
-  bgSkyArches: "/assets/environment/backgrounds/sky_arches.png",
   bush: "/assets/environment/vegetation/bush_1.png",
   cloud: "/assets/environment/backgrounds/cloud.png",
   cloudSmall: "/assets/environment/backgrounds/cloud_small.png",
@@ -234,8 +232,6 @@ const ASSET_URLS = {
   wildflowerMixed: "/assets/environment/flora/wildflower_mixed_1.png",
   wildflowerPink: "/assets/environment/flora/wildflower_pink_1.png",
   wildflowerYellow: "/assets/environment/flora/wildflower_yellow_1.png",
-  snowTree: "/assets/environment/snowTrees/snow_pine.png",
-  bentPine: "/assets/environment/snowTrees/frosted_bent_pine.png",
   fallingIcicle: "/assets/environment/hazards/falling_icicle_1.png",
   fallingIciclesCluster: "/assets/environment/hazards/falling_icicles_cluster_1.png",
   stoneSpikes: "/assets/environment/hazards/stone_spikes_1.png",
@@ -372,6 +368,11 @@ const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>(
 const PROCEDURAL_MOUNTAIN_FOLDERS = new Set(["environment/midMountains"]);
 const PROCEDURAL_PLATFORM_FOLDERS = new Set(["environment/platforms", "environment/platformVariants"]);
 const PROCEDURAL_GAMEPLAY_PROP_FOLDERS = new Set(["environment/relicShrines"]);
+const UNUSED_MANIFEST_ASSET_FOLDERS = new Set(["environment/pineTrees", "environment/snowTrees"]);
+const UNUSED_MANIFEST_ASSETS = new Set([
+  "environment/backgrounds/forest_ruins_panorama.png",
+  "environment/backgrounds/sky_arches.png",
+]);
 const MAX_PIXEL_PARTICLES = 1_200;
 const LOW_FPS_PIXEL_PARTICLES = 700;
 const PRESSURE_PIXEL_PARTICLES = 320;
@@ -523,8 +524,10 @@ const BACKGROUND_LIFE_CONFIG: BackgroundLifeConfig = {
   quality: initialFixedPerformanceProfile,
 };
 
-function isProceduralManifestAsset(relPath: string): boolean {
+function shouldSkipManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
+  if (UNUSED_MANIFEST_ASSET_FOLDERS.has(folder)) return true;
+  if (UNUSED_MANIFEST_ASSETS.has(relPath)) return true;
   if (PROCEDURAL_MOUNTAIN_FOLDERS.has(folder)) return true;
   if (PROCEDURAL_GAMEPLAY_PROP_FOLDERS.has(folder)) return true;
   if (relPath === "environment/effects/jump_pad_1.png") return true;
@@ -703,7 +706,7 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
   if (manifest) {
     await Promise.all(Object.entries(manifest.assets).map(async ([relPath, meta]) => {
       try {
-        if (isProceduralManifestAsset(relPath)) return;
+        if (shouldSkipManifestAsset(relPath)) return;
         const texture = await Assets.load<Texture>(meta.png);
         const pathAlias = pathAliasForAsset(relPath);
         loaded[relPath] = texture;
@@ -3432,16 +3435,16 @@ function biomeDecorationFolders(biome: BiomeId): string[] {
     "environment/particleEffects",
   ];
   if (biome === "pineValley") {
-    return [...common, "environment/flora", "environment/vegetation", "environment/pineTrees", "environment/mossTiles", "environment/terrainTiles"];
+    return [...common, "environment/flora", "environment/vegetation", "environment/mossTiles", "environment/terrainTiles"];
   }
   if (biome === "cloudRidge") {
-    return [...common, "environment/flora", "environment/vegetation", "environment/pineTrees", "environment/ruinTiles", "environment/clouds", "environment/terrainTiles"];
+    return [...common, "environment/flora", "environment/vegetation", "environment/ruinTiles", "environment/clouds", "environment/terrainTiles"];
   }
   if (biome === "snowfallCliffs") {
-    return [...common, "environment/flora", "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles", "environment/clouds"];
+    return [...common, "environment/flora", "environment/snowTiles", "environment/ruinTiles", "environment/clouds"];
   }
   if (biome === "frozenSpires") {
-    return [...common, "environment/flora", "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles"];
+    return [...common, "environment/flora", "environment/snowTiles", "environment/ruinTiles"];
   }
   return [...common, "environment/flora", "environment/relicShrines", "environment/snowTiles", "environment/ruinTiles", "environment/terrainTiles"];
 }
@@ -3978,16 +3981,16 @@ function platformSeed(chunk: GeneratedChunk, platform: GeneratedChunk["platforms
 
 function biomePropFolders(biome: BiomeId): string[] {
   if (biome === "pineValley") {
-    return ["environment/pineTrees", "environment/vegetation", "environment/flora", "environment/rocks", "environment/lights", "environment/decorations"];
+    return ["environment/vegetation", "environment/flora", "environment/rocks", "environment/lights", "environment/decorations"];
   }
   if (biome === "cloudRidge") {
-    return ["environment/pineTrees", "environment/clouds", "environment/structures", "environment/decorations", "environment/crystals", "environment/rocks"];
+    return ["environment/clouds", "environment/structures", "environment/decorations", "environment/crystals", "environment/rocks"];
   }
   if (biome === "snowfallCliffs") {
-    return ["environment/snowTrees", "environment/flora", "environment/rocks", "environment/ruinTiles", "environment/decorations", "environment/lanterns", "environment/crystals"];
+    return ["environment/flora", "environment/rocks", "environment/ruinTiles", "environment/decorations", "environment/lanterns", "environment/crystals"];
   }
   if (biome === "frozenSpires") {
-    return ["environment/snowTrees", "environment/flora", "environment/rocks", "environment/decorations", "environment/crystals", "environment/particleEffects"];
+    return ["environment/flora", "environment/rocks", "environment/decorations", "environment/crystals", "environment/particleEffects"];
   }
   return ["environment/relicShrines", "environment/flora", "environment/decorations", "environment/crystals", "environment/structures", "environment/lights", "environment/banners"];
 }
@@ -3995,7 +3998,7 @@ function biomePropFolders(biome: BiomeId): string[] {
 function biomeSmallPropFolders(biome: BiomeId): string[] {
   if (biome === "pineValley") return ["environment/flora", "environment/vegetation", "environment/rocks"];
   if (biome === "cloudRidge") return ["environment/flora", "environment/rocks", "environment/clouds", "environment/crystals"];
-  if (biome === "snowfallCliffs") return ["environment/flora", "environment/rocks", "environment/snowTrees", "environment/lanterns", "environment/crystals"];
+  if (biome === "snowfallCliffs") return ["environment/flora", "environment/rocks", "environment/lanterns", "environment/crystals"];
   if (biome === "frozenSpires") return ["environment/flora", "environment/rocks", "environment/crystals", "environment/particleEffects", "environment/hazards"];
   return ["environment/flora", "environment/crystals", "environment/decorations", "environment/lights", "environment/banners"];
 }
