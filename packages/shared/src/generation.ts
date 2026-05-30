@@ -89,10 +89,12 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
 
   const difficulty = Math.min(1.0, options.chunkY / 20);
 
-  // Entry: center bottom
-  const entryWidth = clamp(6, MIN_PLATFORM_WIDTH_TILES, width - 4);
+  // Entry: center bottom. Chunk 0 gets a full-width starting ground so the
+  // first screen reads as a stable launch pad instead of a floating island.
+  const isStartChunk = options.chunkY === 0;
+  const entryWidth = isStartChunk ? width : clamp(6, MIN_PLATFORM_WIDTH_TILES, width - 4);
   const entry: PlatformSpan = {
-    x: Math.floor(width / 2) - Math.floor(entryWidth / 2),
+    x: isStartChunk ? 0 : Math.floor(width / 2) - Math.floor(entryWidth / 2),
     y: height - 2,
     width: entryWidth
   };

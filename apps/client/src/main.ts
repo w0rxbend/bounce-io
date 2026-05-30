@@ -2431,6 +2431,11 @@ function getSpawnPos(chunkY = 0): { x: number; y: number } {
   };
 }
 
+function chunkEntrySurfaceY(chunkY: number): number | null {
+  const chunk = loadedChunks.get(chunkY);
+  return chunk ? (chunk.worldTileY + chunk.entry.y) * TILE_SIZE : null;
+}
+
 function respawnLocal(): void {
   if (!localPlayerId) { localPlayerId = "local"; playerNames.set("local", nameInput.value || "Explorer"); }
   const checkpointChunkY = Math.max(0, localPlayer?.checkpointChunkY ?? 0);
@@ -5132,7 +5137,14 @@ function updateCamera(dt: number, scale: number): void {
     const climbLead = localPlayer.velocity.y < -80 ? -vh * 0.05 : 0;
     const fallPullback = localPlayer.velocity.y > 230 ? Math.min(vh * 0.10, (localPlayer.velocity.y - 230) * 0.14) : 0;
     const attackBias = localPlayer.kickPhase !== "idle" ? localPlayer.facing * 8 : 0;
-    const target = renderPos.y + PLAYER_HEIGHT / 2 - vh * 0.30 + climbLead + fallPullback;
+    const playerFocusY = renderPos.y + PLAYER_HEIGHT / 2;
+    const startGroundY = localPlayer.checkpointChunkY === 0 ? chunkEntrySurfaceY(0) : null;
+    const startExit = startGroundY === null
+      ? 1
+      : clamp01((startGroundY - (renderPos.y + PLAYER_HEIGHT)) / 96);
+    const cameraAnchor = 0.5 - startExit * 0.2;
+    const focusY = startGroundY === null ? playerFocusY : startGroundY + (playerFocusY - startGroundY) * startExit;
+    const target = focusY - vh * cameraAnchor + climbLead * startExit + fallPullback;
     if (cameraSnap) { cameraY = target; cameraSnap = false; }
     else            { cameraY += (target - cameraY) * Math.min(1, dt * 7); }
     shakeX += attackBias * 0.003;
