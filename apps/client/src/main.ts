@@ -121,7 +121,6 @@ const ACTIVE_VIEW_MARGIN_PX = 120;
 const PRESSURE_VIEW_MARGIN_PX = 64;
 const VISUAL_RENDER_MARGIN_PX = 96;
 const VISUAL_RETAIN_MARGIN_PX = CHUNK_PIXEL_HEIGHT * 1.25;
-const BIOME_FLUTTER_VISIBLE_TARGET = 20;
 const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 
 const ASSET_URLS = {
@@ -379,6 +378,140 @@ const MAX_CRUMBLE_PARTICLES = 700;
 const LOW_FPS_CRUMBLE_PARTICLES = 320;
 const PRESSURE_CRUMBLE_PARTICLES = 160;
 
+type PerformanceProfileName = "high" | "medium" | "low" | "auto";
+type FixedPerformanceProfileName = Exclude<PerformanceProfileName, "auto">;
+
+interface PerformanceProfileConfig {
+  particleScale: number;
+  crumbleScale: number;
+  pulseCap: number;
+  floatingTextCap: number;
+  flutterTarget: number;
+  environmentFps: number;
+  chunkRendersPerFrame: number;
+  chunkBudgetMs: number;
+  ambientIntervalSeconds: number;
+  fallStreakIntervalSeconds: number;
+  portalParticleIntervalScale: number;
+  collectibleSparkScale: number;
+}
+
+const PERFORMANCE_PROFILES: Record<FixedPerformanceProfileName, PerformanceProfileConfig> = {
+  high: {
+    particleScale: 1,
+    crumbleScale: 1,
+    pulseCap: 24,
+    floatingTextCap: 12,
+    flutterTarget: 20,
+    environmentFps: 30,
+    chunkRendersPerFrame: 2,
+    chunkBudgetMs: 5,
+    ambientIntervalSeconds: 1.5,
+    fallStreakIntervalSeconds: 0.035,
+    portalParticleIntervalScale: 1,
+    collectibleSparkScale: 1,
+  },
+  medium: {
+    particleScale: 0.7,
+    crumbleScale: 0.65,
+    pulseCap: 16,
+    floatingTextCap: 8,
+    flutterTarget: 14,
+    environmentFps: 24,
+    chunkRendersPerFrame: 1,
+    chunkBudgetMs: 3.5,
+    ambientIntervalSeconds: 2.2,
+    fallStreakIntervalSeconds: 0.055,
+    portalParticleIntervalScale: 1.35,
+    collectibleSparkScale: 0.72,
+  },
+  low: {
+    particleScale: 0.38,
+    crumbleScale: 0.35,
+    pulseCap: 8,
+    floatingTextCap: 4,
+    flutterTarget: 8,
+    environmentFps: 16,
+    chunkRendersPerFrame: 1,
+    chunkBudgetMs: 2.5,
+    ambientIntervalSeconds: 3.2,
+    fallStreakIntervalSeconds: 0.08,
+    portalParticleIntervalScale: 2,
+    collectibleSparkScale: 0.45,
+  },
+};
+
+const PERF_TARGET_FPS = 58;
+const PERF_MIN_ADAPTIVE_SCALE = 0.42;
+const PERF_RECOVERY_SCALE_STEP = 0.04;
+const PERF_DEGRADE_SCALE_STEP = 0.10;
+
+interface RuntimePerfMetrics {
+  fpsAvg: number;
+  frameTimeAvgMs: number;
+  updateMsAvg: number;
+  simulationMsAvg: number;
+  renderPrepMsAvg: number;
+  particleCount: number;
+  displayObjectCount: number;
+  adaptiveScale: number;
+  lowFpsSeconds: number;
+  highFpsSeconds: number;
+  lastDisplayCountMs: number;
+}
+
+const perfMetrics: RuntimePerfMetrics = {
+  fpsAvg: 60,
+  frameTimeAvgMs: 1000 / 60,
+  updateMsAvg: 0,
+  simulationMsAvg: 0,
+  renderPrepMsAvg: 0,
+  particleCount: 0,
+  displayObjectCount: 0,
+  adaptiveScale: 1,
+  lowFpsSeconds: 0,
+  highFpsSeconds: 0,
+  lastDisplayCountMs: 0,
+};
+
+function normalizePerformanceProfile(value: string | null | undefined): PerformanceProfileName | null {
+  if (value === "high" || value === "medium" || value === "low" || value === "auto") return value;
+  return null;
+}
+
+function readPerformanceProfile(): PerformanceProfileName {
+  const fromUrl = normalizePerformanceProfile(new URLSearchParams(window.location.search).get("perf"));
+  if (fromUrl) {
+    localStorage.setItem("skyboundPerfProfile", fromUrl);
+    return fromUrl;
+  }
+  return normalizePerformanceProfile(localStorage.getItem("skyboundPerfProfile")) ?? "auto";
+}
+
+const selectedPerformanceProfile = readPerformanceProfile();
+const initialFixedPerformanceProfile: FixedPerformanceProfileName =
+  selectedPerformanceProfile === "auto"
+    ? ((navigator.hardwareConcurrency ?? 4) <= 4 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? "medium" : "high")
+    : selectedPerformanceProfile;
+let activeFixedPerformanceProfile: FixedPerformanceProfileName = initialFixedPerformanceProfile;
+let adaptiveProfileScale = 1;
+
+function activePerformanceConfig(): PerformanceProfileConfig {
+  return PERFORMANCE_PROFILES[activeFixedPerformanceProfile];
+}
+
+function scaledCap(base: number, scale: number): number {
+  return Math.max(1, Math.round(base * scale * adaptiveProfileScale));
+}
+
+function currentPixelParticleBaseCap(): number {
+  return scaledCap(MAX_PIXEL_PARTICLES, activePerformanceConfig().particleScale);
+}
+
+function currentCrumbleParticleBaseCap(): number {
+  return scaledCap(MAX_CRUMBLE_PARTICLES, activePerformanceConfig().crumbleScale);
+}
+
 function isProceduralManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
   if (PROCEDURAL_MOUNTAIN_FOLDERS.has(folder)) return true;
@@ -503,6 +636,10 @@ const scoreboard = appRoot.querySelector<HTMLElement>("#scoreboard")!;
 TextureStyle.defaultOptions.scaleMode = "nearest";
 const PIXEL_CACHE_OPTIONS = { antialias: false, resolution: 1, scaleMode: "nearest" as const };
 
+function disableDisplayEvents(displayObject: { eventMode?: string }): void {
+  displayObject.eventMode = "none";
+}
+
 const pixi = new Application();
 await pixi.init({
   manageImports: false,
@@ -516,6 +653,7 @@ await pixi.init({
   roundPixels: true,
 });
 pixi.canvas.style.imageRendering = "pixelated";
+disableDisplayEvents(pixi.stage);
 gameWrap.prepend(pixi.canvas);
 
 function pathAliasForAsset(relPath: string): AssetKey {
@@ -646,6 +784,7 @@ function hasAsset(key: AssetKey): boolean {
 function makeSprite(key: AssetKey): Sprite {
   const s = new Sprite(assetTexture(key));
   s.roundPixels = true;
+  disableDisplayEvents(s);
   return s;
 }
 
@@ -679,6 +818,7 @@ function chooseAsset(keys: AssetKey[], seed: number, fallback: AssetKey): AssetK
 function makeCharacterSprite(characterId: CharacterId): Sprite {
   const s = new Sprite(characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer"));
   s.roundPixels = true;
+  disableDisplayEvents(s);
   return s;
 }
 
@@ -1125,6 +1265,7 @@ const biomeFlutters = new Map<number, BiomeFlutter[]>();
 const proceduralLianas = new Map<number, ProceduralLiana[]>();
 const proceduralFlora = new Map<number, ProceduralFlora[]>();
 const proceduralTrees = new Map<number, ProceduralTreeInstance[]>();
+const biomeFlutterCandidates: BiomeFlutter[] = [];
 
 function midMountainNoise(chunkY: number, x: number, y: number, salt = 0): number {
   let h = Math.imul(chunkY + 101, 374761393)
@@ -1272,10 +1413,13 @@ function clearMidMountainCrumbleChunk(chunkY: number): void {
 
 function currentCrumbleParticleCap(): number {
   const fps = pixi.ticker.FPS;
-  if (pendingChunkRenders.size > 0) return PRESSURE_CRUMBLE_PARTICLES;
-  if (fps > 0 && fps < 38) return LOW_FPS_CRUMBLE_PARTICLES;
-  if (fps > 0 && fps < 50) return Math.round((LOW_FPS_CRUMBLE_PARTICLES + MAX_CRUMBLE_PARTICLES) * 0.5);
-  return MAX_CRUMBLE_PARTICLES;
+  const baseCap = currentCrumbleParticleBaseCap();
+  const pressureCap = Math.min(PRESSURE_CRUMBLE_PARTICLES, baseCap);
+  const lowCap = Math.min(LOW_FPS_CRUMBLE_PARTICLES, baseCap);
+  if (pendingChunkRenders.size > 0) return pressureCap;
+  if (fps > 0 && fps < 38) return lowCap;
+  if (fps > 0 && fps < 50) return Math.round((lowCap + baseCap) * 0.5);
+  return baseCap;
 }
 
 function releaseMidMountainCrumbleShard(index: number): void {
@@ -1522,7 +1666,8 @@ function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: B
 function updateBiomeFlutters(tSec: number): void {
   const bounds = activeWorldBounds(BIOME_FLUTTER_VIEW_MARGIN_PX);
   const centerY = (bounds.top + bounds.bottom) * 0.5;
-  const candidates: BiomeFlutter[] = [];
+  const candidates = biomeFlutterCandidates;
+  candidates.length = 0;
 
   for (const [chunkY, flutters] of biomeFlutters) {
     const active = isChunkActive(chunkY, BIOME_FLUTTER_VIEW_MARGIN_PX);
@@ -1545,7 +1690,7 @@ function updateBiomeFlutters(tSec: number): void {
     return aDistance - bDistance;
   });
 
-  const visibleCount = Math.min(BIOME_FLUTTER_VISIBLE_TARGET, candidates.length);
+  const visibleCount = Math.min(activePerformanceConfig().flutterTarget, candidates.length);
   for (let i = 0; i < visibleCount; i++) {
     const flutter = candidates[i]!;
     flutter.gfx.visible = true;
@@ -2098,6 +2243,24 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
 });
 const hudLayer    = new Container({ isRenderGroup: true });
 
+for (const layer of [
+  skyLayer,
+  worldLayer,
+  backDecorationLayer,
+  midMountainCrumbleParticleLayer,
+  chunkLayer,
+  decorationLayer,
+  portalLayer,
+  relicLayer,
+  enemyLayer,
+  remoteLayer,
+  localLayer,
+  effectLayer,
+  effectParticleLayer,
+  hudLayer,
+]) {
+  disableDisplayEvents(layer);
+}
 enemyLayer.sortableChildren = true;
 effectLayer.addChild(effectParticleLayer);
 worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
@@ -2124,6 +2287,8 @@ const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const pendingChunkRenders = new Set<number>();
 const collectedRelics = new Set<string>();
+const chunkRenderQueueScratch: number[] = [];
+const chunkPruneScratch: number[] = [];
 
 interface HazardTelegraph {
   gfx: Graphics;
@@ -2239,6 +2404,72 @@ localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
 localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
 localLayer.addChild(localSprite, localGfx, localCrownSprite);
+
+const displayObjectCountStack: Array<{ visible: boolean; renderable?: boolean; children?: unknown[]; particleChildren?: unknown[] }> = [];
+
+function countActiveDisplayObjects(root: Container): number {
+  let count = 0;
+  displayObjectCountStack.length = 0;
+  displayObjectCountStack.push(root);
+  while (displayObjectCountStack.length > 0) {
+    const obj = displayObjectCountStack.pop()!;
+    if (!obj.visible || obj.renderable === false) continue;
+    count++;
+    const particlesInContainer = obj.particleChildren;
+    if (particlesInContainer) count += particlesInContainer.length;
+    const children = obj.children;
+    if (children) {
+      for (let i = 0; i < children.length; i++) {
+        displayObjectCountStack.push(children[i] as { visible: boolean; renderable?: boolean; children?: unknown[]; particleChildren?: unknown[] });
+      }
+    }
+  }
+  return count;
+}
+
+function updatePerformanceAverages(rawFrameMs: number, updateMs: number, simulationMs: number, renderPrepMs: number): void {
+  const alpha = 0.05;
+  perfMetrics.frameTimeAvgMs += (rawFrameMs - perfMetrics.frameTimeAvgMs) * alpha;
+  perfMetrics.fpsAvg = 1000 / Math.max(1, perfMetrics.frameTimeAvgMs);
+  perfMetrics.updateMsAvg += (updateMs - perfMetrics.updateMsAvg) * alpha;
+  perfMetrics.simulationMsAvg += (simulationMs - perfMetrics.simulationMsAvg) * alpha;
+  perfMetrics.renderPrepMsAvg += (renderPrepMs - perfMetrics.renderPrepMsAvg) * alpha;
+  perfMetrics.particleCount = particles.length + midMountainCrumbleShards.length;
+  perfMetrics.adaptiveScale = adaptiveProfileScale;
+
+  if (elapsedMs - perfMetrics.lastDisplayCountMs > 500) {
+    perfMetrics.lastDisplayCountMs = elapsedMs;
+    perfMetrics.displayObjectCount = countActiveDisplayObjects(pixi.stage);
+  }
+}
+
+function updateAdaptivePerformance(dt: number): void {
+  if (selectedPerformanceProfile !== "auto") return;
+
+  const frameBudgetPressure = perfMetrics.updateMsAvg > 11;
+  if (perfMetrics.fpsAvg < PERF_TARGET_FPS - 4 || frameBudgetPressure) {
+    perfMetrics.lowFpsSeconds += dt;
+    perfMetrics.highFpsSeconds = 0;
+  } else if (perfMetrics.fpsAvg > PERF_TARGET_FPS && perfMetrics.updateMsAvg < 9) {
+    perfMetrics.highFpsSeconds += dt;
+    perfMetrics.lowFpsSeconds = 0;
+  } else {
+    perfMetrics.lowFpsSeconds = Math.max(0, perfMetrics.lowFpsSeconds - dt * 0.5);
+    perfMetrics.highFpsSeconds = Math.max(0, perfMetrics.highFpsSeconds - dt * 0.25);
+  }
+
+  if (perfMetrics.lowFpsSeconds > 2.5) {
+    adaptiveProfileScale = Math.max(PERF_MIN_ADAPTIVE_SCALE, adaptiveProfileScale - PERF_DEGRADE_SCALE_STEP);
+    perfMetrics.lowFpsSeconds = 0;
+    if (adaptiveProfileScale < 0.62) activeFixedPerformanceProfile = "low";
+    else if (adaptiveProfileScale < 0.82) activeFixedPerformanceProfile = "medium";
+  } else if (perfMetrics.highFpsSeconds > 5) {
+    adaptiveProfileScale = Math.min(1, adaptiveProfileScale + PERF_RECOVERY_SCALE_STEP);
+    perfMetrics.highFpsSeconds = 0;
+    if (adaptiveProfileScale > 0.88) activeFixedPerformanceProfile = initialFixedPerformanceProfile;
+    else if (adaptiveProfileScale > 0.66 && initialFixedPerformanceProfile !== "low") activeFixedPerformanceProfile = "medium";
+  }
+}
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -2419,11 +2650,13 @@ function enqueueChunkRender(chunkY: number, immediate = false): void {
 function processChunkRenderQueue(): void {
   if (pendingChunkRenders.size === 0) return;
   const centerChunkY = localPlayer ? chunkYForWorldY(localPlayer.position.y) : 0;
-  const fps = pixi.ticker.FPS;
-  const maxRenders = fps > 0 && fps < 45 ? 1 : 2;
-  const budgetMs = fps > 0 && fps < 45 ? 3 : 5;
+  const maxRenders = activePerformanceConfig().chunkRendersPerFrame;
+  const budgetMs = activePerformanceConfig().chunkBudgetMs;
   const started = performance.now();
-  const queue = [...pendingChunkRenders].sort((a, b) => Math.abs(a - centerChunkY) - Math.abs(b - centerChunkY));
+  const queue = chunkRenderQueueScratch;
+  queue.length = 0;
+  for (const chunkY of pendingChunkRenders) queue.push(chunkY);
+  queue.sort((a, b) => Math.abs(a - centerChunkY) - Math.abs(b - centerChunkY));
 
   let rendered = 0;
   for (const chunkY of queue) {
@@ -2444,10 +2677,14 @@ function enqueueVisibleChunkRenders(): void {
 }
 
 function pruneDistantChunkVisuals(): void {
-  for (const chunkY of [...chunkGraphics.keys()]) {
+  chunkPruneScratch.length = 0;
+  for (const chunkY of chunkGraphics.keys()) chunkPruneScratch.push(chunkY);
+  for (const chunkY of chunkPruneScratch) {
     if (!shouldRetainChunkVisuals(chunkY)) destroyChunkVisuals(chunkY);
   }
-  for (const chunkY of [...chunkDecorations.keys()]) {
+  chunkPruneScratch.length = 0;
+  for (const chunkY of chunkDecorations.keys()) chunkPruneScratch.push(chunkY);
+  for (const chunkY of chunkPruneScratch) {
     if (!shouldRetainChunkVisuals(chunkY)) destroyChunkVisuals(chunkY);
   }
 }
@@ -2471,7 +2708,9 @@ function ensureChunksAhead(): void {
 
   // Sliding-window streaming. Chunks are deterministic, so disposing visuals is
   // safe; if the player goes back down, the window above reloads them.
-  for (const cy of [...loadedChunks.keys()]) {
+  chunkPruneScratch.length = 0;
+  for (const cy of loadedChunks.keys()) chunkPruneScratch.push(cy);
+  for (const cy of chunkPruneScratch) {
     if (cy < window.min || cy > window.max) {
       destroyChunkVisuals(cy);
       loadedChunks.delete(cy);
@@ -4705,13 +4944,13 @@ function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
 }
 
 function spawnCollectibleAuraSparks(anim: RelicAnim, tSec: number, bob: number, pulse: number): void {
-  if (elapsedMs - anim.lastParticleMs < 95) return;
+  if (elapsedMs - anim.lastParticleMs < 95 / Math.max(0.1, activePerformanceConfig().collectibleSparkScale)) return;
   anim.lastParticleMs = elapsedMs;
 
   const wx = anim.tileX * TILE_SIZE + TILE_SIZE / 2;
   const wy = anim.tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET + bob;
   const seed = midMountainNoise(anim.tileX + Math.round(tSec * 18), anim.tileY, Math.round(elapsedMs / 16), 719);
-  const count = seed % 4 === 0 ? 3 : 2;
+  const count = Math.max(1, Math.round((seed % 4 === 0 ? 3 : 2) * activePerformanceConfig().collectibleSparkScale));
 
   for (let i = 0; i < count; i++) {
     const n = midMountainNoise(seed, i * 37, anim.tileX + anim.tileY * 13, 743);
@@ -4923,9 +5162,10 @@ function updatePortals(tSec: number): void {
     const col   = a.isExit ? PAL.portalBlue : PAL.uiHighlight;
     drawProceduralPortalArch(a.bodyGfx, a.glowGfx, hw, ph, a.isExit, tSec);
 
-    if (elapsedMs - a.lastParticleMs > (a.isExit ? 80 : 130)) {
+    if (elapsedMs - a.lastParticleMs > (a.isExit ? 80 : 130) * activePerformanceConfig().portalParticleIntervalScale) {
       a.lastParticleMs = elapsedMs;
-      for (let i = 0; i < (a.isExit ? 3 : 2); i++) {
+      const particleCount = Math.max(1, Math.round((a.isExit ? 3 : 2) * activePerformanceConfig().collectibleSparkScale));
+      for (let i = 0; i < particleCount; i++) {
         const n = midMountainNoise(Math.round(tSec * 10), a.worldX + i * 17, a.worldY, a.isExit ? 211 : 131);
         const angle = ((n % 628) / 100) + tSec * 0.35;
         const radius = hw * 0.42 + (n % 12);
@@ -4949,12 +5189,12 @@ function updatePortals(tSec: number): void {
 
 // ── Character drawing ─────────────────────────────────────────────────────────
 
-function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: number): void {
+function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: number, position = s.position): void {
   g.clear();
   if (s.invulnerable > 0 && Math.floor(elapsed / 80) % 2 === 1) return;
 
-  const x = Math.round(s.position.x);
-  const y = Math.round(s.position.y);
+  const x = Math.round(position.x);
+  const y = Math.round(position.y);
   const fx = s.facing;
   const phase = s.kickPhase;
 
@@ -5066,16 +5306,21 @@ interface FloatingText { txt: Text; vx: number; vy: number; life: number; max: n
 const particles:   Particle[] = [];
 const partPool:    PixiParticle[] = [];
 const worldPulses: WorldPulse[] = [];
+const worldPulsePool: Graphics[] = [];
 const floatingTexts: FloatingText[] = [];
+const floatingTextPool: Text[] = [];
 let fallStreakTimer = 0;
 let effectParticleLayerDirty = false;
 
 function currentPixelParticleCap(): number {
   const fps = pixi.ticker.FPS;
-  if (pendingChunkRenders.size > 0) return PRESSURE_PIXEL_PARTICLES;
-  if (fps > 0 && fps < 38) return PRESSURE_PIXEL_PARTICLES;
-  if (fps > 0 && fps < 50) return LOW_FPS_PIXEL_PARTICLES;
-  return MAX_PIXEL_PARTICLES;
+  const baseCap = currentPixelParticleBaseCap();
+  const pressureCap = Math.min(PRESSURE_PIXEL_PARTICLES, baseCap);
+  const lowCap = Math.min(LOW_FPS_PIXEL_PARTICLES, baseCap);
+  if (pendingChunkRenders.size > 0) return pressureCap;
+  if (fps > 0 && fps < 38) return pressureCap;
+  if (fps > 0 && fps < 50) return lowCap;
+  return baseCap;
 }
 
 function releasePixelParticle(index: number): void {
@@ -5094,6 +5339,65 @@ function releasePixelParticle(index: number): void {
   if (partPool.length < MAX_PIXEL_PARTICLES) partPool.push(entry.particle);
 }
 
+function acquireWorldPulseGraphics(): Graphics {
+  const gfx = worldPulsePool.pop() ?? new Graphics();
+  disableDisplayEvents(gfx);
+  if (!gfx.parent) effectLayer.addChild(gfx);
+  gfx.clear();
+  gfx.visible = true;
+  gfx.alpha = 1;
+  return gfx;
+}
+
+function releaseWorldPulse(index: number): void {
+  const pulse = worldPulses[index];
+  if (!pulse) return;
+  const lastIndex = worldPulses.length - 1;
+  if (index !== lastIndex) worldPulses[index] = worldPulses[lastIndex]!;
+  worldPulses.pop();
+  pulse.gfx.clear();
+  pulse.gfx.visible = false;
+  pulse.gfx.alpha = 0;
+  if (worldPulsePool.length < PERFORMANCE_PROFILES.high.pulseCap) worldPulsePool.push(pulse.gfx);
+}
+
+function createFloatingText(): Text {
+  const txt = new Text({
+    text: "",
+    style: {
+      fill: 0xffffff,
+      fontFamily: "monospace",
+      fontSize: 9,
+      fontWeight: "900",
+      stroke: { color: PAL.uiInk, width: 2 },
+    },
+  });
+  txt.anchor.set(0.5);
+  disableDisplayEvents(txt);
+  return txt;
+}
+
+function acquireFloatingText(msg: string, color: number): Text {
+  const txt = floatingTextPool.pop() ?? createFloatingText();
+  if (!txt.parent) effectLayer.addChild(txt);
+  txt.text = msg;
+  txt.style.fill = color;
+  txt.visible = true;
+  txt.alpha = 1;
+  return txt;
+}
+
+function releaseFloatingText(index: number): void {
+  const floating = floatingTexts[index];
+  if (!floating) return;
+  const lastIndex = floatingTexts.length - 1;
+  if (index !== lastIndex) floatingTexts[index] = floatingTexts[lastIndex]!;
+  floatingTexts.pop();
+  floating.txt.visible = false;
+  floating.txt.alpha = 0;
+  if (floatingTextPool.length < PERFORMANCE_PROFILES.high.floatingTextCap) floatingTextPool.push(floating.txt);
+}
+
 function resetEffectParticles(): void {
   for (const entry of particles) {
     entry.particle.alpha = 0;
@@ -5104,12 +5408,21 @@ function resetEffectParticles(): void {
   effectParticleLayerDirty = true;
 
   for (const pulse of worldPulses) {
-    if (!pulse.gfx.destroyed) pulse.gfx.destroy();
+    if (!pulse.gfx.destroyed) {
+      pulse.gfx.clear();
+      pulse.gfx.visible = false;
+      pulse.gfx.alpha = 0;
+      if (worldPulsePool.length < PERFORMANCE_PROFILES.high.pulseCap) worldPulsePool.push(pulse.gfx);
+    }
   }
   worldPulses.length = 0;
 
   for (const floating of floatingTexts) {
-    if (!floating.txt.destroyed) floating.txt.destroy();
+    if (!floating.txt.destroyed) {
+      floating.txt.visible = false;
+      floating.txt.alpha = 0;
+      if (floatingTextPool.length < PERFORMANCE_PROFILES.high.floatingTextCap) floatingTextPool.push(floating.txt);
+    }
   }
   floatingTexts.length = 0;
 }
@@ -5131,33 +5444,21 @@ function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number,
 
 function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, life = 0.42, width = 2): void {
   if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
-  const pulseCap = pendingChunkRenders.size > 0 ? 8 : 24;
-  if (worldPulses.length > pulseCap) return;
-  const gfx = new Graphics();
+  const pulseCap = pendingChunkRenders.size > 0 ? Math.min(8, activePerformanceConfig().pulseCap) : activePerformanceConfig().pulseCap;
+  if (worldPulses.length >= pulseCap) return;
+  const gfx = acquireWorldPulseGraphics();
   gfx.x = wx;
   gfx.y = wy;
-  effectLayer.addChild(gfx);
   worldPulses.push({ gfx, wx, wy, life, max: life, color, radius, width });
 }
 
 function spawnFloatingText(wx: number, wy: number, msg: string, color: number): void {
   if (!isWorldYActive(wy, ACTIVE_VIEW_MARGIN_PX * 1.5)) return;
-  const textCap = pendingChunkRenders.size > 0 ? 4 : 12;
-  if (floatingTexts.length > textCap) return;
-  const txt = new Text({
-    text: msg,
-    style: {
-      fill: color,
-      fontFamily: "monospace",
-      fontSize: 9,
-      fontWeight: "900",
-      stroke: { color: PAL.uiInk, width: 2 },
-    },
-  });
-  txt.anchor.set(0.5);
+  const textCap = pendingChunkRenders.size > 0 ? Math.min(4, activePerformanceConfig().floatingTextCap) : activePerformanceConfig().floatingTextCap;
+  if (floatingTexts.length >= textCap) return;
+  const txt = acquireFloatingText(msg, color);
   txt.x = wx;
   txt.y = wy;
-  effectLayer.addChild(txt);
   floatingTexts.push({ txt, vx: (Math.random() - 0.5) * 12, vy: -26, life: 0.92, max: 0.92 });
 }
 
@@ -5173,6 +5474,21 @@ function prewarmParticlePools(): void {
   }
   while (midMountainCrumblePool.length < MAX_CRUMBLE_PARTICLES) {
     midMountainCrumblePool.push(new PixiParticle({ texture: Texture.WHITE, alpha: 0 }));
+  }
+  while (worldPulsePool.length < PERFORMANCE_PROFILES.high.pulseCap) {
+    const gfx = new Graphics();
+    disableDisplayEvents(gfx);
+    gfx.visible = false;
+    gfx.alpha = 0;
+    effectLayer.addChild(gfx);
+    worldPulsePool.push(gfx);
+  }
+  while (floatingTextPool.length < PERFORMANCE_PROFILES.high.floatingTextCap) {
+    const txt = createFloatingText();
+    txt.visible = false;
+    txt.alpha = 0;
+    effectLayer.addChild(txt);
+    floatingTextPool.push(txt);
   }
 }
 
@@ -5197,9 +5513,7 @@ function updateParticles(dt: number): void {
     const p = worldPulses[i]!;
     p.life -= dt;
     if (p.life <= 0) {
-      effectLayer.removeChild(p.gfx);
-      p.gfx.destroy();
-      worldPulses.splice(i, 1);
+      releaseWorldPulse(i);
       continue;
     }
     const t = 1 - p.life / p.max;
@@ -5213,9 +5527,7 @@ function updateParticles(dt: number): void {
     const f = floatingTexts[i]!;
     f.life -= dt;
     if (f.life <= 0) {
-      effectLayer.removeChild(f.txt);
-      f.txt.destroy();
-      floatingTexts.splice(i, 1);
+      releaseFloatingText(i);
       continue;
     }
     f.txt.x += f.vx * dt;
@@ -5238,9 +5550,9 @@ let ambientTimer = 0;
 function spawnAmbientParticles(dt: number): void {
   ambientTimer += dt;
   if (pendingChunkRenders.size > 0) return;
-  if (!localPlayer || particles.length > 80) return;
-  // Spawn a leaf every ~1.5s from above the visible area
-  if (ambientTimer > 1.5) {
+  if (!localPlayer || particles.length > currentPixelParticleCap() * 0.18) return;
+  // Profile-scaled ambient cadence keeps background particles from competing with gameplay effects.
+  if (ambientTimer > activePerformanceConfig().ambientIntervalSeconds) {
     ambientTimer = 0;
     const wx = (Math.random() * WORLD_WIDTH * 0.9) + WORLD_WIDTH * 0.05;
     const wy = localPlayer.position.y - 100 - Math.random() * 80;
@@ -5259,12 +5571,12 @@ function spawnAmbientParticles(dt: number): void {
 }
 
 function spawnFallStreaks(dt: number): void {
-  if (pendingChunkRenders.size > 0 || !localPlayer || localPlayer.grounded || localPlayer.velocity.y < 260 || particles.length > 180) {
+  if (pendingChunkRenders.size > 0 || !localPlayer || localPlayer.grounded || localPlayer.velocity.y < 260 || particles.length > currentPixelParticleCap() * 0.36) {
     fallStreakTimer = 0;
     return;
   }
   fallStreakTimer += dt;
-  if (fallStreakTimer < 0.035) return;
+  if (fallStreakTimer < activePerformanceConfig().fallStreakIntervalSeconds) return;
   fallStreakTimer = 0;
   const wx = localPlayer.position.x + PLAYER_WIDTH / 2 + (Math.random() - 0.5) * 22;
   const wy = localPlayer.position.y + PLAYER_HEIGHT * 0.35 + Math.random() * 12;
@@ -5460,10 +5772,11 @@ function triggerShake(sx: number, sy: number): void {
 
 function environmentAnimationIntervalMs(): number {
   const fps = pixi.ticker.FPS;
-  if (pendingChunkRenders.size > 0) return 1000 / 16;
-  if (fps > 0 && fps < 42) return 1000 / 20;
-  if (fps > 0 && fps < 55) return 1000 / 24;
-  return 1000 / 30;
+  const profileFps = activePerformanceConfig().environmentFps;
+  if (pendingChunkRenders.size > 0) return 1000 / Math.min(16, profileFps);
+  if (fps > 0 && fps < 42) return 1000 / Math.min(20, profileFps);
+  if (fps > 0 && fps < 55) return 1000 / Math.min(24, profileFps);
+  return 1000 / profileFps;
 }
 
 // ── HUD ───────────────────────────────────────────────────────────────────────
@@ -5719,13 +6032,29 @@ function updateNotifications(dt: number): void {
 // ── Debug overlay ─────────────────────────────────────────────────────────────
 
 const dbgGfx = new Graphics();
-hudLayer.addChild(dbgGfx);
+const dbgText = new Text({
+  text: "",
+  style: {
+    fill: PAL.uiParchment,
+    fontFamily: "monospace",
+    fontSize: 8,
+    lineHeight: 10,
+    stroke: { color: PAL.uiInk, width: 2 },
+  },
+});
+dbgText.x = 10;
+dbgText.y = 138;
+dbgText.visible = false;
+disableDisplayEvents(dbgGfx);
+disableDisplayEvents(dbgText);
+hudLayer.addChild(dbgGfx, dbgText);
 
 function updateDebug(): void {
   dbgGfx.clear();
+  dbgText.visible = showDebug;
   if (!showDebug) return;
 
-  drawHudPanel(dbgGfx, 4, 58, 200, 132);
+  drawHudPanel(dbgGfx, 4, 58, 220, 158);
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
@@ -5752,6 +6081,12 @@ function updateDebug(): void {
   dbgGfx.rect(8, 115, Math.round(predBuf.length * 0.98), 6).fill(PAL.portalBlue);
   dbgGfx.rect(8, 124, Math.min((serverTick % 60) * 2, 118), 3).fill(PAL.stoneMid);
   dbgGfx.rect(8, 130, Math.min(particles.length * 1.5, 118), 3).fill(PAL.canopyLight);
+  dbgText.text =
+    `perf ${selectedPerformanceProfile}->${activeFixedPerformanceProfile} x${adaptiveProfileScale.toFixed(2)}\n` +
+    `fps ${perfMetrics.fpsAvg.toFixed(1)}  frame ${perfMetrics.frameTimeAvgMs.toFixed(1)}ms\n` +
+    `update ${perfMetrics.updateMsAvg.toFixed(1)}ms  sim ${perfMetrics.simulationMsAvg.toFixed(1)}ms\n` +
+    `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms  particles ${perfMetrics.particleCount}\n` +
+    `objects ${perfMetrics.displayObjectCount}  chunks ${pendingChunkRenders.size}`;
 }
 
 // ── Networking ────────────────────────────────────────────────────────────────
@@ -6129,20 +6464,20 @@ function drawActors(): void {
 
   if (localPlayer) {
     const renderPos = getLocalRenderPosition();
-    const renderState = renderPos ? { ...localPlayer, position: renderPos } : localPlayer;
-    localSprite.visible = hasAsset("playerExplorer") && !(renderState.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
-    if (hasPlayerAnimationAssets()) localSprite.texture = playerAnimationTexture(renderState, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(renderState, elapsedMs));
-    localSprite.x = Math.round(renderState.position.x + PLAYER_WIDTH / 2);
-    localSprite.y = Math.round(renderState.position.y + PLAYER_HEIGHT + 2);
-    localSprite.scale.x = (renderState.facing < 0 ? -1 : 1) * playerSpriteScale();
+    const drawPosition = renderPos ?? localPlayer.position;
+    localSprite.visible = hasAsset("playerExplorer") && !(localPlayer.invulnerable > 0 && Math.floor(elapsedMs / 80) % 2 === 1);
+    if (hasPlayerAnimationAssets()) localSprite.texture = playerAnimationTexture(localPlayer, elapsedMs) ?? assetTexture(fallbackPlayerAnimationAsset(localPlayer, elapsedMs));
+    localSprite.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2);
+    localSprite.y = Math.round(drawPosition.y + PLAYER_HEIGHT + 2);
+    localSprite.scale.x = (localPlayer.facing < 0 ? -1 : 1) * playerSpriteScale();
     localSprite.scale.y = playerSpriteScale();
     localSprite.tint = 0xffffff;
-    drawPlayerInto(localGfx, renderState, PLAYER_COLORS[0]!, elapsedMs);
+    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition);
     localCrownSprite.visible = hasAsset("crown") && localPlayerId === leaderId;
-    localCrownSprite.x = Math.round((renderPos?.x ?? localPlayer.position.x) + PLAYER_WIDTH / 2);
-    localCrownSprite.y = Math.round((renderPos?.y ?? localPlayer.position.y) - 10);
+    localCrownSprite.x = Math.round(drawPosition.x + PLAYER_WIDTH / 2);
+    localCrownSprite.y = Math.round(drawPosition.y - 10);
     if (localPlayerId === leaderId && !hasAsset("crown"))
-      drawCrown(localGfx, Math.round((renderPos?.x ?? localPlayer.position.x) + PLAYER_WIDTH / 2), Math.round(renderPos?.y ?? localPlayer.position.y) - 12, PLAYER_COLORS[0]!);
+      drawCrown(localGfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, PLAYER_COLORS[0]!);
   }
 }
 
@@ -6156,12 +6491,15 @@ joinBtn.addEventListener("click", () => connectRoom(nameInput.value.trim() || "E
 // ── Ticker ────────────────────────────────────────────────────────────────────
 
 pixi.ticker.add((ticker) => {
-  const dtMs = ticker.deltaMS;
+  const frameStart = performance.now();
+  const rawDtMs = ticker.deltaMS;
+  const dtMs = Math.min(rawDtMs, 1000 / 30);
   const dt   = Math.min(dtMs / 1000, 1 / 30);
   elapsedMs += dtMs;
   const tSec  = elapsedMs / 1000;
   const scale = getScale();
 
+  const renderPrepStart = performance.now();
   ensureChunksAhead();
   reqChunks();
   maybePing();
@@ -6194,7 +6532,9 @@ pixi.ticker.add((ticker) => {
     cloudDriftFar = 0; cloudDriftMid = 0; cloudDriftFront = 0;
     buildSkyStatic(pixi.screen.width, pixi.screen.height);
   }
+  let renderPrepMs = performance.now() - renderPrepStart;
 
+  const simulationStart = performance.now();
   if (localPlayer && shouldPredictLocalMovement()) {
     const frameInput = captureInput();
     queuedJumpPressed = queuedJumpPressed || frameInput.jumpPressed;
@@ -6266,7 +6606,9 @@ pixi.ticker.add((ticker) => {
     queuedKickPressed = false;
     predictionAccumulatorSeconds = 0;
   }
+  const simulationMs = performance.now() - simulationStart;
 
+  const visualPrepStart = performance.now();
   updateLocalVisualPosition(dt);
   updateCamera(dt, scale);
   enqueueVisibleChunkRenders();
@@ -6275,5 +6617,9 @@ pixi.ticker.add((ticker) => {
   syncChunkVisibility();
   drawActors();
   updateHud(tSec);
+  renderPrepMs += performance.now() - visualPrepStart;
+  const updateMs = performance.now() - frameStart;
+  updatePerformanceAverages(rawDtMs, updateMs, simulationMs, renderPrepMs);
+  updateAdaptivePerformance(dt);
   updateDebug();
 });
