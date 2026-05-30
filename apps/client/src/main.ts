@@ -1028,9 +1028,63 @@ interface BiomeFlutter {
   palette: BiomeFlutterPalette;
 }
 
+interface LianaPalette {
+  vineDark: number;
+  vineMid: number;
+  vineLight: number;
+  leafDark: number;
+  leafLight: number;
+  flower: number;
+}
+
+interface ProceduralLiana {
+  chunkY: number;
+  gfx: Graphics;
+  anchorX: number;
+  anchorY: number;
+  length: number;
+  phase: number;
+  speed: number;
+  amplitude: number;
+  seed: number;
+  thickness: number;
+  palette: LianaPalette;
+  frozen: boolean;
+}
+
+interface ProceduralFloraPalette {
+  stemDark: number;
+  stem: number;
+  leafDark: number;
+  leaf: number;
+  leafLight: number;
+  petalA: number;
+  petalB: number;
+  center: number;
+  frost: number;
+}
+
+type ProceduralFloraKind = "grass" | "sprout" | "daisy" | "bell" | "berry" | "crystal" | "lotus";
+
+interface ProceduralFlora {
+  chunkY: number;
+  gfx: Graphics;
+  baseX: number;
+  baseY: number;
+  phase: number;
+  speed: number;
+  amplitude: number;
+  seed: number;
+  height: number;
+  kind: ProceduralFloraKind;
+  palette: ProceduralFloraPalette;
+}
+
 const midMountainCrumbleEmitters = new Map<number, MidMountainCrumbleEmitter[]>();
 const midMountainCrumbleShards: MidMountainCrumbleShard[] = [];
 const biomeFlutters = new Map<number, BiomeFlutter[]>();
+const proceduralLianas = new Map<number, ProceduralLiana[]>();
+const proceduralFlora = new Map<number, ProceduralFlora[]>();
 
 function midMountainNoise(chunkY: number, x: number, y: number, salt = 0): number {
   let h = Math.imul(chunkY + 101, 374761393)
@@ -1400,6 +1454,345 @@ function updateBiomeFlutters(tSec: number): void {
       drawBiomeFlutter(flutter, tSec);
     }
     if (flutters.length === 0) biomeFlutters.delete(chunkY);
+  }
+}
+
+function lianaPaletteForBiome(biome: BiomeId): LianaPalette {
+  if (biome === "cloudRidge") {
+    return { vineDark: 0x314632, vineMid: 0x58783c, vineLight: 0x9ab75a, leafDark: 0x243f28, leafLight: 0x7fb45a, flower: 0xf26bd8 };
+  }
+  if (biome === "snowfallCliffs") {
+    return { vineDark: 0x3e5968, vineMid: 0x6f91a2, vineLight: 0xc4ddeb, leafDark: 0x476a78, leafLight: 0xaed4e6, flower: 0xc179ff };
+  }
+  if (biome === "frozenSpires") {
+    return { vineDark: 0x334b69, vineMid: 0x628db2, vineLight: 0xe3f7ff, leafDark: 0x476f91, leafLight: 0xbdeaff, flower: 0x8cf7ff };
+  }
+  if (biome === "celestialSummit") {
+    return { vineDark: 0x35406d, vineMid: 0x6a7cc8, vineLight: 0xf0f4ff, leafDark: 0x4e5c9b, leafLight: 0xd7dcff, flower: 0xffe58a };
+  }
+  return { vineDark: 0x233b1c, vineMid: 0x5d7f32, vineLight: 0x9dbb52, leafDark: 0x2d5528, leafLight: 0x86b94a, flower: 0xff5bd6 };
+}
+
+function clearProceduralLianasChunk(chunkY: number): void {
+  const lianas = proceduralLianas.get(chunkY);
+  if (!lianas) return;
+  for (const liana of lianas) {
+    if (!liana.gfx.destroyed) liana.gfx.destroy();
+  }
+  proceduralLianas.delete(chunkY);
+}
+
+function drawProceduralLiana(liana: ProceduralLiana, tSec: number): void {
+  const { gfx, length, palette, seed } = liana;
+  const wind = Math.sin(tSec * liana.speed + liana.phase);
+  const bounce = Math.sin(tSec * (liana.speed * 1.7) + liana.phase * 0.6) * 1.6;
+  const segments = Math.max(5, Math.ceil(length / 5));
+  let prevX = 0;
+  let prevY = 0;
+  gfx.clear();
+
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    const y = Math.round(t * length + Math.abs(wind) * t * 1.2 + bounce * t);
+    const localWave = Math.sin(tSec * liana.speed + liana.phase + t * 2.2 + (seed % 17) * 0.1);
+    const x = Math.round(localWave * liana.amplitude * t + Math.sin(t * Math.PI * 1.4 + liana.phase) * 2.5 * t);
+    const width = Math.max(1, liana.thickness - (t > 0.72 ? 1 : 0));
+    const color = i % 4 === 0 ? palette.vineLight : i % 3 === 0 ? palette.vineDark : palette.vineMid;
+    if (i > 0) drawPixelLine(gfx, prevX, prevY, x, y, width, color, 0.92);
+    if (i % 3 === 0) gfx.rect(x - 1, y - 1, 2, 2).fill(palette.vineDark);
+
+    const n = midMountainNoise(seed, i * 31, y, 2203);
+    if (i > 1 && i < segments && n % 3 !== 0) {
+      const side = n % 2 === 0 ? -1 : 1;
+      const leafW = 3 + (n % 3);
+      const leafH = 4 + ((n >> 3) % 4);
+      const sway = Math.round(wind * side * t * 2);
+      const lx = x + side * (2 + (n % 3)) + sway;
+      const ly = y - Math.round(leafH / 2);
+      const leafX = side < 0 ? lx - leafW : lx;
+      gfx.rect(leafX, ly, leafW, leafH).fill(n % 5 === 0 ? palette.leafLight : palette.leafDark);
+      gfx.rect(leafX, ly, Math.max(1, leafW - 1), 1).fill({ color: palette.vineLight, alpha: 0.45 });
+    }
+    if (i > 2 && n % 17 === 0) {
+      gfx.rect(x - 2, y - 2, 4, 4).fill(palette.flower);
+      gfx.rect(x - 1, y - 1, 2, 2).fill(PAL.coinGlow);
+    }
+    if (liana.frozen && i % 4 === 0) {
+      gfx.rect(x - 2, y - 1, 4, 1).fill({ color: palette.vineLight, alpha: 0.75 });
+    }
+    prevX = x;
+    prevY = y;
+  }
+
+  const tipSway = Math.round(wind * liana.amplitude);
+  gfx.rect(prevX - 1 + tipSway * 0.12, prevY, 2, 5).fill(liana.frozen ? palette.vineLight : palette.vineDark);
+}
+
+function composeProceduralLianas(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
+  clearProceduralLianasChunk(chunk.chunkY);
+  const lianas: ProceduralLiana[] = [];
+  const palette = lianaPaletteForBiome(biome);
+  const frozen = biome === "snowfallCliffs" || biome === "frozenSpires" || biome === "celestialSummit";
+
+  for (const platform of chunk.platforms) {
+    if (platform.width < 2) continue;
+    const baseSeed = platformSeed(chunk, platform, 2423);
+    const edgeCount = platform.width >= 7 ? 3 : platform.width >= 4 ? 2 : 1;
+    const anchors: number[] = [];
+    for (let i = 0; i < edgeCount; i++) {
+      const leftOffset = i * 0.42 + ((baseSeed >> (i + 1)) % 5) * 0.04;
+      const rightOffset = i * 0.42 + ((baseSeed >> (i + 5)) % 5) * 0.04;
+      anchors.push(platform.x * TILE_SIZE + 2 + leftOffset * TILE_SIZE);
+      anchors.push((platform.x + platform.width) * TILE_SIZE - 2 - rightOffset * TILE_SIZE);
+    }
+    if (platform.width >= 8 && baseSeed % 2 === 0) {
+      anchors.push((platform.x + platform.width * 0.5) * TILE_SIZE + ((baseSeed >> 7) % 13) - 6);
+    }
+
+    for (const [i, anchorX] of anchors.entries()) {
+      const n = midMountainNoise(chunk.chunkY, anchorX, platform.y * 17 + i * 41, 2401);
+      const length = 20 + (n % 34) + (platform.width >= 6 ? 10 : 0);
+      const liana: ProceduralLiana = {
+        chunkY: chunk.chunkY,
+        gfx: new Graphics(),
+        anchorX: Math.round(anchorX),
+        anchorY: platformTopY(chunk, platform) + 5 + ((n >> 5) % 5),
+        length,
+        phase: ((n >> 9) % 628) / 100,
+        speed: 0.85 + ((n >> 15) % 65) / 100,
+        amplitude: 2.5 + ((n >> 21) % 55) / 10,
+        seed: n,
+        thickness: n % 5 === 0 ? 3 : 2,
+        palette,
+        frozen,
+      };
+      liana.gfx.zIndex = 1;
+      liana.gfx.alpha = biome === "celestialSummit" ? 0.74 : frozen ? 0.82 : 0.9;
+      liana.gfx.x = liana.anchorX;
+      liana.gfx.y = liana.anchorY;
+      drawProceduralLiana(liana, 0);
+      target.addChild(liana.gfx);
+      lianas.push(liana);
+    }
+  }
+
+  if (lianas.length > 0) proceduralLianas.set(chunk.chunkY, lianas);
+}
+
+function updateProceduralLianas(tSec: number): void {
+  for (const [chunkY, lianas] of proceduralLianas) {
+    for (let i = lianas.length - 1; i >= 0; i--) {
+      const liana = lianas[i]!;
+      if (liana.gfx.destroyed) {
+        lianas.splice(i, 1);
+        continue;
+      }
+      liana.gfx.x = liana.anchorX + Math.round(Math.sin(tSec * 0.22 + liana.phase) * 1.5);
+      liana.gfx.y = liana.anchorY + Math.round(Math.sin(tSec * 0.48 + liana.phase) * 0.8);
+      drawProceduralLiana(liana, tSec);
+    }
+    if (lianas.length === 0) proceduralLianas.delete(chunkY);
+  }
+}
+
+function proceduralFloraPaletteForBiome(biome: BiomeId): ProceduralFloraPalette {
+  if (biome === "cloudRidge") {
+    return { stemDark: 0x2d5442, stem: 0x5f9a67, leafDark: 0x2f6f57, leaf: 0x67b978, leafLight: 0xb7e58b, petalA: 0x58b8ff, petalB: 0xea7bff, center: 0xffe982, frost: 0xdff6ff };
+  }
+  if (biome === "snowfallCliffs") {
+    return { stemDark: 0x4a6375, stem: 0x7ba0b3, leafDark: 0x526f88, leaf: 0x91bed4, leafLight: 0xdff7ff, petalA: 0xbadfff, petalB: 0xc787ff, center: 0xf7f0b8, frost: 0xffffff };
+  }
+  if (biome === "frozenSpires") {
+    return { stemDark: 0x334b67, stem: 0x6e98bd, leafDark: 0x48779c, leaf: 0x9fddf4, leafLight: 0xe9fbff, petalA: 0x8df7ff, petalB: 0xbfc6ff, center: 0xffffff, frost: 0xffffff };
+  }
+  if (biome === "celestialSummit") {
+    return { stemDark: 0x38446d, stem: 0x7786c6, leafDark: 0x4e6095, leaf: 0x9aa8ec, leafLight: 0xe3e8ff, petalA: 0xffdf76, petalB: 0xc17bff, center: 0xffffff, frost: 0xd7fff9 };
+  }
+  return { stemDark: 0x24451f, stem: 0x4d7b2c, leafDark: 0x2f6427, leaf: 0x72a83c, leafLight: 0xb5d852, petalA: 0xff7b39, petalB: 0xff71c9, center: 0xffd65a, frost: 0xe4f7d6 };
+}
+
+function chooseProceduralFloraKind(biome: BiomeId, seed: number): ProceduralFloraKind {
+  const roll = seed % 12;
+  if (biome === "pineValley") return roll < 3 ? "grass" : roll < 5 ? "sprout" : roll < 8 ? "daisy" : roll < 10 ? "berry" : "bell";
+  if (biome === "cloudRidge") return roll < 2 ? "grass" : roll < 4 ? "bell" : roll < 7 ? "daisy" : roll < 10 ? "lotus" : "berry";
+  if (biome === "snowfallCliffs") return roll < 2 ? "sprout" : roll < 5 ? "bell" : roll < 8 ? "crystal" : roll < 10 ? "lotus" : "grass";
+  if (biome === "frozenSpires") return roll < 4 ? "crystal" : roll < 7 ? "bell" : roll < 10 ? "sprout" : "lotus";
+  return roll < 3 ? "crystal" : roll < 6 ? "lotus" : roll < 9 ? "bell" : "daisy";
+}
+
+function clearProceduralFloraChunk(chunkY: number): void {
+  const flora = proceduralFlora.get(chunkY);
+  if (!flora) return;
+  for (const plant of flora) {
+    if (!plant.gfx.destroyed) plant.gfx.destroy();
+  }
+  proceduralFlora.delete(chunkY);
+}
+
+function drawFloraPixelLeaf(g: Graphics, x: number, y: number, side: number, width: number, height: number, color: number): void {
+  const leafX = side < 0 ? x - width : x;
+  g.rect(Math.round(leafX), Math.round(y), width, height).fill(color);
+  g.rect(Math.round(leafX + (side < 0 ? 0 : width - 1)), Math.round(y - 1), 1, height + 2).fill({ color, alpha: 0.55 });
+}
+
+function drawFloraPetal(g: Graphics, x: number, y: number, width: number, height: number, color: number, alpha = 1): void {
+  const w = Math.max(2, Math.round(width));
+  const h = Math.max(2, Math.round(height));
+  g.rect(Math.round(x - w / 2), Math.round(y - h / 2), w, h).fill({ color, alpha });
+  if (w > 3 && h > 3) g.rect(Math.round(x - w / 2 + 1), Math.round(y - h / 2), Math.max(1, w - 2), 1).fill({ color: 0xffffff, alpha: 0.22 * alpha });
+}
+
+function drawProceduralFlora(flora: ProceduralFlora, tSec: number): void {
+  const { gfx, height, kind, palette, seed } = flora;
+  const wind = Math.sin(tSec * flora.speed + flora.phase);
+  const flutter = Math.sin(tSec * (flora.speed * 1.9) + flora.phase * 0.7);
+  const topSway = Math.round(wind * flora.amplitude);
+  const cold = kind === "crystal" || palette.frost === 0xffffff;
+  gfx.clear();
+
+  if (kind === "grass") {
+    const blades = 4 + (seed % 4);
+    for (let i = 0; i < blades; i++) {
+      const n = midMountainNoise(seed, i * 23, height, 2549);
+      const bx = -6 + i * 3 + (n % 3);
+      const bh = Math.max(9, height - 8 + (n % 12));
+      const bend = Math.round((wind * (2 + (n % 4))) + (i - blades / 2) * 0.4);
+      drawPixelLine(gfx, bx, 0, bx + bend, -bh, n % 3 === 0 ? 2 : 1, n % 4 === 0 ? palette.leafLight : palette.leaf);
+      if (n % 5 === 0) gfx.rect(bx + bend - 1, -bh - 1, 3, 2).fill(cold ? palette.frost : palette.petalA);
+    }
+    return;
+  }
+
+  const stemTopX = topSway;
+  const stemTopY = -height;
+  drawPixelLine(gfx, 0, 0, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), 2, palette.stemDark, 0.96);
+  drawPixelLine(gfx, Math.round(stemTopX * 0.35), Math.round(stemTopY * 0.48), stemTopX, stemTopY, 2, palette.stem, 0.96);
+  drawPixelLine(gfx, 1, -2, stemTopX + 1, stemTopY + 1, 1, palette.leafLight, 0.5);
+  drawFloraPixelLeaf(gfx, -1 + Math.round(wind), -Math.round(height * 0.35), -1, 5 + (seed % 3), 4, palette.leafDark);
+  drawFloraPixelLeaf(gfx, 1 + Math.round(wind * 0.5), -Math.round(height * 0.58), 1, 5 + ((seed >> 4) % 3), 4, palette.leaf);
+
+  if (kind === "sprout") {
+    drawFloraPixelLeaf(gfx, stemTopX - 1, stemTopY - 2, -1, 8, 6, palette.leaf);
+    drawFloraPixelLeaf(gfx, stemTopX + 1, stemTopY - 1, 1, 8, 6, palette.leafLight);
+    gfx.rect(stemTopX - 2, stemTopY - 8, 5, 6).fill(cold ? palette.frost : palette.petalB);
+    gfx.rect(stemTopX - 1, stemTopY - 9, 3, 2).fill(palette.center);
+    return;
+  }
+
+  if (kind === "berry") {
+    const berryColor = (seed >> 3) % 2 === 0 ? palette.petalA : palette.petalB;
+    const offsets = [[-4, -3], [1, -5], [5, -1], [-1, 2], [4, 4]] as const;
+    for (const [i, [ox, oy]] of offsets.entries()) {
+      const wiggle = Math.round(flutter * ((i % 2) + 1));
+      gfx.rect(stemTopX + ox + wiggle, stemTopY + oy, 4, 4).fill(berryColor);
+      gfx.rect(stemTopX + ox + wiggle + 1, stemTopY + oy, 1, 1).fill({ color: 0xffffff, alpha: 0.38 });
+    }
+    gfx.rect(stemTopX - 6, stemTopY - 8, 10, 3).fill(palette.leafDark);
+    return;
+  }
+
+  if (kind === "crystal") {
+    const shine = Math.max(0.25, 0.6 + flutter * 0.28);
+    gfx.rect(stemTopX - 4, stemTopY - 5, 8, 10).fill({ color: palette.petalA, alpha: 0.9 });
+    gfx.rect(stemTopX - 2, stemTopY - 13, 4, 8).fill({ color: palette.frost, alpha: 0.95 });
+    gfx.rect(stemTopX - 7, stemTopY - 2, 3, 8).fill({ color: palette.petalB, alpha: 0.82 });
+    gfx.rect(stemTopX + 4, stemTopY - 1, 3, 7).fill({ color: palette.leafLight, alpha: 0.72 });
+    gfx.rect(stemTopX - 1, stemTopY - 10, 2, 13).fill({ color: 0xffffff, alpha: shine });
+    return;
+  }
+
+  if (kind === "bell") {
+    const cupColor = (seed >> 6) % 2 === 0 ? palette.petalA : palette.petalB;
+    gfx.rect(stemTopX - 4, stemTopY - 4, 8, 3).fill(palette.leafLight);
+    gfx.rect(stemTopX - 5, stemTopY - 1, 10, 7).fill(cupColor);
+    gfx.rect(stemTopX - 7, stemTopY + 4, 4, 4).fill(cupColor);
+    gfx.rect(stemTopX + 3, stemTopY + 4, 4, 4).fill(cupColor);
+    gfx.rect(stemTopX - 2, stemTopY + 5, 4, 5).fill({ color: palette.center, alpha: 0.8 });
+    gfx.rect(stemTopX - 4, stemTopY, 8, 1).fill({ color: 0xffffff, alpha: 0.22 });
+    return;
+  }
+
+  if (kind === "lotus") {
+    const baseY = stemTopY + 2;
+    const a = palette.petalA;
+    const b = palette.petalB;
+    drawFloraPetal(gfx, stemTopX - 7, baseY + 3, 7, 6, a, 0.95);
+    drawFloraPetal(gfx, stemTopX + 7, baseY + 3, 7, 6, b, 0.95);
+    drawFloraPetal(gfx, stemTopX - 3, baseY - 1, 7, 8, b, 0.95);
+    drawFloraPetal(gfx, stemTopX + 3, baseY - 1, 7, 8, a, 0.95);
+    drawFloraPetal(gfx, stemTopX, baseY - 5, 6, 8, palette.frost, cold ? 0.8 : 0.55);
+    gfx.rect(stemTopX - 2, baseY + 1, 4, 4).fill(palette.center);
+    return;
+  }
+
+  const petalA = palette.petalA;
+  const petalB = palette.petalB;
+  drawFloraPetal(gfx, stemTopX, stemTopY - 9, 6, 7, petalA);
+  drawFloraPetal(gfx, stemTopX - 7, stemTopY - 3, 7, 6, petalB);
+  drawFloraPetal(gfx, stemTopX + 7, stemTopY - 3, 7, 6, petalB);
+  drawFloraPetal(gfx, stemTopX - 4, stemTopY + 5, 6, 6, petalA);
+  drawFloraPetal(gfx, stemTopX + 4, stemTopY + 5, 6, 6, petalA);
+  gfx.rect(stemTopX - 3, stemTopY - 3, 6, 6).fill(palette.center);
+  gfx.rect(stemTopX - 1, stemTopY - 4, 2, 2).fill({ color: 0xffffff, alpha: 0.45 });
+}
+
+function composeProceduralFlora(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
+  clearProceduralFloraChunk(chunk.chunkY);
+  const flora: ProceduralFlora[] = [];
+  const palette = proceduralFloraPaletteForBiome(biome);
+
+  for (const platform of chunk.platforms) {
+    if (platform.width < 2) continue;
+    const baseSeed = platformSeed(chunk, platform, 3167);
+    const count = Math.min(9, Math.max(2, Math.floor(platform.width / 2) + (baseSeed % 3)));
+    const topY = platformTopY(chunk, platform);
+
+    for (let i = 0; i < count; i++) {
+      const n = midMountainNoise(chunk.chunkY, platform.x * 41 + i * 73, platform.y * 59, 3191);
+      if (n % 5 === 0 && platform.width < 5) continue;
+      const edgeBias = i % 4 === 0 ? 0.08 + ((n >> 5) % 8) / 100 : i % 4 === 1 ? 0.92 - ((n >> 9) % 8) / 100 : (i + 0.55) / (count + 0.8);
+      const xRatio = Math.max(0.08, Math.min(0.92, edgeBias + (((n >> 13) % 17) - 8) / 100));
+      const kind = chooseProceduralFloraKind(biome, n);
+      const height = kind === "grass" ? 13 + (n % 12) : kind === "crystal" ? 18 + (n % 12) : 16 + (n % 17);
+      const plant: ProceduralFlora = {
+        chunkY: chunk.chunkY,
+        gfx: new Graphics(),
+        baseX: Math.round((platform.x + platform.width * xRatio) * TILE_SIZE),
+        baseY: topY + 2,
+        phase: ((n >> 17) % 628) / 100,
+        speed: 0.85 + ((n >> 23) % 70) / 100,
+        amplitude: 1.5 + ((n >> 3) % 33) / 10,
+        seed: n,
+        height,
+        kind,
+        palette,
+      };
+      plant.gfx.zIndex = 5;
+      plant.gfx.alpha = biome === "celestialSummit" ? 0.82 : biome === "frozenSpires" ? 0.88 : 0.94;
+      plant.gfx.x = plant.baseX;
+      plant.gfx.y = plant.baseY;
+      drawProceduralFlora(plant, 0);
+      target.addChild(plant.gfx);
+      flora.push(plant);
+    }
+  }
+
+  if (flora.length > 0) proceduralFlora.set(chunk.chunkY, flora);
+}
+
+function updateProceduralFlora(tSec: number): void {
+  for (const [chunkY, flora] of proceduralFlora) {
+    for (let i = flora.length - 1; i >= 0; i--) {
+      const plant = flora[i]!;
+      if (plant.gfx.destroyed) {
+        flora.splice(i, 1);
+        continue;
+      }
+      plant.gfx.x = plant.baseX + Math.round(Math.sin(tSec * 0.18 + plant.phase) * 0.5);
+      plant.gfx.y = plant.baseY;
+      drawProceduralFlora(plant, tSec);
+    }
+    if (flora.length === 0) proceduralFlora.delete(chunkY);
   }
 }
 
@@ -1861,6 +2254,18 @@ function clearWorldChunks(): void {
     }
   }
   biomeFlutters.clear();
+  for (const lianas of proceduralLianas.values()) {
+    for (const liana of lianas) {
+      if (!liana.gfx.destroyed) liana.gfx.destroy();
+    }
+  }
+  proceduralLianas.clear();
+  for (const flora of proceduralFlora.values()) {
+    for (const plant of flora) {
+      if (!plant.gfx.destroyed) plant.gfx.destroy();
+    }
+  }
+  proceduralFlora.clear();
   backDecorationLayer.removeChildren();
   chunkLayer.removeChildren();
   decorationLayer.removeChildren();
@@ -1893,6 +2298,8 @@ function destroyChunkVisuals(chunkY: number): void {
   chunkHazardTelegraphs.delete(chunkY);
   clearMidMountainCrumbleChunk(chunkY);
   clearBiomeFluttersChunk(chunkY);
+  clearProceduralLianasChunk(chunkY);
+  clearProceduralFloraChunk(chunkY);
 
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
@@ -2414,15 +2821,21 @@ function biomeDecorationFolders(biome: BiomeId): string[] {
     return [...common, "environment/flora", "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles", "environment/clouds"];
   }
   if (biome === "frozenSpires") {
-    return [...common, "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles"];
+    return [...common, "environment/flora", "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles"];
   }
-  return [...common, "environment/relicShrines", "environment/snowTiles", "environment/ruinTiles", "environment/terrainTiles"];
+  return [...common, "environment/flora", "environment/relicShrines", "environment/snowTiles", "environment/ruinTiles", "environment/terrainTiles"];
+}
+
+function folderAssetKeysForBiome(folder: string, biome: BiomeId): AssetKey[] {
+  if (folder === "environment/rocks") return biomeRockAssetKeys(biome);
+  if (folder === "environment/flora") return biomeFloraAssetKeys(biome);
+  return folderAssetKeys(folder);
 }
 
 function folderChoiceForBiome(biome: BiomeId, seed: number): AssetKey | null {
   const folders = biomeDecorationFolders(biome);
   const folder = folders[Math.abs(seed) % folders.length]!;
-  const keys = folder === "environment/rocks" ? biomeRockAssetKeys(biome) : folderAssetKeys(folder);
+  const keys = folderAssetKeysForBiome(folder, biome);
   if (keys.length === 0) return null;
   return chooseAsset(keys, seed >> 3, "");
 }
@@ -2493,9 +2906,40 @@ function chooseBiomeRockAsset(biome: BiomeId, seed: number, shape: "any" | "cap"
   return keys[Math.abs(seed) % keys.length]!;
 }
 
+type FloraShape = "any" | "tall" | "ground" | "bloom";
+
+function biomeFloraAssetKeys(biome: BiomeId, shape: FloraShape = "any"): AssetKey[] {
+  const keys = uniqueAssetKeys(folderAssetKeys("environment/flora"));
+  const biomeMatch = (key: AssetKey): boolean => {
+    const lower = key.toLowerCase();
+    if (biome === "pineValley") return lower.includes("pine") || lower.includes("moss") || lower.includes("clover") || lower.includes("wildflower") || lower.includes("reed_grass") || lower.includes("flower_pink");
+    if (biome === "cloudRidge") return lower.includes("cloud") || lower.includes("sky") || lower.includes("wind") || lower.includes("blue_sprig") || lower.includes("wildflower");
+    if (biome === "snowfallCliffs") return lower.includes("snow") || lower.includes("frost") || lower.includes("blue_sprig") || lower.includes("silver");
+    if (biome === "frozenSpires") return lower.includes("ice") || lower.includes("crystal") || lower.includes("frost") || lower.includes("silver");
+    return lower.includes("star") || lower.includes("moon") || lower.includes("summit") || lower.includes("crystal");
+  };
+  const shapeMatch = (key: AssetKey): boolean => {
+    const lower = key.toLowerCase();
+    if (shape === "tall") return lower.includes("reed") || lower.includes("grass") || lower.includes("bells") || lower.includes("thistle");
+    if (shape === "ground") return lower.includes("fern") || lower.includes("moss") || lower.includes("lichen") || lower.includes("sprout");
+    if (shape === "bloom") return lower.includes("flower") || lower.includes("bloom") || lower.includes("lotus") || lower.includes("snowdrop") || lower.includes("clover") || lower.includes("sprig");
+    return true;
+  };
+  const themed = keys.filter((key) => biomeMatch(key) && shapeMatch(key));
+  if (themed.length > 0) return themed;
+  const shaped = keys.filter(shapeMatch);
+  return shaped.length > 0 ? shaped : keys;
+}
+
+function chooseBiomeFloraAsset(biome: BiomeId, seed: number, shape: FloraShape = "any"): AssetKey | null {
+  const keys = biomeFloraAssetKeys(biome, shape);
+  if (keys.length === 0) return null;
+  return keys[Math.abs(seed) % keys.length]!;
+}
+
 function chooseAssetFromFolders(folders: string[], seed: number, biome?: BiomeId): AssetKey | null {
   const keys = uniqueAssetKeys(folders.flatMap((folder) =>
-    folder === "environment/rocks" && biome ? biomeRockAssetKeys(biome) : folderAssetKeys(folder)
+    biome ? folderAssetKeysForBiome(folder, biome) : folderAssetKeys(folder)
   )).filter((key) => !isProceduralGameplayPropAsset(key));
   if (keys.length === 0) return null;
   return keys[Math.abs(seed) % keys.length]!;
@@ -2793,20 +3237,20 @@ function biomePropFolders(biome: BiomeId): string[] {
     return ["environment/pineTrees", "environment/clouds", "environment/structures", "environment/decorations", "environment/crystals", "environment/rocks"];
   }
   if (biome === "snowfallCliffs") {
-    return ["environment/snowTrees", "environment/rocks", "environment/ruinTiles", "environment/decorations", "environment/lanterns", "environment/crystals"];
+    return ["environment/snowTrees", "environment/flora", "environment/rocks", "environment/ruinTiles", "environment/decorations", "environment/lanterns", "environment/crystals"];
   }
   if (biome === "frozenSpires") {
-    return ["environment/snowTrees", "environment/rocks", "environment/decorations", "environment/crystals", "environment/particleEffects"];
+    return ["environment/snowTrees", "environment/flora", "environment/rocks", "environment/decorations", "environment/crystals", "environment/particleEffects"];
   }
-  return ["environment/relicShrines", "environment/decorations", "environment/crystals", "environment/structures", "environment/lights", "environment/banners"];
+  return ["environment/relicShrines", "environment/flora", "environment/decorations", "environment/crystals", "environment/structures", "environment/lights", "environment/banners"];
 }
 
 function biomeSmallPropFolders(biome: BiomeId): string[] {
   if (biome === "pineValley") return ["environment/flora", "environment/vegetation", "environment/rocks"];
   if (biome === "cloudRidge") return ["environment/flora", "environment/rocks", "environment/clouds", "environment/crystals"];
-  if (biome === "snowfallCliffs") return ["environment/rocks", "environment/snowTrees", "environment/lanterns", "environment/crystals"];
-  if (biome === "frozenSpires") return ["environment/rocks", "environment/crystals", "environment/particleEffects", "environment/hazards"];
-  return ["environment/crystals", "environment/decorations", "environment/lights", "environment/banners"];
+  if (biome === "snowfallCliffs") return ["environment/flora", "environment/rocks", "environment/snowTrees", "environment/lanterns", "environment/crystals"];
+  if (biome === "frozenSpires") return ["environment/flora", "environment/rocks", "environment/crystals", "environment/particleEffects", "environment/hazards"];
+  return ["environment/flora", "environment/crystals", "environment/decorations", "environment/lights", "environment/banners"];
 }
 
 function hazardTelegraphStyle(assetKey: AssetKey): HazardTelegraph["style"] {
@@ -3079,6 +3523,8 @@ function decorateChunk(chunk: GeneratedChunk): void {
   composePlatformPartLayer(chunk, front, biome);
   composeTraversalConnectors(chunk, back, front, biome);
   composePlatformSceneDressing(chunk, back, front, biome);
+  composeProceduralLianas(chunk, front, biome);
+  composeProceduralFlora(chunk, front, biome);
   composeBiomeFlutters(chunk, front, biome);
 
   for (let ly = 0; ly < chunk.height; ly++) {
@@ -3207,8 +3653,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
         back.addChild(spire);
       }
 
-      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("reedGrassWheat") && seed % 31 === 0) {
-        const reeds = makeSceneSprite(seed % 3 === 0 && hasAsset("reedGrassYellow") ? "reedGrassYellow" : "reedGrassWheat");
+      const tallFloraKey = seed % 31 === 0 ? chooseBiomeFloraAsset(biome, seed, "tall") : null;
+      if (tallFloraKey) {
+        const reeds = makeSceneSprite(tallFloraKey);
         reeds.x = wx - 3;
         reeds.y = wy - 27;
         reeds.alpha = 0.84;
@@ -3216,8 +3663,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(reeds);
       }
 
-      if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("wildflowerMixed") && seed % 37 === 0) {
-        const flowers = makeSceneSprite(seed % 5 === 0 && hasAsset("wildflowerPink") ? "wildflowerPink" : seed % 7 === 0 && hasAsset("wildflowerYellow") ? "wildflowerYellow" : "wildflowerMixed");
+      const bloomFloraKey = seed % 37 === 0 ? chooseBiomeFloraAsset(biome, seed, "bloom") : null;
+      if (bloomFloraKey) {
+        const flowers = makeSceneSprite(bloomFloraKey);
         flowers.x = wx - 3;
         flowers.y = wy - 19;
         flowers.alpha = 0.9;
@@ -3225,10 +3673,11 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(flowers);
       }
 
-      if (biome === "pineValley" && hasAsset("flowerPink") && seed % 61 === 0) {
-        const flower = makeSceneSprite("flowerPink");
+      const groundFloraKey = seed % 61 === 0 ? chooseBiomeFloraAsset(biome, seed, "ground") : null;
+      if (groundFloraKey) {
+        const flower = makeSceneSprite(groundFloraKey);
         flower.x = wx - 3;
-        flower.y = wy - 27;
+        flower.y = wy - 18;
         flower.alpha = 0.82;
         flower.zIndex = 3;
         front.addChild(flower);
@@ -5046,6 +5495,8 @@ pixi.ticker.add((ticker) => {
   updateParticles(dt);
   updateMidMountainCrumble(dt);
   updateBiomeFlutters(tSec);
+  updateProceduralLianas(tSec);
+  updateProceduralFlora(tSec);
   spawnAmbientParticles(dt);
   spawnFallStreaks(dt);
   updateHazardTelegraphs(tSec);

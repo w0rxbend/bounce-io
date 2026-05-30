@@ -1771,6 +1771,106 @@ def sign_board(kind: str = "wood") -> Image.Image:
     return img
 
 
+PIXEL_FONT_3X5 = {
+    "A": ("010", "101", "111", "101", "101"),
+    "C": ("111", "100", "100", "100", "111"),
+    "D": ("110", "101", "101", "101", "110"),
+    "E": ("111", "100", "110", "100", "111"),
+    "G": ("111", "100", "101", "101", "111"),
+    "H": ("101", "101", "111", "101", "101"),
+    "I": ("111", "010", "010", "010", "111"),
+    "L": ("100", "100", "100", "100", "111"),
+    "N": ("101", "111", "111", "111", "101"),
+    "O": ("111", "101", "101", "101", "111"),
+    "P": ("111", "101", "111", "100", "100"),
+    "R": ("110", "101", "110", "101", "101"),
+    "S": ("111", "100", "111", "001", "111"),
+    "T": ("111", "010", "010", "010", "010"),
+    "U": ("101", "101", "101", "101", "111"),
+    "W": ("101", "101", "111", "111", "101"),
+}
+
+
+def pixel_text_size(text: str, scale: int = 2) -> tuple[int, int]:
+    width = 0
+    for ch in text:
+        width += (2 if ch == " " else 3) * scale + scale
+    return max(0, width - scale), 5 * scale
+
+
+def draw_pixel_text(d: ImageDraw.ImageDraw, x: int, y: int, text: str, fill: tuple[int, int, int, int], scale: int = 2) -> None:
+    cursor = x
+    for ch in text.upper():
+        if ch == " ":
+            cursor += 3 * scale
+            continue
+        glyph = PIXEL_FONT_3X5.get(ch)
+        if glyph is None:
+            cursor += 4 * scale
+            continue
+        for gy, row in enumerate(glyph):
+            for gx, bit in enumerate(row):
+                if bit == "1":
+                    d.rectangle((cursor + gx * scale, y + gy * scale, cursor + (gx + 1) * scale - 1, y + (gy + 1) * scale - 1), fill=fill)
+        cursor += 4 * scale
+
+
+def labeled_banner(kind: str = "help") -> Image.Image:
+    img = canvas(80, 56)
+    d = ImageDraw.Draw(img)
+    label_map = {
+        "help": ("HELP", PAL["green"], PAL["leaf_dark"]),
+        "danger": ("DANGER", PAL["red"], rgba("#5c1828")),
+        "caution": ("CAUTION", PAL["gold_light"], PAL["gold_dark"]),
+        "no_winners": ("NO WINNERS", PAL["violet"], rgba("#39254f")),
+    }
+    label, accent, shade = label_map[kind]
+    wood_hi = rgba("#d39854")
+    wood_mid = rgba("#96572f")
+    wood_dark = rgba("#3c2318")
+    leaf_dark = PAL["leaf_dark"]
+    leaf_mid = PAL["leaf_mid"]
+    leaf_light = PAL["leaf_light"]
+
+    d.ellipse((8, 49, 72, 55), fill=PAL["shadow"])
+    for x, h in ((8, 43), (64, 37)):
+        d.rectangle((x, 14, x + 7, 52), fill=PAL["outline"])
+        d.rectangle((x + 2, 15, x + 5, 51), fill=wood_dark)
+        d.rectangle((x + 4, 16, x + 6, 49), fill=PAL["bark"])
+        d.rectangle((x - 2, h, x + 10, h + 3), fill=wood_dark)
+    d.polygon([(6, 8), (67, 3), (75, 11), (15, 18)], fill=PAL["outline"])
+    d.polygon([(9, 9), (66, 5), (72, 11), (16, 16)], fill=wood_dark)
+    d.polygon([(14, 9), (63, 6), (69, 10), (18, 14)], fill=wood_mid)
+    d.rectangle((20, 18, 22, 25), fill=wood_dark)
+    d.rectangle((58, 16, 60, 25), fill=wood_dark)
+    d.rectangle((16, 24, 64, 43), fill=PAL["outline"])
+    d.rectangle((18, 25, 62, 41), fill=wood_mid)
+    d.rectangle((20, 27, 60, 39), fill=wood_hi)
+    d.rectangle((18, 40, 62, 42), fill=wood_dark)
+    d.rectangle((20, 29, 30, 31), fill=rgba("#f6c06a"))
+    d.rectangle((35, 28, 55, 29), fill=rgba("#6d3822"))
+    d.rectangle((26, 36, 45, 37), fill=rgba("#6d3822"))
+
+    lines = ["NO", "WINNERS"] if kind == "no_winners" else [label]
+    y0 = 28 if len(lines) == 1 else 27
+    for i, line in enumerate(lines):
+        scale = 2 if len(line) <= 7 else 1
+        tw, th = pixel_text_size(line, scale)
+        tx = 40 - tw // 2
+        ty = y0 + i * (th + 1)
+        draw_pixel_text(d, tx + 1, ty + 1, line, shade, scale)
+        draw_pixel_text(d, tx, ty, line, accent, scale)
+
+    for x, y, flip in [(4, 12, 0), (12, 7, 1), (58, 3, 0), (69, 15, 1), (3, 34, 1), (65, 34, 0), (13, 45, 0)]:
+        d.rectangle((x, y, x + 1, y + 10), fill=leaf_dark)
+        leaf = [(x - 2, y + 2), (x + 3, y - 1), (x + 8, y + 4), (x + 2, y + 7)] if flip else [(x + 1, y + 2), (x + 7, y), (x + 10, y + 5), (x + 4, y + 8)]
+        d.polygon(leaf, fill=leaf_mid)
+        d.rectangle((x + 3, y + 3, x + 5, y + 5), fill=leaf_light)
+    d.rectangle((19, 23, 27, 24), fill=leaf_dark)
+    d.rectangle((54, 22, 61, 23), fill=leaf_dark)
+    return img
+
+
 def rope_posts(kind: str = "plain") -> Image.Image:
     img = canvas(56, 28)
     d = ImageDraw.Draw(img)
@@ -1856,24 +1956,6 @@ def tripod_prop(kind: str = "red") -> Image.Image:
     d.polygon([(18, 10), (25, 29), (11, 29)], fill=cloth)
     d.rectangle((15, 20, 21, 21), fill=PAL["gold_light"])
     d.rectangle((16, 12, 20, 14), fill=PAL["gold_light"])
-    return img
-
-
-def rope_gate_prop(kind: str = "wood") -> Image.Image:
-    img = canvas(56, 36)
-    d = ImageDraw.Draw(img)
-    post = PAL["bark"] if kind == "wood" else rgba("#8796a9")
-    rope = PAL["bark_dark"] if kind == "wood" else PAL["cyan"]
-    for x in (4, 48):
-        d.rectangle((x, 7, x + 5, 35), fill=PAL["outline"])
-        d.rectangle((x + 1, 6, x + 4, 34), fill=post)
-        d.rectangle((x - 2, 4, x + 7, 8), fill=PAL["gold_dark"])
-    d.line((8, 15, 28, 21, 51, 15), fill=rope, width=2)
-    d.line((8, 24, 28, 30, 51, 24), fill=rope, width=2)
-    if kind == "lit":
-        for x in (16, 40):
-            d.rectangle((x, 16, x + 5, 23), fill=PAL["outline"])
-            d.rectangle((x + 1, 17, x + 4, 22), fill=PAL["gold_light"])
     return img
 
 
@@ -2357,6 +2439,21 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/flora/wildflower_mixed_1.png", wildflower_patch("mixed")),
         ("environment/flora/wildflower_pink_1.png", wildflower_patch("pink")),
         ("environment/flora/wildflower_yellow_1.png", wildflower_patch("yellow")),
+        ("environment/flora/pine_fern_1.png", biome_flora("pine_fern")),
+        ("environment/flora/moss_sprout_1.png", biome_flora("moss_sprout")),
+        ("environment/flora/clover_bloom_1.png", biome_flora("clover_bloom")),
+        ("environment/flora/cloud_bells_1.png", biome_flora("cloud_bells")),
+        ("environment/flora/sky_thistle_1.png", biome_flora("sky_thistle")),
+        ("environment/flora/wind_grass_1.png", biome_flora("wind_grass")),
+        ("environment/flora/snowdrop_1.png", biome_flora("snowdrop")),
+        ("environment/flora/frost_fern_1.png", biome_flora("frost_fern")),
+        ("environment/flora/blue_sprig_1.png", biome_flora("blue_sprig")),
+        ("environment/flora/ice_bloom_1.png", biome_flora("ice_bloom")),
+        ("environment/flora/crystal_grass_1.png", biome_flora("crystal_grass")),
+        ("environment/flora/silver_lichen_1.png", biome_flora("silver_lichen")),
+        ("environment/flora/starflower_1.png", biome_flora("starflower")),
+        ("environment/flora/moon_reed_1.png", biome_flora("moon_reed")),
+        ("environment/flora/summit_lotus_1.png", biome_flora("summit_lotus")),
         ("environment/hazards/spikes_1.png", spikes("stone")),
         ("environment/hazards/stone_spikes_1.png", spikes("stone")),
         ("environment/hazards/ice_spikes_1.png", spikes("ice")),
@@ -2400,6 +2497,10 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/decorations/pedestal_lamp_gold.png", pedestal_lamp("gold")),
         ("environment/decorations/sign_board_wood.png", sign_board("wood")),
         ("environment/decorations/sign_board_rune.png", sign_board("rune")),
+        ("environment/decorations/banner_help.png", labeled_banner("help")),
+        ("environment/decorations/banner_danger.png", labeled_banner("danger")),
+        ("environment/decorations/banner_caution.png", labeled_banner("caution")),
+        ("environment/decorations/banner_no_winners.png", labeled_banner("no_winners")),
         ("environment/decorations/rope_posts_plain.png", rope_posts("plain")),
         ("environment/decorations/rope_posts_lanterns.png", rope_posts("lanterns")),
         ("environment/decorations/flower_crystal_blue.png", flower_crystal_cluster("blue")),
@@ -2415,9 +2516,6 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/decorations/tripod_red.png", tripod_prop("red")),
         ("environment/decorations/tripod_blue.png", tripod_prop("blue")),
         ("environment/decorations/tripod_purple.png", tripod_prop("purple")),
-        ("environment/decorations/rope_gate_wood.png", rope_gate_prop("wood")),
-        ("environment/decorations/rope_gate_lit.png", rope_gate_prop("lit")),
-        ("environment/decorations/rope_gate_ice.png", rope_gate_prop("ice")),
         ("environment/decorations/crate_stack_wood.png", crate_stack_prop("wood")),
         ("environment/decorations/crate_stack_rune.png", crate_stack_prop("rune")),
         ("environment/decorations/barrel_stack_wood.png", barrel_stack_prop("wood")),
@@ -2808,6 +2906,93 @@ def wildflower_patch(kind: str = "mixed") -> Image.Image:
         d.rectangle((x - 2, 20 - h, x + 2, 22 - h), fill=c)
         d.point((x, 21 - h), fill=PAL["gold_dark"])
     d.rectangle((1, 20, 22, 23), fill=PAL["grass_dark"])
+    return img
+
+
+def biome_flora(kind: str) -> Image.Image:
+    img = canvas(28, 28)
+    d = ImageDraw.Draw(img)
+    leaf = {
+        "pine_fern": PAL["leaf_mid"],
+        "moss_sprout": PAL["moss_light"],
+        "clover_bloom": PAL["green"],
+        "cloud_bells": rgba("#8ed8ff"),
+        "sky_thistle": rgba("#84a6ff"),
+        "wind_grass": rgba("#b7e8d8"),
+        "snowdrop": PAL["snow"],
+        "frost_fern": rgba("#b6d8e8"),
+        "blue_sprig": PAL["cyan_light"],
+        "ice_bloom": rgba("#9fe7ff"),
+        "crystal_grass": PAL["cyan"],
+        "silver_lichen": rgba("#b8c8d0"),
+        "starflower": PAL["gold_light"],
+        "moon_reed": rgba("#d6c8ff"),
+        "summit_lotus": rgba("#f1dcff"),
+    }[kind]
+    stem = {
+        "pine_fern": PAL["leaf_dark"],
+        "moss_sprout": PAL["moss"],
+        "clover_bloom": PAL["leaf_mid"],
+        "cloud_bells": rgba("#426f83"),
+        "sky_thistle": rgba("#465c91"),
+        "wind_grass": rgba("#5f9c89"),
+        "snowdrop": rgba("#7e9eaf"),
+        "frost_fern": rgba("#7692a1"),
+        "blue_sprig": rgba("#477e91"),
+        "ice_bloom": rgba("#496b83"),
+        "crystal_grass": rgba("#31576d"),
+        "silver_lichen": rgba("#6d7e84"),
+        "starflower": rgba("#655a45"),
+        "moon_reed": rgba("#5e5480"),
+        "summit_lotus": rgba("#5e4775"),
+    }[kind]
+
+    if kind in {"pine_fern", "frost_fern"}:
+        d.rectangle((1, 24, 26, 27), fill=PAL["grass_dark"] if kind == "pine_fern" else rgba("#4f6574"))
+        for x, h in [(5, 16), (11, 22), (17, 18), (23, 14)]:
+            d.rectangle((x, 24 - h, x + 1, 25), fill=stem)
+            for y in range(24 - h + 3, 23, 4):
+                d.rectangle((x - 3, y, x + 4, y + 1), fill=leaf)
+                d.point((x + 3, y - 1), fill=PAL["white"] if kind == "frost_fern" else PAL["moss_light"])
+    elif kind in {"moss_sprout", "silver_lichen"}:
+        base = PAL["moss"] if kind == "moss_sprout" else rgba("#82939a")
+        d.rectangle((2, 23, 25, 27), fill=base)
+        for x, y, w in [(4, 20, 7), (10, 17, 8), (17, 21, 6), (20, 18, 5)]:
+            d.ellipse((x, y, x + w, y + 5), fill=leaf)
+            d.point((x + w // 2, y + 1), fill=PAL["white"])
+    elif kind in {"clover_bloom", "snowdrop", "ice_bloom", "starflower", "summit_lotus"}:
+        d.rectangle((1, 24, 26, 27), fill=PAL["grass_dark"] if kind == "clover_bloom" else rgba("#4c6274"))
+        flower = leaf
+        center = PAL["gold_light"] if kind not in {"starflower", "summit_lotus"} else PAL["white"]
+        for x, h in [(6, 11), (13, 17), (20, 13)]:
+            d.rectangle((x, 24 - h, x + 1, 24), fill=stem)
+            y = 22 - h
+            if kind == "summit_lotus":
+                d.polygon([(x, y + 5), (x - 4, y + 1), (x, y - 2), (x + 4, y + 1)], fill=flower)
+                d.rectangle((x - 1, y + 1, x + 2, y + 3), fill=center)
+            elif kind == "starflower":
+                d.rectangle((x - 1, y, x + 2, y + 5), fill=flower)
+                d.rectangle((x - 3, y + 2, x + 4, y + 3), fill=flower)
+                d.point((x, y + 2), fill=center)
+            else:
+                d.rectangle((x - 2, y + 1, x + 3, y + 4), fill=flower)
+                d.point((x, y + 2), fill=center)
+    else:
+        d.rectangle((1, 24, 26, 27), fill=rgba("#385d52"))
+        for x, h in [(4, 20), (9, 15), (14, 23), (20, 17), (24, 12)]:
+            d.rectangle((x, 24 - h, x + 1, 25), fill=stem)
+            if kind in {"cloud_bells", "moon_reed"}:
+                d.rectangle((x - 2, 24 - h, x + 3, 28 - h), fill=leaf)
+                d.point((x, 25 - h), fill=PAL["white"])
+            elif kind == "sky_thistle":
+                d.rectangle((x - 2, 23 - h, x + 3, 27 - h), fill=rgba("#5b63c6"))
+                d.rectangle((x - 1, 22 - h, x + 2, 28 - h), fill=leaf)
+            elif kind == "crystal_grass":
+                d.polygon([(x - 2, 25), (x + 1, 24 - h), (x + 4, 25)], fill=rgba("#1f4c64"))
+                d.polygon([(x, 24), (x + 1, 27 - h), (x + 3, 24)], fill=leaf)
+            else:
+                d.line((x, 23, x + 5, 24 - h), fill=leaf, width=1)
+                d.line((x, 22, x - 4, 27 - h), fill=leaf, width=1)
     return img
 
 

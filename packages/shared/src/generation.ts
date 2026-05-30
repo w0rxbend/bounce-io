@@ -7,7 +7,7 @@ import {
   MIN_PLATFORM_WIDTH_TILES,
   TILE_SIZE
 } from "./constants.js";
-import type { EnemyKind, EnemySpawn, GeneratedChunk, JumpPadSpawn, PlatformSpan, TileKind, TileMap } from "./types.js";
+import type { EnemyKind, EnemySpawn, GeneratedChunk, JumpPadSpawn, PlatformSpan, TileKind, TileMap, WindZoneSpawn } from "./types.js";
 import { createRng, hashSeed } from "./rng.js";
 
 export interface GenerateChunkOptions {
@@ -198,6 +198,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   const relics: Array<{ id: string; x: number; y: number }> = [];
   const enemies: EnemySpawn[] = [];
   const jumpPads: JumpPadSpawn[] = [];
+  const windZones: WindZoneSpawn[] = [];
   let relicIndex = 0;
 
   for (let i = 1; i < allPlatforms.length - 1; i++) {
@@ -232,6 +233,36 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
           y: padY,
           multiplier: 5
         });
+      }
+    }
+
+    if (options.chunkY >= 8 && options.chunkY < 16) {
+      const windCandidates = allPlatforms
+        .slice(1, -1)
+        .filter((platform) => platform.width >= 3 && platform.y >= 5);
+      const maxWindZones = options.chunkY >= 12 ? 2 : 1;
+      let windIndex = 0;
+      for (let i = 0; i < windCandidates.length && windIndex < maxWindZones; i++) {
+        const platform = windCandidates[(i + options.chunkY) % windCandidates.length];
+        if (!platform) continue;
+        const zoneSeed = hashSeed(options.seed, options.chunkY * 911 + platform.x * 37 + platform.y * 101);
+        const chance = options.chunkY >= 12 ? 42 : 28;
+        if (zoneSeed % 100 >= chance) continue;
+        const zoneWidth = clamp(platform.width + 1, 3, 5);
+        const zoneHeight = 4;
+        const zoneX = clamp(platform.x + Math.floor(platform.width / 2) - Math.floor(zoneWidth / 2), 0, width - zoneWidth);
+        const zoneY = clamp(platform.y - zoneHeight, 0, height - zoneHeight - 1);
+        const direction: -1 | 1 = (zoneSeed & 1) === 0 ? 1 : -1;
+        windZones.push({
+          id: `wind:${options.chunkY}:${windIndex}`,
+          x: zoneX,
+          y: zoneY,
+          width: zoneWidth,
+          height: zoneHeight,
+          direction,
+          strength: options.chunkY >= 12 ? 340 : 260
+        });
+        windIndex++;
       }
     }
 
@@ -281,7 +312,8 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     exit,
     relics,
     enemies,
-    jumpPads
+    jumpPads,
+    windZones
   };
 }
 

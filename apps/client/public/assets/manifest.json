@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 810,
+  "assetCount": 827,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -116,8 +116,12 @@
     ],
     "environment/decorations": [
       "environment/decorations/banner_blue_large.png",
+      "environment/decorations/banner_caution.png",
+      "environment/decorations/banner_danger.png",
       "environment/decorations/banner_gold_large.png",
       "environment/decorations/banner_green_large.png",
+      "environment/decorations/banner_help.png",
+      "environment/decorations/banner_no_winners.png",
       "environment/decorations/barrel_stack_rune.png",
       "environment/decorations/barrel_stack_wood.png",
       "environment/decorations/campfire_blue.png",
@@ -140,9 +144,6 @@
       "environment/decorations/pedestal_lamp_blue.png",
       "environment/decorations/pedestal_lamp_gold.png",
       "environment/decorations/pedestal_lamp_green.png",
-      "environment/decorations/rope_gate_ice.png",
-      "environment/decorations/rope_gate_lit.png",
-      "environment/decorations/rope_gate_wood.png",
       "environment/decorations/rope_posts_lanterns.png",
       "environment/decorations/rope_posts_plain.png",
       "environment/decorations/sign_board_rune.png",
@@ -168,7 +169,8 @@
       "environment/effects/collectible_ring_green_1.png",
       "environment/effects/collectible_sparkle_1.png",
       "environment/effects/fog_strip_1.png",
-      "environment/effects/jump_pad_1.png"
+      "environment/effects/jump_pad_1.png",
+      "environment/effects/portal_arch_1.png"
     ],
     "environment/enemies": [
       "environment/enemies/archer_1.png",
@@ -192,12 +194,27 @@
       "environment/enemies/yeti_1.png"
     ],
     "environment/flora": [
+      "environment/flora/blue_sprig_1.png",
+      "environment/flora/cloud_bells_1.png",
+      "environment/flora/clover_bloom_1.png",
+      "environment/flora/crystal_grass_1.png",
       "environment/flora/flower_pink_1.png",
+      "environment/flora/frost_fern_1.png",
+      "environment/flora/ice_bloom_1.png",
+      "environment/flora/moon_reed_1.png",
+      "environment/flora/moss_sprout_1.png",
+      "environment/flora/pine_fern_1.png",
       "environment/flora/reed_grass_wheat_1.png",
       "environment/flora/reed_grass_yellow_1.png",
+      "environment/flora/silver_lichen_1.png",
+      "environment/flora/sky_thistle_1.png",
+      "environment/flora/snowdrop_1.png",
+      "environment/flora/starflower_1.png",
+      "environment/flora/summit_lotus_1.png",
       "environment/flora/wildflower_mixed_1.png",
       "environment/flora/wildflower_pink_1.png",
-      "environment/flora/wildflower_yellow_1.png"
+      "environment/flora/wildflower_yellow_1.png",
+      "environment/flora/wind_grass_1.png"
     ],
     "environment/hazards": [
       "environment/hazards/crystal_spikes_1.png",
@@ -1399,6 +1416,16 @@
       "width": 28,
       "height": 48
     },
+    "environment/decorations/banner_caution.png": {
+      "png": "/assets/environment/decorations/banner_caution.png",
+      "width": 80,
+      "height": 56
+    },
+    "environment/decorations/banner_danger.png": {
+      "png": "/assets/environment/decorations/banner_danger.png",
+      "width": 80,
+      "height": 56
+    },
     "environment/decorations/banner_gold_large.png": {
       "png": "/assets/environment/decorations/banner_gold_large.png",
       "width": 28,
@@ -1408,6 +1435,16 @@
       "png": "/assets/environment/decorations/banner_green_large.png",
       "width": 28,
       "height": 48
+    },
+    "environment/decorations/banner_help.png": {
+      "png": "/assets/environment/decorations/banner_help.png",
+      "width": 80,
+      "height": 56
+    },
+    "environment/decorations/banner_no_winners.png": {
+      "png": "/assets/environment/decorations/banner_no_winners.png",
+      "width": 80,
+      "height": 56
     },
     "environment/decorations/barrel_stack_rune.png": {
       "png": "/assets/environment/decorations/barrel_stack_rune.png",
@@ -1518,21 +1555,6 @@
       "png": "/assets/environment/decorations/pedestal_lamp_green.png",
       "width": 32,
       "height": 48
-    },
-    "environment/decorations/rope_gate_ice.png": {
-      "png": "/assets/environment/decorations/rope_gate_ice.png",
-      "width": 56,
-      "height": 36
-    },
-    "environment/decorations/rope_gate_lit.png": {
-      "png": "/assets/environment/decorations/rope_gate_lit.png",
-      "width": 56,
-      "height": 36
-    },
-    "environment/decorations/rope_gate_wood.png": {
-      "png": "/assets/environment/decorations/rope_gate_wood.png",
-      "width": 56,
-      "height": 36
     },
     "environment/decorations/rope_posts_lanterns.png": {
       "png": "/assets/environment/decorations/rope_posts_lanterns.png",
@@ -1654,6 +1676,11 @@
       "width": 32,
       "height": 32
     },
+    "environment/effects/portal_arch_1.png": {
+      "png": "/assets/environment/effects/portal_arch_1.png",
+      "width": 64,
+      "height": 64
+    },
     "environment/enemies/archer_1.png": {
       "png": "/assets/environment/enemies/archer_1.png",
       "width": 40,
@@ -1749,10 +1776,55 @@
       "width": 40,
       "height": 36
     },
+    "environment/flora/blue_sprig_1.png": {
+      "png": "/assets/environment/flora/blue_sprig_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/cloud_bells_1.png": {
+      "png": "/assets/environment/flora/cloud_bells_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/clover_bloom_1.png": {
+      "png": "/assets/environment/flora/clover_bloom_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/crystal_grass_1.png": {
+      "png": "/assets/environment/flora/crystal_grass_1.png",
+      "width": 28,
+      "height": 28
+    },
     "environment/flora/flower_pink_1.png": {
       "png": "/assets/environment/flora/flower_pink_1.png",
       "width": 24,
       "height": 32
+    },
+    "environment/flora/frost_fern_1.png": {
+      "png": "/assets/environment/flora/frost_fern_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/ice_bloom_1.png": {
+      "png": "/assets/environment/flora/ice_bloom_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/moon_reed_1.png": {
+      "png": "/assets/environment/flora/moon_reed_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/moss_sprout_1.png": {
+      "png": "/assets/environment/flora/moss_sprout_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/pine_fern_1.png": {
+      "png": "/assets/environment/flora/pine_fern_1.png",
+      "width": 28,
+      "height": 28
     },
     "environment/flora/reed_grass_wheat_1.png": {
       "png": "/assets/environment/flora/reed_grass_wheat_1.png",
@@ -1763,6 +1835,31 @@
       "png": "/assets/environment/flora/reed_grass_yellow_1.png",
       "width": 24,
       "height": 32
+    },
+    "environment/flora/silver_lichen_1.png": {
+      "png": "/assets/environment/flora/silver_lichen_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/sky_thistle_1.png": {
+      "png": "/assets/environment/flora/sky_thistle_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/snowdrop_1.png": {
+      "png": "/assets/environment/flora/snowdrop_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/starflower_1.png": {
+      "png": "/assets/environment/flora/starflower_1.png",
+      "width": 28,
+      "height": 28
+    },
+    "environment/flora/summit_lotus_1.png": {
+      "png": "/assets/environment/flora/summit_lotus_1.png",
+      "width": 28,
+      "height": 28
     },
     "environment/flora/wildflower_mixed_1.png": {
       "png": "/assets/environment/flora/wildflower_mixed_1.png",
@@ -1778,6 +1875,11 @@
       "png": "/assets/environment/flora/wildflower_yellow_1.png",
       "width": 24,
       "height": 24
+    },
+    "environment/flora/wind_grass_1.png": {
+      "png": "/assets/environment/flora/wind_grass_1.png",
+      "width": 28,
+      "height": 28
     },
     "environment/hazards/crystal_spikes_1.png": {
       "png": "/assets/environment/hazards/crystal_spikes_1.png",

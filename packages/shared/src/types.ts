@@ -59,6 +59,16 @@ export interface JumpPadSpawn {
   multiplier: number;
 }
 
+export interface WindZoneSpawn {
+  id: EntityId;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  direction: -1 | 1;
+  strength: number;
+}
+
 export type CollectibleKind =
   | "relic"
   | "blueCrystal"
@@ -87,6 +97,7 @@ export interface GeneratedChunk {
   relics: RelicSpawn[];
   enemies: EnemySpawn[];
   jumpPads: JumpPadSpawn[];
+  windZones: WindZoneSpawn[];
 }
 
 export interface EnemyState {
