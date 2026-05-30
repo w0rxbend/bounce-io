@@ -1,0 +1,297 @@
+package game
+
+import "time"
+
+const (
+	GameVersion     = "0.1.0"
+	ProtocolVersion = 2
+
+	TileSize                       = 16
+	ChunkWidthTiles                = 24
+	ChunkHeightTiles               = 18
+	PlayerWidth                    = 14
+	PlayerHeight                   = 22
+	PhysicsStepSeconds             = 1.0 / 60.0
+	MaxDeltaSeconds                = 1.0 / 15.0
+	MaxReachableVerticalGapTiles   = 3
+	MaxReachableHorizontalGapTiles = 6
+	DefaultTickRate                = 60
+	DefaultSnapshotRate            = 20
+	DefaultRoomID                  = "demo"
+	DefaultMaxPlayers              = 8
+	DefaultOutboundQueue           = 32
+	DefaultReconnectGrace          = 30 * time.Second
+)
+
+const (
+	MoveAcceleration   = 1200.0
+	GroundFriction     = 1450.0
+	AirAcceleration    = 760.0
+	MaxRunSpeed        = 150.0
+	Gravity            = 820.0
+	JumpSpeed          = 315.0
+	MaxFallSpeed       = 420.0
+	CoyoteTimeSeconds  = 0.09
+	JumpBufferSeconds  = 0.10
+	ShortHopCutoff     = 0.45
+	BaseMaxHealth      = 5
+	ReconcileTolerance = 6.0
+
+	KickWindupSeconds          = 0.10
+	KickActiveSeconds          = 0.08
+	KickRecoverySeconds        = 0.22
+	KickCooldownSeconds        = 0.80
+	KickRangePX                = 20
+	KickForceGround            = 260.0
+	KickForceAir               = 160.0
+	KickHitInvulnerableSeconds = 0.35
+	HitStunSeconds             = 0.16
+	PlayerPushForce            = 800.0
+	PlayerMaxPushVelocity      = 120.0
+	AirPushFactor              = 0.35
+	RelicsPerLevel             = 5
+)
+
+type MessageEnvelope struct {
+	Type string `json:"type"`
+}
+
+type ClientHello struct {
+	Type     string `json:"type"`
+	Protocol int    `json:"protocol"`
+	Version  string `json:"version"`
+	Name     string `json:"name"`
+	Token    string `json:"token,omitempty"`
+}
+
+type ClientJoin struct {
+	Type       string `json:"type"`
+	Protocol   int    `json:"protocol"`
+	Version    string `json:"version"`
+	Name       string `json:"name"`
+	Token      string `json:"token,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
+	ClientTime int64  `json:"clientTime,omitempty"`
+}
+
+type ClientPing struct {
+	Type       string `json:"type"`
+	ClientTime int64  `json:"clientTime"`
+}
+
+type ClientLeave struct {
+	Type     string `json:"type"`
+	ClientID string `json:"clientId,omitempty"`
+	PlayerID string `json:"playerId,omitempty"`
+}
+
+type ClientRequestChunk struct {
+	Type   string `json:"type"`
+	ChunkY int    `json:"chunkY"`
+}
+
+type ClientInput struct {
+	Type       string       `json:"type"`
+	ClientID   string       `json:"clientId,omitempty"`
+	PlayerID   string       `json:"playerId,omitempty"`
+	InputSeq   int64        `json:"inputSeq,omitempty"`
+	ClientTime int64        `json:"clientTime,omitempty"`
+	Input      PlayerInput  `json:"input,omitempty"`
+	Movement   *InputState  `json:"movement,omitempty"`
+	Aim        *AimState    `json:"aim,omitempty"`
+	Action     *ActionState `json:"action,omitempty"`
+}
+
+type InputState struct {
+	Left        bool `json:"left"`
+	Right       bool `json:"right"`
+	JumpPressed bool `json:"jumpPressed"`
+	JumpHeld    bool `json:"jumpHeld"`
+	Drop        bool `json:"drop"`
+}
+
+type AimState struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type ActionState struct {
+	Kick bool `json:"kick"`
+}
+
+type PlayerInput struct {
+	Left        bool  `json:"left"`
+	Right       bool  `json:"right"`
+	JumpPressed bool  `json:"jumpPressed"`
+	JumpHeld    bool  `json:"jumpHeld"`
+	Drop        bool  `json:"drop"`
+	Kick        bool  `json:"kick"`
+	Sequence    int64 `json:"sequence"`
+	ClientTime  int64 `json:"clientTime,omitempty"`
+}
+
+type Vec2 struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type PlayerState struct {
+	ID                  string   `json:"id"`
+	Position            Vec2     `json:"position"`
+	Velocity            Vec2     `json:"velocity"`
+	Facing              int      `json:"facing"`
+	Grounded            bool     `json:"grounded"`
+	CoyoteTimer         float64  `json:"coyoteTimer"`
+	JumpBufferTimer     float64  `json:"jumpBufferTimer"`
+	KickCooldown        float64  `json:"kickCooldown"`
+	KickPhase           string   `json:"kickPhase"`
+	KickTimer           float64  `json:"kickTimer"`
+	KickInvulnerable    float64  `json:"kickInvulnerable"`
+	Invulnerable        float64  `json:"invulnerable"`
+	StunTimer           float64  `json:"stunTimer"`
+	CheckpointChunkY    int      `json:"checkpointChunkY"`
+	Coins               int      `json:"coins"`
+	Health              int      `json:"health"`
+	MaxHealth           int      `json:"maxHealth"`
+	Damage              int      `json:"damage"`
+	AttackSpeed         float64  `json:"attackSpeed"`
+	JumpPower           float64  `json:"jumpPower"`
+	AirControl          float64  `json:"airControl"`
+	KnockbackResistance float64  `json:"knockbackResistance"`
+	MovementSpeed       float64  `json:"movementSpeed"`
+	Level               int      `json:"level"`
+	Relics              int      `json:"relics"`
+	Crystals            int      `json:"crystals"`
+	RelicFragments      int      `json:"relicFragments"`
+	FallStartY          *float64 `json:"fallStartY"`
+}
+
+type EntityState struct {
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	Type     string `json:"type"`
+	Position Vec2   `json:"position"`
+	Velocity Vec2   `json:"velocity"`
+	Facing   int    `json:"facing"`
+}
+
+type EnemySpawn struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	X    int    `json:"x"`
+	Y    int    `json:"y"`
+}
+
+type EnemyState struct {
+	ID             string  `json:"id"`
+	Kind           string  `json:"kind"`
+	Position       Vec2    `json:"position"`
+	Velocity       Vec2    `json:"velocity"`
+	Facing         int     `json:"facing"`
+	Health         int     `json:"health"`
+	MaxHealth      int     `json:"maxHealth"`
+	ChunkY         int     `json:"chunkY"`
+	PatrolMinX     float64 `json:"patrolMinX"`
+	PatrolMaxX     float64 `json:"patrolMaxX"`
+	PlatformY      float64 `json:"platformY"`
+	AttackCooldown float64 `json:"attackCooldown"`
+	HurtCooldown   float64 `json:"hurtCooldown"`
+}
+
+type MatchEvent map[string]any
+
+type WelcomeMessage struct {
+	Type         string `json:"type"`
+	PlayerID     string `json:"playerId"`
+	SessionToken string `json:"sessionToken"`
+	ServerTime   int64  `json:"serverTime"`
+	TickRate     int    `json:"tickRate"`
+	MatchPhase   string `json:"matchPhase"`
+	Seed         uint32 `json:"seed"`
+	Name         string `json:"name"`
+}
+
+type SnapshotMessage struct {
+	Type             string           `json:"type"`
+	Tick             uint64           `json:"tick"`
+	ServerTick       uint64           `json:"serverTick"`
+	SnapshotSeq      uint64           `json:"snapshotSeq"`
+	ServerTime       int64            `json:"serverTime"`
+	MatchPhase       string           `json:"matchPhase"`
+	AckInputSeq      int64            `json:"ackInputSeq"`
+	Players          []PlayerState    `json:"players"`
+	Entities         []EntityState    `json:"entities"`
+	Enemies          []EnemyState     `json:"enemies"`
+	CollectedRelics  []string         `json:"collectedRelics"`
+	Events           []MatchEvent     `json:"events"`
+	LastProcessedSeq map[string]int64 `json:"lastProcessedSeq"`
+}
+
+type ErrorMessage struct {
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type PongMessage struct {
+	Type       string `json:"type"`
+	ClientTime int64  `json:"clientTime"`
+	ServerTime int64  `json:"serverTime"`
+}
+
+type MatchPhaseMessage struct {
+	Type        string `json:"type"`
+	Phase       string `json:"phase"`
+	CountdownMS int64  `json:"countdownMs,omitempty"`
+}
+
+type PlayerJoinedMessage struct {
+	Type   string      `json:"type"`
+	Player PlayerState `json:"player"`
+	Name   string      `json:"name"`
+}
+
+type PlayerLeftMessage struct {
+	Type     string `json:"type"`
+	PlayerID string `json:"playerId"`
+}
+
+type ChunkMessage struct {
+	Type  string         `json:"type"`
+	Chunk GeneratedChunk `json:"chunk"`
+}
+
+type GeneratedChunk struct {
+	Seed       uint32         `json:"seed"`
+	ChunkY     int            `json:"chunkY"`
+	Width      int            `json:"width"`
+	Height     int            `json:"height"`
+	WorldTileY int            `json:"worldTileY"`
+	Tiles      []string       `json:"tiles"`
+	Platforms  []PlatformSpan `json:"platforms"`
+	Entry      PlatformSpan   `json:"entry"`
+	Exit       PlatformSpan   `json:"exit"`
+	Relics     []RelicSpawn   `json:"relics"`
+	Enemies    []EnemySpawn   `json:"enemies"`
+	JumpPads   []JumpPadSpawn `json:"jumpPads"`
+	WindZones  []any          `json:"windZones"`
+}
+
+type PlatformSpan struct {
+	X     int `json:"x"`
+	Y     int `json:"y"`
+	Width int `json:"width"`
+}
+
+type RelicSpawn struct {
+	ID string `json:"id"`
+	X  int    `json:"x"`
+	Y  int    `json:"y"`
+}
+
+type JumpPadSpawn struct {
+	ID         string  `json:"id"`
+	X          int     `json:"x"`
+	Y          int     `json:"y"`
+	Multiplier float64 `json:"multiplier"`
+}

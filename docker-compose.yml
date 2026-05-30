@@ -3,10 +3,12 @@ services:
     image: bounce-io-backend:latest
     build:
       context: .
-      dockerfile: apps/server/Dockerfile
+      dockerfile: apps/server-go/Dockerfile
     environment:
       HOST: 0.0.0.0
       PORT: 8787
+      TICK_RATE: 60
+      SNAPSHOT_RATE: 20
     expose:
       - "8787"
     restart: unless-stopped
