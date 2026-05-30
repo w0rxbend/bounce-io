@@ -33,6 +33,47 @@ export interface RelicSpawn {
   y: number;
 }
 
+export type EnemyKind =
+  | "goblin"
+  | "goblinScout"
+  | "goblinChief"
+  | "archer"
+  | "iceBat"
+  | "skeleton"
+  | "skeletonArmored"
+  | "yeti"
+  | "iceGolem"
+  | "windSpirit";
+
+export interface EnemySpawn {
+  id: EntityId;
+  kind: EnemyKind;
+  x: number;
+  y: number;
+}
+
+export interface JumpPadSpawn {
+  id: EntityId;
+  x: number;
+  y: number;
+  multiplier: number;
+}
+
+export type CollectibleKind =
+  | "relic"
+  | "blueCrystal"
+  | "greenCrystal"
+  | "purpleCrystal"
+  | "smallHeart"
+  | "bigHeart";
+
+export type HazardKind =
+  | "spikeTrap"
+  | "fallingIcicle"
+  | "windGust"
+  | "crumblingPlatform"
+  | "lightningRune";
+
 export interface GeneratedChunk {
   seed: number;
   chunkY: number;
@@ -44,6 +85,24 @@ export interface GeneratedChunk {
   entry: PlatformSpan;
   exit: PlatformSpan;
   relics: RelicSpawn[];
+  enemies: EnemySpawn[];
+  jumpPads: JumpPadSpawn[];
+}
+
+export interface EnemyState {
+  id: EntityId;
+  kind: EnemyKind;
+  position: Vec2;
+  velocity: Vec2;
+  facing: -1 | 1;
+  health: number;
+  maxHealth: number;
+  chunkY: number;
+  patrolMinX: number;
+  patrolMaxX: number;
+  platformY: number;
+  attackCooldown: number;
+  hurtCooldown: number;
 }
 
 export type KickPhase = "idle" | "windup" | "active" | "recovery";
@@ -73,10 +132,25 @@ export interface PlayerState {
   kickInvulnerable: number;
   // Respawn invulnerability
   invulnerable: number;
+  stunTimer: number;
   // Highest chunk entry reached; server-authoritative respawn anchor
   checkpointChunkY: number;
   // Authoritative score
   coins: number;
+  // Health, combat and progression
+  health: number;
+  maxHealth: number;
+  damage: number;
+  attackSpeed: number;
+  jumpPower: number;
+  airControl: number;
+  knockbackResistance: number;
+  movementSpeed: number;
+  level: number;
+  relics: number;
+  crystals: number;
+  relicFragments: number;
+  fallStartY: number | null;
 }
 
 export interface CollisionHit {
@@ -94,6 +168,7 @@ export interface StepResult {
 export interface TileMap {
   isSolid(tileX: number, tileY: number): boolean;
   isOneWay?(tileX: number, tileY: number): boolean;
+  getTile?(tileX: number, tileY: number): TileKind;
 }
 
 export type RoomPhase = "waiting" | "countdown" | "playing" | "finished" | "closed";
@@ -109,6 +184,9 @@ export type MatchEventType =
   | "CHECKPOINT_REACHED"
   | "PLAYER_KICK_STARTED"
   | "PLAYER_KICK_HIT"
+  | "ENEMY_HIT"
+  | "ENEMY_KILLED"
+  | "JUMP_PAD_TRIGGERED"
   | "PLAYER_FINISHED"
   | "MATCH_COUNTDOWN_STARTED"
   | "MATCH_STARTED"
@@ -125,7 +203,10 @@ export type MatchEvent =
   | { type: "CHECKPOINT_REACHED";   playerId: PlayerId; chunkY: number }
   | { type: "PLAYER_KICK_STARTED";  playerId: PlayerId }
   | { type: "PLAYER_KICK_HIT";      playerId: PlayerId; targetId: PlayerId }
-  | { type: "COIN_COLLECTED";       playerId: PlayerId; coinId: RelicId; value: number; x: number; y: number }
+  | { type: "ENEMY_HIT";            playerId: PlayerId; enemyId: EntityId; x: number; y: number; damage: number }
+  | { type: "ENEMY_KILLED";         playerId: PlayerId; enemyId: EntityId; x: number; y: number; drops: RelicSpawn[] }
+  | { type: "JUMP_PAD_TRIGGERED";   playerId: PlayerId; padId: EntityId; x: number; y: number; multiplier: number }
+  | { type: "COIN_COLLECTED";       playerId: PlayerId; coinId: RelicId; value: number; x: number; y: number; pickupType?: CollectibleKind }
   | { type: "MATCH_COUNTDOWN_STARTED"; countdownMs: number }
   | { type: "MATCH_STARTED" }
   | { type: "MATCH_ENDED" };

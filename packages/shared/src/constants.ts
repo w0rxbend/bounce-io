@@ -35,11 +35,26 @@ export const PLAYER_PUSH_FORCE = 800;          // px/s² applied when AABBs over
 export const PLAYER_MAX_PUSH_VELOCITY = 120;    // px/s cap on push-induced velocity change
 export const AIR_PUSH_FACTOR = 0.35;            // fraction of push force when airborne
 
+// Player combat/progression
+export const PLAYER_MAX_HEALTH = 5;
+export const PLAYER_BASE_DAMAGE = 1;
+export const PLAYER_BASE_ATTACK_SPEED = 1;
+export const PLAYER_BASE_JUMP_POWER = 1;
+export const PLAYER_BASE_AIR_CONTROL = 1;
+export const PLAYER_BASE_KNOCKBACK_RESISTANCE = 0;
+export const PLAYER_BASE_MOVEMENT_SPEED = 1;
+export const RELICS_PER_LEVEL = 5;
+export const CRYSTALS_PER_MOVEMENT_TIER = 3;
+export const FATAL_FALL_DISTANCE_PX = 20 * 32;
+export const HIT_STUN_SECONDS = 0.16;
+export const HAZARD_HIT_INVULNERABLE_SECONDS = 0.85;
+export const MELEE_ATTACK_COOLDOWN_SECONDS = 0.80;
+
 // Kick system
 export const KICK_WINDUP_SECONDS = 0.10;
 export const KICK_ACTIVE_SECONDS = 0.08;
 export const KICK_RECOVERY_SECONDS = 0.22;
-export const KICK_COOLDOWN_SECONDS = 0.50;
+export const KICK_COOLDOWN_SECONDS = MELEE_ATTACK_COOLDOWN_SECONDS;
 export const KICK_RANGE_PX = 20;               // distance in front of kicker
 export const KICK_FORCE_GROUND = 260;           // px/s impulse, both grounded
 export const KICK_FORCE_AIR = 160;              // px/s impulse, airborne kicker/target

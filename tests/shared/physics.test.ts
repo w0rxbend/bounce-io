@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COYOTE_TIME_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, PLAYER_HEIGHT, PLAYER_WIDTH, TILE_SIZE } from "../../packages/shared/src/constants.js";
-import { applyPlayerInteractions, createPlayerState, rectsOverlap, stepPlayer } from "../../packages/shared/src/physics.js";
+import { COYOTE_TIME_SECONDS, FATAL_FALL_DISTANCE_PX, JUMP_BUFFER_SECONDS, JUMP_SPEED, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, TILE_SIZE } from "../../packages/shared/src/constants.js";
+import { applyCollectible, applyHazardHit, applyPlayerInteractions, createPlayerState, rectsOverlap, stepPlayer } from "../../packages/shared/src/physics.js";
 import type { TileMap } from "../../packages/shared/src/types.js";
 
 const floorMap: TileMap = {
@@ -211,4 +211,65 @@ test("kick interaction reports authoritative hit event once target becomes invul
   assert.deepEqual(events, [{ type: "PLAYER_KICK_HIT", playerId: "p1", targetId: "p2" }]);
   assert.ok(target.kickInvulnerable > 0);
   assert.ok(target.velocity.x > 0);
+  assert.equal(target.health, PLAYER_MAX_HEALTH - kicker.damage);
+});
+
+test("fatal fall over 20m kills the player", () => {
+  const emptyMap: TileMap = { isSolid: () => false };
+  let player = createPlayerState("p1", 20, 0);
+  player.velocity.y = 420;
+  player.fallStartY = 0;
+
+  for (let i = 0; i < 120 && player.health > 0; i += 1) {
+    player = stepPlayer(player, {
+      left: false, right: false, jumpPressed: false, jumpHeld: false,
+      drop: false, kick: false, sequence: i
+    }, emptyMap, 1 / 60).player;
+  }
+
+  assert.equal(player.health, 0);
+  assert.ok(player.position.y > FATAL_FALL_DISTANCE_PX);
+});
+
+test("hazards damage and push players while violet crystals improve jump stats", () => {
+  const player = createPlayerState("p1", 20, 20);
+  applyHazardHit(player, "spikeTrap", 1);
+
+  assert.equal(player.health, PLAYER_MAX_HEALTH - 1);
+  assert.ok(player.velocity.x > 0);
+  assert.ok(player.invulnerable > 0);
+
+  const jumpBefore = player.jumpPower;
+  const movementBefore = player.movementSpeed;
+  applyCollectible(player, "purpleCrystal");
+  assert.ok(player.jumpPower > jumpBefore);
+  assert.equal(player.movementSpeed, movementBefore);
+});
+
+test("jump and attack collectibles use small diminishing gains while hearts heal exactly one", () => {
+  const player = createPlayerState("p1", 20, 20);
+  player.health = 2;
+
+  applyCollectible(player, "smallHeart");
+  assert.equal(player.health, 3);
+
+  const jumpBase = player.jumpPower;
+  applyCollectible(player, "purpleCrystal");
+  const firstJumpGain = player.jumpPower - jumpBase;
+  applyCollectible(player, "purpleCrystal");
+  const secondJumpGain = player.jumpPower - jumpBase - firstJumpGain;
+  assert.ok(firstJumpGain > 0 && firstJumpGain < 0.03);
+  assert.ok(secondJumpGain > 0 && secondJumpGain < firstJumpGain);
+
+  for (let i = 0; i < 40; i += 1) applyCollectible(player, "purpleCrystal");
+  assert.ok(player.jumpPower <= 1.22);
+
+  const damageBase = player.damage;
+  applyCollectible(player, "relic");
+  const firstDamageGain = player.damage - damageBase;
+  applyCollectible(player, "relic");
+  const secondDamageGain = player.damage - damageBase - firstDamageGain;
+  assert.ok(firstDamageGain > 0 && firstDamageGain < 0.05);
+  assert.ok(secondDamageGain > 0 && secondDamageGain < firstDamageGain);
+  assert.ok(player.attackSpeed > 1 && player.attackSpeed < 1.05);
 });

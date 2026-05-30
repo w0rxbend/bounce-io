@@ -7,7 +7,7 @@ import {
   MIN_PLATFORM_WIDTH_TILES,
   TILE_SIZE
 } from "./constants.js";
-import type { GeneratedChunk, PlatformSpan, TileKind, TileMap } from "./types.js";
+import type { EnemyKind, EnemySpawn, GeneratedChunk, JumpPadSpawn, PlatformSpan, TileKind, TileMap } from "./types.js";
 import { createRng, hashSeed } from "./rng.js";
 
 export interface GenerateChunkOptions {
@@ -196,6 +196,8 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   // Right platforms are every 3rd entry in allPlatforms after entry (index 0)
   // Pattern: entry, [left, center, right] per 3-platform layer, exit
   const relics: Array<{ id: string; x: number; y: number }> = [];
+  const enemies: EnemySpawn[] = [];
+  const jumpPads: JumpPadSpawn[] = [];
   let relicIndex = 0;
 
   for (let i = 1; i < allPlatforms.length - 1; i++) {
@@ -215,6 +217,58 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     }
   }
 
+  if (options.chunkY > 0) {
+    const padCandidates = allPlatforms
+      .slice(1, -1)
+      .filter((platform) => platform.width >= 3 && platform.x + platform.width / 2 < width * 0.72);
+    if (padCandidates.length > 0 && (options.chunkY <= 2 || rng.nextFloat() < 0.65)) {
+      const platform = padCandidates[rng.int(0, padCandidates.length - 1)]!;
+      const padX = platform.x + Math.floor(platform.width / 2);
+      const padY = platform.y - 1;
+      if (padY >= 0 && tiles[tileIndex(width, padX, padY)] === "empty") {
+        jumpPads.push({
+          id: `jumpPad:${options.chunkY}:0`,
+          x: padX,
+          y: padY,
+          multiplier: 5
+        });
+      }
+    }
+
+    const enemyKindsByAltitude: EnemyKind[][] = [
+      ["goblin", "goblinScout", "archer"],
+      ["goblinScout", "goblinChief", "archer", "skeleton"],
+      ["iceBat", "skeleton", "archer"],
+      ["iceBat", "skeletonArmored", "iceGolem", "windSpirit"],
+      ["skeletonArmored", "iceGolem", "windSpirit", "yeti"],
+    ];
+    const band = Math.min(enemyKindsByAltitude.length - 1, Math.floor(options.chunkY / 3));
+    const kindPool = enemyKindsByAltitude[band]!;
+    const maxEnemies = 1 + Math.min(1, Math.floor(options.chunkY / 8));
+    let enemyIndex = 0;
+
+    for (let i = 1; i < allPlatforms.length - 1 && enemyIndex < maxEnemies; i++) {
+      const platform = allPlatforms[i];
+      if (!platform || platform.width < 3) continue;
+      const center = platform.x + platform.width / 2;
+      const isMainOrRiskLane = center > width * 0.32;
+      const spawnRoll = rng.nextFloat();
+      const spawnChance = Math.min(0.22, 0.08 + difficulty * 0.1);
+      if (!isMainOrRiskLane || spawnRoll >= spawnChance) continue;
+
+      const tileY = platform.y - 1;
+      if (tileY < 0 || tiles[tileIndex(width, platform.x + Math.floor(platform.width / 2), tileY)] !== "empty") continue;
+      const kind = kindPool[rng.int(0, kindPool.length - 1)]!;
+      enemies.push({
+        id: `enemy:${options.chunkY}:${enemyIndex}`,
+        kind,
+        x: platform.x + Math.floor(platform.width / 2),
+        y: tileY
+      });
+      enemyIndex++;
+    }
+  }
+
   return {
     seed: options.seed,
     chunkY: options.chunkY,
@@ -225,7 +279,9 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     platforms: allPlatforms,
     entry,
     exit,
-    relics
+    relics,
+    enemies,
+    jumpPads
   };
 }
 
@@ -237,7 +293,8 @@ export function getTile(chunk: GeneratedChunk, x: number, y: number): TileKind {
 export function createChunkTileMap(chunk: GeneratedChunk): TileMap {
   return {
     isSolid: (tileX, tileY) => getTile(chunk, tileX, tileY) === "solid",
-    isOneWay: (tileX, tileY) => getTile(chunk, tileX, tileY) === "oneWay"
+    isOneWay: (tileX, tileY) => getTile(chunk, tileX, tileY) === "oneWay",
+    getTile: (tileX, tileY) => getTile(chunk, tileX, tileY)
   };
 }
 
@@ -269,7 +326,8 @@ export function createMultiChunkTileMap(
 
   return {
     isSolid: (x, y) => lookupTile(x, y) === "solid",
-    isOneWay: (x, y) => lookupTile(x, y) === "oneWay"
+    isOneWay: (x, y) => lookupTile(x, y) === "oneWay",
+    getTile: (x, y) => lookupTile(x, y)
   };
 }
 

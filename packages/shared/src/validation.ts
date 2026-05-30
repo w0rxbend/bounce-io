@@ -1,6 +1,6 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { ClientMessage, NetworkMessage, ServerMessage } from "./protocol.js";
-import type { GeneratedChunk, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind } from "./types.js";
+import type { EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind } from "./types.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -10,6 +10,10 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function isFiniteNumberOrNull(value: unknown): value is number | null {
+  return value === null || isFiniteNumber(value);
 }
 
 function isInteger(value: unknown): value is number {
@@ -51,6 +55,46 @@ function isRelicSpawn(value: unknown): value is RelicSpawn {
     isInteger(value.y);
 }
 
+function isEnemySpawn(value: unknown): value is EnemySpawn {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isString(value.kind) &&
+    isInteger(value.x) &&
+    isInteger(value.y);
+}
+
+function isJumpPadSpawn(value: unknown): value is JumpPadSpawn {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isInteger(value.x) &&
+    isInteger(value.y) &&
+    isFiniteNumber(value.multiplier) &&
+    (value.multiplier as number) > 0;
+}
+
+function isVec2(value: unknown): value is { x: number; y: number } {
+  return isRecord(value) &&
+    isFiniteNumber(value.x) &&
+    isFiniteNumber(value.y);
+}
+
+function isEnemyState(value: unknown): value is EnemyState {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isString(value.kind) &&
+    isVec2(value.position) &&
+    isVec2(value.velocity) &&
+    (value.facing === -1 || value.facing === 1) &&
+    isFiniteNumber(value.health) &&
+    isFiniteNumber(value.maxHealth) &&
+    isInteger(value.chunkY) &&
+    isFiniteNumber(value.patrolMinX) &&
+    isFiniteNumber(value.patrolMaxX) &&
+    isFiniteNumber(value.platformY) &&
+    isFiniteNumber(value.attackCooldown) &&
+    isFiniteNumber(value.hurtCooldown);
+}
+
 export function isPlayerInput(value: unknown): value is PlayerInput {
   return isRecord(value) &&
     isBoolean(value.left) &&
@@ -80,10 +124,36 @@ export function isPlayerState(value: unknown): value is PlayerState {
     isFiniteNumber(value.kickTimer) &&
     isFiniteNumber(value.kickInvulnerable) &&
     isFiniteNumber(value.invulnerable) &&
+    isFiniteNumber(value.stunTimer) &&
     isInteger(value.checkpointChunkY) &&
     (value.checkpointChunkY as number) >= 0 &&
     isInteger(value.coins) &&
-    (value.coins as number) >= 0;
+    (value.coins as number) >= 0 &&
+    isFiniteNumber(value.health) &&
+    isFiniteNumber(value.maxHealth) &&
+    isFiniteNumber(value.damage) &&
+    isFiniteNumber(value.attackSpeed) &&
+    isFiniteNumber(value.jumpPower) &&
+    isFiniteNumber(value.airControl) &&
+    isFiniteNumber(value.knockbackResistance) &&
+    isFiniteNumber(value.movementSpeed) &&
+    isInteger(value.level) &&
+    isInteger(value.relics) &&
+    isInteger(value.crystals) &&
+    isInteger(value.relicFragments) &&
+    isFiniteNumberOrNull(value.fallStartY) &&
+    (value.health as number) >= 0 &&
+    (value.maxHealth as number) > 0 &&
+    (value.damage as number) >= 0 &&
+    (value.attackSpeed as number) > 0 &&
+    (value.jumpPower as number) > 0 &&
+    (value.airControl as number) > 0 &&
+    (value.knockbackResistance as number) >= 0 &&
+    (value.movementSpeed as number) > 0 &&
+    (value.level as number) >= 1 &&
+    (value.relics as number) >= 0 &&
+    (value.crystals as number) >= 0 &&
+    (value.relicFragments as number) >= 0;
 }
 
 export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
@@ -103,7 +173,11 @@ export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
     isPlatformSpan(value.entry) &&
     isPlatformSpan(value.exit) &&
     Array.isArray(value.relics) &&
-    (value.relics as unknown[]).every(isRelicSpawn);
+    (value.relics as unknown[]).every(isRelicSpawn) &&
+    Array.isArray(value.enemies) &&
+    (value.enemies as unknown[]).every(isEnemySpawn) &&
+    Array.isArray(value.jumpPads) &&
+    (value.jumpPads as unknown[]).every(isJumpPadSpawn);
 }
 
 function isMatchEvent(value: unknown): value is MatchEvent {
@@ -152,6 +226,7 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         isString(value.matchPhase) &&
         Array.isArray(value.players) &&
         (value.players as unknown[]).every(isPlayerState) &&
+        (value.enemies === undefined || (Array.isArray(value.enemies) && (value.enemies as unknown[]).every(isEnemyState))) &&
         Array.isArray(value.collectedRelics) &&
         (value.collectedRelics as unknown[]).every(isString) &&
         Array.isArray(value.events) &&

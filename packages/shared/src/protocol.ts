@@ -1,5 +1,5 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
-import type { GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
+import type { EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
 
 export type ClientMessage =
   | {
@@ -47,6 +47,7 @@ export type ServerMessage =
       serverTime: number;
       matchPhase: RoomPhase;
       players: PlayerState[];
+      enemies?: EnemyState[];
       collectedRelics: RelicId[];
       events: MatchEvent[];
       lastProcessedSeq: Record<PlayerId, number>;

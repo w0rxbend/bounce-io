@@ -5,6 +5,7 @@ import type { WSContext } from "hono/ws";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
+  JUMP_SPEED,
   MATCH_COUNTDOWN_SECONDS,
   MIN_PLAYERS_TO_START,
   PHYSICS_STEP_SECONDS,
@@ -12,21 +13,28 @@ import {
   PLAYER_WIDTH,
   PROTOCOL_VERSION,
   RECONNECT_TIMEOUT_SECONDS,
-  RESPAWN_INVULNERABILITY_SECONDS,
   SERVER_TICK_RATE,
   SNAPSHOT_RATE,
   TILE_SIZE
 } from "@skybound/shared";
 import {
+  applyDamage,
+  applyCollectible,
   applyPlayerInteractions,
+  collectibleKindForRelicId,
   createPlayerState,
   createMultiChunkTileMap,
   generateVerticalChunk,
+  isPlayerDead,
+  respawnPlayerState,
   stepPlayer,
   verifyChunkReachability
 } from "@skybound/shared";
 import { isClientMessage } from "@skybound/shared";
 import type {
+  EnemyKind,
+  EnemySpawn,
+  EnemyState,
   GeneratedChunk,
   MatchEvent,
   PlayerInput,
@@ -67,6 +75,7 @@ interface ServerRoom {
   players: Map<string, PlayerState>;
   collectedRelics: Set<string>;
   chunks: Map<number, GeneratedChunk>;
+  enemies: Map<string, EnemyState>;
   tick: number;
   matchStartTick: number;
   countdownEndMs: number;
@@ -383,6 +392,7 @@ function getOrCreateRoom(id: string): ServerRoom {
     players: new Map(),
     collectedRelics: new Set(),
     chunks: new Map(),
+    enemies: new Map(),
     tick: 0,
     matchStartTick: 0,
     countdownEndMs: 0,
@@ -412,16 +422,220 @@ function ensureChunksLoaded(room: ServerRoom, upToChunkY: number): void {
         console.warn(`[room ${room.id}] chunk ${cy} reachability issues:`, issues.map(i => i.reason));
       }
       room.chunks.set(cy, chunk);
+      hydrateEnemiesForChunk(room, chunk);
       loaded = true;
     }
   }
   if (loaded) room.tileMapDirty = true;
 }
 
+function enemyStats(kind: EnemyKind): { health: number; speed: number; damage: number; cooldown: number } {
+  switch (kind) {
+    case "goblinChief": return { health: 4, speed: 24, damage: 1, cooldown: 0.8 };
+    case "archer": return { health: 2, speed: 14, damage: 1, cooldown: 1.2 };
+    case "iceBat": return { health: 2, speed: 30, damage: 1, cooldown: 0.75 };
+    case "skeleton": return { health: 3, speed: 16, damage: 1, cooldown: 0.95 };
+    case "skeletonArmored": return { health: 5, speed: 13, damage: 1, cooldown: 1.0 };
+    case "iceGolem": return { health: 6, speed: 12, damage: 2, cooldown: 1.35 };
+    case "windSpirit": return { health: 3, speed: 28, damage: 1, cooldown: 0.85 };
+    case "yeti": return { health: 9, speed: 18, damage: 2, cooldown: 1.2 };
+    case "goblinScout":
+    case "goblin":
+    default:
+      return { health: 2, speed: 22, damage: 1, cooldown: 0.9 };
+  }
+}
+
+function findEnemyPlatform(chunk: GeneratedChunk, spawn: EnemySpawn) {
+  return chunk.platforms.find((p) => p.y === spawn.y + 1 && spawn.x >= p.x && spawn.x < p.x + p.width);
+}
+
+function hydrateEnemiesForChunk(room: ServerRoom, chunk: GeneratedChunk): void {
+  for (const spawn of chunk.enemies) {
+    if (room.enemies.has(spawn.id)) continue;
+    const platform = findEnemyPlatform(chunk, spawn);
+    if (!platform) continue;
+    const stats = enemyStats(spawn.kind);
+    const x = spawn.x * TILE_SIZE - 10;
+    const platformY = (chunk.worldTileY + platform.y) * TILE_SIZE;
+    room.enemies.set(spawn.id, {
+      id: spawn.id,
+      kind: spawn.kind,
+      position: { x, y: platformY - 24 },
+      velocity: { x: stats.speed * (spawn.x % 2 === 0 ? 1 : -1), y: 0 },
+      facing: spawn.x % 2 === 0 ? 1 : -1,
+      health: stats.health,
+      maxHealth: stats.health,
+      chunkY: chunk.chunkY,
+      patrolMinX: platform.x * TILE_SIZE + 2,
+      patrolMaxX: (platform.x + platform.width) * TILE_SIZE - 22,
+      platformY,
+      attackCooldown: 0.35 + (spawn.x % 5) * 0.08,
+      hurtCooldown: 0
+    });
+  }
+}
+
 function getSpawnY(room: ServerRoom, chunkY: number): number {
   const chunk = room.chunks.get(chunkY);
   if (!chunk) return -TILE_SIZE;
   return (chunk.worldTileY + chunk.entry.y) * TILE_SIZE - 22; // 22 = PLAYER_HEIGHT
+}
+
+function rectsOverlap(
+  ax: number,
+  ay: number,
+  aw: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number
+): boolean {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function playerKickHitsEnemy(player: PlayerState, enemy: EnemyState): boolean {
+  if (player.kickPhase !== "active" || enemy.hurtCooldown > 0 || enemy.health <= 0) return false;
+  const rangeX = player.facing > 0 ? player.position.x : player.position.x - 20;
+  return rectsOverlap(rangeX, player.position.y - 4, PLAYER_WIDTH + 20, PLAYER_HEIGHT + 8, enemy.position.x, enemy.position.y, 22, 24);
+}
+
+function enemyTouchesPlayer(enemy: EnemyState, player: PlayerState): boolean {
+  return rectsOverlap(enemy.position.x + 2, enemy.position.y + 3, 18, 21, player.position.x, player.position.y, PLAYER_WIDTH, PLAYER_HEIGHT);
+}
+
+function makeEnemyDrops(room: ServerRoom, enemy: EnemyState): Array<{ id: string; x: number; y: number }> {
+  const count = enemy.kind === "yeti" || enemy.kind === "iceGolem" ? 2 : 1;
+  const tileX = Math.max(1, Math.min(CHUNK_WIDTH_TILES - 2, Math.round((enemy.position.x + 11) / TILE_SIZE)));
+  const tileY = Math.round((enemy.position.y + 14) / TILE_SIZE);
+  const suffixes = enemy.kind === "yeti" || enemy.kind === "iceGolem"
+    ? ["relic", "jump"]
+    : enemy.kind === "archer" || enemy.kind === "skeletonArmored"
+      ? ["relic"]
+      : ["heart"];
+  const drops: Array<{ id: string; x: number; y: number }> = [];
+  const chunk = room.chunks.get(enemy.chunkY);
+  for (let i = 0; i < count; i++) {
+    const id = `drop:${enemy.id}:${suffixes[i % suffixes.length]}:${room.tick}:${i}`;
+    drops.push({ id, x: tileX + i, y: tileY });
+    if (chunk) chunk.relics.push({ id, x: tileX + i, y: tileY });
+  }
+  return drops;
+}
+
+function simulateEnemies(room: ServerRoom, players: PlayerState[], dt: number): void {
+  for (const enemy of [...room.enemies.values()]) {
+    const chunk = room.chunks.get(enemy.chunkY);
+    if (!chunk || enemy.health <= 0) continue;
+    const stats = enemyStats(enemy.kind);
+    enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dt);
+    enemy.hurtCooldown = Math.max(0, enemy.hurtCooldown - dt);
+
+    let target: PlayerState | null = null;
+    let targetDist = Infinity;
+    for (const player of players) {
+      if (player.health <= 0) continue;
+      const dx = (player.position.x + PLAYER_WIDTH / 2) - (enemy.position.x + 11);
+      const dy = (player.position.y + PLAYER_HEIGHT / 2) - (enemy.position.y + 12);
+      const dist = Math.abs(dx) + Math.abs(dy) * 1.35;
+      if (dist < targetDist && dist < 95) {
+        target = player;
+        targetDist = dist;
+      }
+    }
+
+    if (target && Math.abs(target.position.y - enemy.position.y) < 42) {
+      enemy.facing = target.position.x + PLAYER_WIDTH / 2 >= enemy.position.x + 11 ? 1 : -1;
+      enemy.velocity.x = enemy.facing * stats.speed * 1.15;
+    }
+
+    enemy.position.x += enemy.velocity.x * dt;
+    if (enemy.position.x <= enemy.patrolMinX) {
+      enemy.position.x = enemy.patrolMinX;
+      enemy.velocity.x = Math.abs(enemy.velocity.x || stats.speed);
+      enemy.facing = 1;
+    } else if (enemy.position.x >= enemy.patrolMaxX) {
+      enemy.position.x = enemy.patrolMaxX;
+      enemy.velocity.x = -Math.abs(enemy.velocity.x || stats.speed);
+      enemy.facing = -1;
+    }
+
+    enemy.position.y = enemy.platformY - (enemy.kind === "iceBat" || enemy.kind === "windSpirit" ? 30 : 24);
+    if (enemy.kind === "iceBat" || enemy.kind === "windSpirit") {
+      enemy.position.y += Math.sin((room.tick + enemy.chunkY * 19) * 0.12) * 5;
+    }
+
+    for (const player of players) {
+      if (player.health <= 0) continue;
+      if (playerKickHitsEnemy(player, enemy)) {
+        const damage = Math.max(1, player.damage);
+        enemy.health = Math.max(0, enemy.health - damage);
+        enemy.hurtCooldown = 0.28;
+        enemy.velocity.x = player.facing * stats.speed;
+        room.pendingEvents.push({
+          type: "ENEMY_HIT",
+          playerId: player.id,
+          enemyId: enemy.id,
+          x: enemy.position.x + 11,
+          y: enemy.position.y + 12,
+          damage
+        });
+        if (enemy.health <= 0) {
+          const drops = makeEnemyDrops(room, enemy);
+          room.enemies.delete(enemy.id);
+          room.pendingEvents.push({
+            type: "ENEMY_KILLED",
+            playerId: player.id,
+            enemyId: enemy.id,
+            x: enemy.position.x + 11,
+            y: enemy.position.y + 12,
+            drops
+          });
+          break;
+        }
+        continue;
+      }
+
+      if (enemy.health > 0 && enemy.attackCooldown <= 0 && enemyTouchesPlayer(enemy, player)) {
+        const dir = player.position.x + PLAYER_WIDTH / 2 >= enemy.position.x + 11 ? 1 : -1;
+        applyDamage(player, stats.damage, dir * (enemy.kind === "yeti" || enemy.kind === "iceGolem" ? 190 : 125), -70, 0.16);
+        player.invulnerable = Math.max(player.invulnerable, 0.42);
+        enemy.attackCooldown = stats.cooldown;
+      }
+    }
+  }
+}
+
+function applyJumpPads(room: ServerRoom, player: PlayerState): void {
+  if (player.health <= 0 || player.velocity.y < 0) return;
+  const playerCenterX = player.position.x + PLAYER_WIDTH / 2;
+  const playerBottom = player.position.y + PLAYER_HEIGHT;
+
+  for (const chunk of room.chunks.values()) {
+    for (const pad of chunk.jumpPads) {
+      const padX = pad.x * TILE_SIZE + TILE_SIZE / 2;
+      const padY = (chunk.worldTileY + pad.y) * TILE_SIZE + TILE_SIZE / 2;
+      const nearX = Math.abs(playerCenterX - padX) <= TILE_SIZE * 0.85;
+      const nearY = playerBottom >= padY - TILE_SIZE * 0.9 && playerBottom <= padY + TILE_SIZE * 0.9;
+      if (!nearX || !nearY) continue;
+
+      player.velocity.y = -JUMP_SPEED * Math.max(1, pad.multiplier);
+      player.grounded = false;
+      player.coyoteTimer = 0;
+      player.jumpBufferTimer = 0;
+      player.fallStartY = null;
+      room.pendingEvents.push({
+        type: "JUMP_PAD_TRIGGERED",
+        playerId: player.id,
+        padId: pad.id,
+        x: padX,
+        y: padY,
+        multiplier: pad.multiplier
+      });
+      return;
+    }
+  }
 }
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
@@ -484,6 +698,7 @@ function tickRoom(room: ServerRoom): void {
 
       const previousKickPhase = player.kickPhase;
       const { player: next } = stepPlayer(player, input, tileMap, PHYSICS_STEP_SECONDS);
+      applyJumpPads(room, next);
       if (previousKickPhase === "idle" && next.kickPhase === "windup") {
         room.pendingEvents.push({ type: "PLAYER_KICK_STARTED", playerId: pid });
       }
@@ -496,9 +711,8 @@ function tickRoom(room: ServerRoom): void {
         room.pendingEvents.push({ type: "CHECKPOINT_REACHED", playerId: pid, chunkY: playerChunkY });
       }
 
-      // Death detection: fell more than one chunk below the player's current chunk floor
-      const currentChunkFloor = (-playerChunkY * CHUNK_HEIGHT_TILES + CHUNK_HEIGHT_TILES) * TILE_SIZE;
-      if (next.position.y > currentChunkFloor && next.invulnerable <= 0) {
+      // Death detection: shared physics marks fatal falls, hazards and combat as health <= 0.
+      if (isPlayerDead(next)) {
         respawnPlayer(room, pid, next);
         room.pendingEvents.push({ type: "PLAYER_DIED", playerId: pid });
         room.pendingEvents.push({ type: "PLAYER_RESPAWNED", playerId: pid });
@@ -527,7 +741,13 @@ function tickRoom(room: ServerRoom): void {
     for (const event of interactionEvents) {
       room.pendingEvents.push(event);
     }
+    simulateEnemies(room, activePlayers, PHYSICS_STEP_SECONDS);
     for (const p of activePlayers) {
+      if (isPlayerDead(p)) {
+        respawnPlayer(room, p.id, p);
+        room.pendingEvents.push({ type: "PLAYER_DIED", playerId: p.id });
+        room.pendingEvents.push({ type: "PLAYER_RESPAWNED", playerId: p.id });
+      }
       room.players.set(p.id, p);
     }
   }
@@ -545,6 +765,9 @@ function tickRoom(room: ServerRoom): void {
       const disposeBelow = minCheckpoint - CHUNKS_KEEP_BEHIND_SERVER;
       for (const cy of [...room.chunks.keys()]) {
         if (cy < disposeBelow) {
+          for (const [enemyId, enemy] of room.enemies) {
+            if (enemy.chunkY === cy) room.enemies.delete(enemyId);
+          }
           room.chunks.delete(cy);
           room.tileMapDirty = true;
         }
@@ -569,6 +792,7 @@ function tickRoom(room: ServerRoom): void {
       serverTime: now,
       matchPhase: room.phase,
       players,
+      enemies: [...room.enemies.values()],
       collectedRelics: [...room.collectedRelics],
       events: room.pendingEvents.splice(0),
       lastProcessedSeq
@@ -584,19 +808,7 @@ function respawnPlayer(room: ServerRoom, playerId: string, player: PlayerState):
     ? (checkpointChunk.entry.x + Math.floor(checkpointChunk.entry.width / 2)) * TILE_SIZE - PLAYER_WIDTH / 2
     : SPAWN_X_BASE;
   const spawnY = getSpawnY(room, checkpointChunkY);
-  player.position.x = spawnX;
-  player.position.y = spawnY;
-  player.velocity.x = 0;
-  player.velocity.y = 0;
-  player.grounded = false;
-  player.coyoteTimer = 0;
-  player.jumpBufferTimer = 0;
-  player.kickPhase = "idle";
-  player.kickTimer = 0;
-  player.kickCooldown = 0;
-  player.kickInvulnerable = 0;
-  player.invulnerable = RESPAWN_INVULNERABILITY_SECONDS;
-  player.checkpointChunkY = checkpointChunkY;
+  respawnPlayerState(player, spawnX, spawnY, checkpointChunkY);
   room.players.set(playerId, player);
 }
 
@@ -613,6 +825,8 @@ function checkRelicCollection(room: ServerRoom, playerId: string, player: Player
 
       if (Math.abs(px - worldX) < 20 && Math.abs(py - worldY) < 20) {
         room.collectedRelics.add(relic.id);
+        const pickupType = collectibleKindForRelicId(relic.id);
+        applyCollectible(player, pickupType);
         player.coins += 1;
         room.pendingEvents.push({
           type: "COIN_COLLECTED",
@@ -620,7 +834,8 @@ function checkRelicCollection(room: ServerRoom, playerId: string, player: Player
           coinId: relic.id,
           value: 1,
           x: worldX,
-          y: worldY
+          y: worldY,
+          pickupType
         });
       }
     }

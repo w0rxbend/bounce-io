@@ -93,6 +93,8 @@ function applyInput(
 test("player state initialises with coins = 0", () => {
   const p = createPlayerState("p1", 0, 0);
   assert.equal(p.coins, 0);
+  assert.equal(p.health, 5);
+  assert.equal(p.level, 1);
 });
 
 test("player joins room with correct initial state", () => {
@@ -239,12 +241,9 @@ test("valid hello with session token passes validation", () => {
 });
 
 test("snapshot message validates correctly including coins in player state", () => {
-  const playerState: PlayerState = {
-    id: "p1", position: { x: 100, y: -50 }, velocity: { x: 0, y: 0 },
-    facing: 1, grounded: true, coyoteTimer: 0, jumpBufferTimer: 0,
-    kickCooldown: 0, kickPhase: "idle", kickTimer: 0, kickInvulnerable: 0,
-    invulnerable: 0, checkpointChunkY: 0, coins: 3
-  };
+  const playerState = createPlayerState("p1", 100, -50);
+  playerState.grounded = true;
+  playerState.coins = 3;
 
   assert.equal(isServerMessage({
     type: "snapshot",
@@ -296,12 +295,7 @@ test("pending input merge preserves jump and kick edges from same tick", () => {
 });
 
 test("snapshot with negative coins fails validation", () => {
-  const badState = {
-    id: "p1", position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 },
-    facing: 1, grounded: false, coyoteTimer: 0, jumpBufferTimer: 0,
-    kickCooldown: 0, kickPhase: "idle", kickTimer: 0, kickInvulnerable: 0,
-    invulnerable: 0, checkpointChunkY: 0, coins: -1
-  };
+  const badState = { ...createPlayerState("p1", 0, 0), coins: -1 };
   assert.equal(isServerMessage({
     type: "snapshot",
     tick: 1, serverTime: Date.now(), matchPhase: "playing",

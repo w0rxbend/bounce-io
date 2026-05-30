@@ -2,6 +2,889 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
+  "assetCount": 800,
+  "folders": {
+    "environment/backgrounds": [
+      "environment/backgrounds/cloud.png",
+      "environment/backgrounds/cloud_bank.png",
+      "environment/backgrounds/cloud_cluster.png",
+      "environment/backgrounds/cloud_flat.png",
+      "environment/backgrounds/cloud_long.png",
+      "environment/backgrounds/cloud_puff.png",
+      "environment/backgrounds/cloud_small.png",
+      "environment/backgrounds/cloud_streak.png",
+      "environment/backgrounds/cloud_tall.png",
+      "environment/backgrounds/cloud_wispy.png",
+      "environment/backgrounds/forest_ruins_panorama.png",
+      "environment/backgrounds/mountain_panorama.png",
+      "environment/backgrounds/mountain_tall.png",
+      "environment/backgrounds/mountain_wide.png",
+      "environment/backgrounds/mountain_wide_alt.png",
+      "environment/backgrounds/sky_arches.png"
+    ],
+    "environment/banners": [
+      "environment/banners/pine_valley_banner.png",
+      "environment/banners/summit_banner.png"
+    ],
+    "environment/clouds": [
+      "environment/clouds/background_cloud_huge.png",
+      "environment/clouds/fast_cloud_streak.png",
+      "environment/clouds/midground_cloud.png"
+    ],
+    "environment/collectibles": [
+      "environment/collectibles/coin_1.png",
+      "environment/collectibles/coin_copper_1.png",
+      "environment/collectibles/coin_gold_1.png",
+      "environment/collectibles/coin_rune_blue_1.png",
+      "environment/collectibles/coin_rune_purple_1.png",
+      "environment/collectibles/coin_silver_1.png",
+      "environment/collectibles/coin_spin_frame1.png",
+      "environment/collectibles/coin_spin_frame2.png",
+      "environment/collectibles/coin_spin_frame3.png",
+      "environment/collectibles/coin_spin_frame4.png",
+      "environment/collectibles/crown_blue_1.png",
+      "environment/collectibles/crown_gold_1.png",
+      "environment/collectibles/elemental_burst_fire_frame1.png",
+      "environment/collectibles/elemental_burst_fire_frame2.png",
+      "environment/collectibles/elemental_burst_fire_frame3.png",
+      "environment/collectibles/elemental_burst_fire_frame4.png",
+      "environment/collectibles/elemental_burst_ice_frame1.png",
+      "environment/collectibles/elemental_burst_ice_frame2.png",
+      "environment/collectibles/elemental_burst_ice_frame3.png",
+      "environment/collectibles/elemental_burst_ice_frame4.png",
+      "environment/collectibles/exp_badge_1.png",
+      "environment/collectibles/gem_blue_1.png",
+      "environment/collectibles/gem_gold_1.png",
+      "environment/collectibles/gem_green_1.png",
+      "environment/collectibles/gem_purple_1.png",
+      "environment/collectibles/gem_red_1.png",
+      "environment/collectibles/gem_variant1.png",
+      "environment/collectibles/gem_variant2.png",
+      "environment/collectibles/gem_variant3.png",
+      "environment/collectibles/gem_variant4.png",
+      "environment/collectibles/heart_1.png",
+      "environment/collectibles/magic_orb_blue_1.png",
+      "environment/collectibles/magic_orb_blue_frame1.png",
+      "environment/collectibles/magic_orb_blue_frame2.png",
+      "environment/collectibles/magic_orb_blue_frame3.png",
+      "environment/collectibles/magic_orb_blue_frame4.png",
+      "environment/collectibles/magic_orb_gold_1.png",
+      "environment/collectibles/magic_orb_gold_frame1.png",
+      "environment/collectibles/magic_orb_gold_frame2.png",
+      "environment/collectibles/magic_orb_gold_frame3.png",
+      "environment/collectibles/magic_orb_gold_frame4.png",
+      "environment/collectibles/magic_orb_purple_1.png",
+      "environment/collectibles/magic_orb_purple_frame1.png",
+      "environment/collectibles/magic_orb_purple_frame2.png",
+      "environment/collectibles/magic_orb_purple_frame3.png",
+      "environment/collectibles/magic_orb_purple_frame4.png",
+      "environment/collectibles/medallion_gold_frame1.png",
+      "environment/collectibles/medallion_gold_frame2.png",
+      "environment/collectibles/medallion_gold_frame3.png",
+      "environment/collectibles/medallion_gold_frame4.png",
+      "environment/collectibles/medallion_green_frame1.png",
+      "environment/collectibles/medallion_green_frame2.png",
+      "environment/collectibles/medallion_green_frame3.png",
+      "environment/collectibles/medallion_green_frame4.png",
+      "environment/collectibles/potion_blue_1.png",
+      "environment/collectibles/potion_gold_1.png",
+      "environment/collectibles/potion_red_1.png",
+      "environment/collectibles/relic_pedestal_blue_frame1.png",
+      "environment/collectibles/relic_pedestal_blue_frame2.png",
+      "environment/collectibles/relic_pedestal_blue_frame3.png",
+      "environment/collectibles/relic_pedestal_blue_frame4.png",
+      "environment/collectibles/relic_pedestal_fire_frame1.png",
+      "environment/collectibles/relic_pedestal_fire_frame2.png",
+      "environment/collectibles/relic_pedestal_fire_frame3.png",
+      "environment/collectibles/relic_pedestal_fire_frame4.png",
+      "environment/collectibles/relic_pink_frame1.png",
+      "environment/collectibles/relic_pink_frame2.png",
+      "environment/collectibles/relic_pink_frame3.png",
+      "environment/collectibles/relic_pink_frame4.png",
+      "environment/collectibles/seed_green_frame1.png",
+      "environment/collectibles/seed_green_frame2.png",
+      "environment/collectibles/seed_green_frame3.png",
+      "environment/collectibles/seed_green_frame4.png",
+      "environment/collectibles/star_shard_frame1.png",
+      "environment/collectibles/star_shard_frame2.png",
+      "environment/collectibles/star_shard_frame3.png",
+      "environment/collectibles/star_shard_frame4.png",
+      "environment/collectibles/treasure_chest_1.png",
+      "environment/collectibles/treasure_chest_blue_1.png",
+      "environment/collectibles/treasure_chest_red_1.png"
+    ],
+    "environment/crystals": [
+      "environment/crystals/blue_movement_crystal.png",
+      "environment/crystals/green_healing_crystal.png",
+      "environment/crystals/red_relic_crystal.png"
+    ],
+    "environment/decorations": [
+      "environment/decorations/banner_blue_large.png",
+      "environment/decorations/banner_gold_large.png",
+      "environment/decorations/banner_green_large.png",
+      "environment/decorations/barrel_stack_rune.png",
+      "environment/decorations/barrel_stack_wood.png",
+      "environment/decorations/campfire_blue.png",
+      "environment/decorations/campfire_green.png",
+      "environment/decorations/campfire_warm.png",
+      "environment/decorations/crate_stack_rune.png",
+      "environment/decorations/crate_stack_wood.png",
+      "environment/decorations/crystal_totem_blue.png",
+      "environment/decorations/crystal_totem_green.png",
+      "environment/decorations/crystal_totem_purple.png",
+      "environment/decorations/flower_crystal_blue.png",
+      "environment/decorations/flower_crystal_green.png",
+      "environment/decorations/flower_crystal_purple.png",
+      "environment/decorations/flower_post_blue.png",
+      "environment/decorations/flower_post_pink.png",
+      "environment/decorations/flower_post_white.png",
+      "environment/decorations/hanging_lantern_blue.png",
+      "environment/decorations/hanging_lantern_gold.png",
+      "environment/decorations/hanging_lantern_green.png",
+      "environment/decorations/pedestal_lamp_blue.png",
+      "environment/decorations/pedestal_lamp_gold.png",
+      "environment/decorations/pedestal_lamp_green.png",
+      "environment/decorations/rope_gate_ice.png",
+      "environment/decorations/rope_gate_lit.png",
+      "environment/decorations/rope_gate_wood.png",
+      "environment/decorations/rope_posts_lanterns.png",
+      "environment/decorations/rope_posts_plain.png",
+      "environment/decorations/sign_board_rune.png",
+      "environment/decorations/sign_board_wood.png",
+      "environment/decorations/skeleton_marker.png",
+      "environment/decorations/small_shrine_purple.png",
+      "environment/decorations/small_shrine_snow.png",
+      "environment/decorations/small_shrine_wood.png",
+      "environment/decorations/snow_brazier_blue.png",
+      "environment/decorations/snow_brazier_gold.png",
+      "environment/decorations/snow_brazier_green.png",
+      "environment/decorations/snow_lamp_blue.png",
+      "environment/decorations/snow_lamp_gold.png",
+      "environment/decorations/snow_lamp_purple.png",
+      "environment/decorations/statue_snow.png",
+      "environment/decorations/statue_stone.png",
+      "environment/decorations/tripod_blue.png",
+      "environment/decorations/tripod_purple.png",
+      "environment/decorations/tripod_red.png"
+    ],
+    "environment/effects": [
+      "environment/effects/collectible_ring_1.png",
+      "environment/effects/collectible_ring_green_1.png",
+      "environment/effects/collectible_sparkle_1.png",
+      "environment/effects/fog_strip_1.png",
+      "environment/effects/jump_pad_1.png",
+      "environment/effects/portal_arch_1.png"
+    ],
+    "environment/enemies": [
+      "environment/enemies/archer_1.png",
+      "environment/enemies/archer_bone_1.png",
+      "environment/enemies/archer_dark_1.png",
+      "environment/enemies/armored_brute_1.png",
+      "environment/enemies/goblin_1.png",
+      "environment/enemies/goblin_chief_1.png",
+      "environment/enemies/goblin_dark_1.png",
+      "environment/enemies/goblin_scout_1.png",
+      "environment/enemies/ice_bat_1.png",
+      "environment/enemies/ice_bat_frost_1.png",
+      "environment/enemies/ice_golem_1.png",
+      "environment/enemies/portal_blue_1.png",
+      "environment/enemies/skeleton_1.png",
+      "environment/enemies/skeleton_armored_1.png",
+      "environment/enemies/skeleton_dark_1.png",
+      "environment/enemies/skeleton_mage_1.png",
+      "environment/enemies/skull_bat_1.png",
+      "environment/enemies/wind_spirit_1.png",
+      "environment/enemies/yeti_1.png"
+    ],
+    "environment/flora": [
+      "environment/flora/flower_pink_1.png",
+      "environment/flora/reed_grass_wheat_1.png",
+      "environment/flora/reed_grass_yellow_1.png",
+      "environment/flora/wildflower_mixed_1.png",
+      "environment/flora/wildflower_pink_1.png",
+      "environment/flora/wildflower_yellow_1.png"
+    ],
+    "environment/hazards": [
+      "environment/hazards/crystal_spikes_1.png",
+      "environment/hazards/crystal_spikes_blue_1.png",
+      "environment/hazards/crystal_spikes_green_1.png",
+      "environment/hazards/crystal_spikes_purple_1.png",
+      "environment/hazards/falling_icicle_1.png",
+      "environment/hazards/falling_icicles_cluster_1.png",
+      "environment/hazards/ice_spikes_1.png",
+      "environment/hazards/lightning_1.png",
+      "environment/hazards/lightning_blue_1.png",
+      "environment/hazards/lightning_purple_1.png",
+      "environment/hazards/magic_arc_blue_1.png",
+      "environment/hazards/magic_arc_purple_1.png",
+      "environment/hazards/magic_wind_green_1.png",
+      "environment/hazards/magic_wind_purple_1.png",
+      "environment/hazards/rolling_boulder_1.png",
+      "environment/hazards/rolling_boulder_rune_1.png",
+      "environment/hazards/rune_trap_gold_1.png",
+      "environment/hazards/rune_trap_green_1.png",
+      "environment/hazards/spike_ball_1.png",
+      "environment/hazards/spike_boulder_1.png",
+      "environment/hazards/spike_machine_1.png",
+      "environment/hazards/spikes_1.png",
+      "environment/hazards/stone_spikes_1.png",
+      "environment/hazards/summit_spikes_1.png",
+      "environment/hazards/thorn_vine_1.png",
+      "environment/hazards/wind_zone_1.png"
+    ],
+    "environment/ladders": [
+      "environment/ladders/climbing_chain.png",
+      "environment/ladders/frosted_wood_ladder.png"
+    ],
+    "environment/lanterns": [
+      "environment/lanterns/crystal_lantern.png",
+      "environment/lanterns/wood_lantern.png"
+    ],
+    "environment/lights": [
+      "environment/lights/lamp_post_1.png",
+      "environment/lights/lantern_cyan_1.png",
+      "environment/lights/lantern_gold_1.png",
+      "environment/lights/torch_1.png"
+    ],
+    "environment/midMountains": [
+      "environment/midMountains/cloud_body.png",
+      "environment/midMountains/cloud_bottom.png",
+      "environment/midMountains/cloud_cap.png",
+      "environment/midMountains/cloud_left.png",
+      "environment/midMountains/cloud_right.png",
+      "environment/midMountains/frozen_body.png",
+      "environment/midMountains/frozen_bottom.png",
+      "environment/midMountains/frozen_cap.png",
+      "environment/midMountains/frozen_left.png",
+      "environment/midMountains/frozen_right.png",
+      "environment/midMountains/pine_body.png",
+      "environment/midMountains/pine_bottom.png",
+      "environment/midMountains/pine_cap.png",
+      "environment/midMountains/pine_left.png",
+      "environment/midMountains/pine_right.png",
+      "environment/midMountains/snow_body.png",
+      "environment/midMountains/snow_bottom.png",
+      "environment/midMountains/snow_cap.png",
+      "environment/midMountains/snow_left.png",
+      "environment/midMountains/snow_right.png",
+      "environment/midMountains/summit_body.png",
+      "environment/midMountains/summit_bottom.png",
+      "environment/midMountains/summit_cap.png",
+      "environment/midMountains/summit_left.png",
+      "environment/midMountains/summit_right.png"
+    ],
+    "environment/mossTiles": [
+      "environment/mossTiles/mossy_stone_tile.png"
+    ],
+    "environment/mountainBackgrounds": [
+      "environment/mountainBackgrounds/alpine_valley.png"
+    ],
+    "environment/particleEffects": [
+      "environment/particleEffects/blue_rune_ring.png",
+      "environment/particleEffects/wind_ribbon.png"
+    ],
+    "environment/pineTrees": [
+      "environment/pineTrees/alpine_pine.png",
+      "environment/pineTrees/autumn_block_tree.png",
+      "environment/pineTrees/dead_branch_tree.png",
+      "environment/pineTrees/forked_oak_tree.png",
+      "environment/pineTrees/round_canopy_tree.png",
+      "environment/pineTrees/sapling_pine_tree.png",
+      "environment/pineTrees/small_round_tree.png",
+      "environment/pineTrees/tall_canopy_tree.png",
+      "environment/pineTrees/wide_bush_tree.png",
+      "environment/pineTrees/wind_bent_leaf_tree.png",
+      "environment/pineTrees/wind_bent_pine.png"
+    ],
+    "environment/platformVariants": [
+      "environment/platformVariants/platform_crumble_body_inner.png",
+      "environment/platformVariants/platform_crumble_body_left.png",
+      "environment/platformVariants/platform_crumble_body_right.png",
+      "environment/platformVariants/platform_crumble_bottom_inner.png",
+      "environment/platformVariants/platform_crumble_bottom_left.png",
+      "environment/platformVariants/platform_crumble_bottom_right.png",
+      "environment/platformVariants/platform_crumble_outer_left.png",
+      "environment/platformVariants/platform_crumble_outer_right.png",
+      "environment/platformVariants/platform_crumble_top_inner.png",
+      "environment/platformVariants/platform_crumble_top_left.png",
+      "environment/platformVariants/platform_crumble_top_right.png",
+      "environment/platformVariants/platform_ice_body_inner.png",
+      "environment/platformVariants/platform_ice_body_left.png",
+      "environment/platformVariants/platform_ice_body_right.png",
+      "environment/platformVariants/platform_ice_bottom_inner.png",
+      "environment/platformVariants/platform_ice_bottom_left.png",
+      "environment/platformVariants/platform_ice_bottom_right.png",
+      "environment/platformVariants/platform_ice_outer_left.png",
+      "environment/platformVariants/platform_ice_outer_right.png",
+      "environment/platformVariants/platform_ice_top_inner.png",
+      "environment/platformVariants/platform_ice_top_left.png",
+      "environment/platformVariants/platform_ice_top_right.png",
+      "environment/platformVariants/platform_snow_body_inner.png",
+      "environment/platformVariants/platform_snow_body_left.png",
+      "environment/platformVariants/platform_snow_body_right.png",
+      "environment/platformVariants/platform_snow_bottom_inner.png",
+      "environment/platformVariants/platform_snow_bottom_left.png",
+      "environment/platformVariants/platform_snow_bottom_right.png",
+      "environment/platformVariants/platform_snow_outer_left.png",
+      "environment/platformVariants/platform_snow_outer_right.png",
+      "environment/platformVariants/platform_snow_top_inner.png",
+      "environment/platformVariants/platform_snow_top_left.png",
+      "environment/platformVariants/platform_snow_top_right.png",
+      "environment/platformVariants/platform_summit_body_inner.png",
+      "environment/platformVariants/platform_summit_body_left.png",
+      "environment/platformVariants/platform_summit_body_right.png",
+      "environment/platformVariants/platform_summit_bottom_inner.png",
+      "environment/platformVariants/platform_summit_bottom_left.png",
+      "environment/platformVariants/platform_summit_bottom_right.png",
+      "environment/platformVariants/platform_summit_outer_left.png",
+      "environment/platformVariants/platform_summit_outer_right.png",
+      "environment/platformVariants/platform_summit_top_inner.png",
+      "environment/platformVariants/platform_summit_top_left.png",
+      "environment/platformVariants/platform_summit_top_right.png"
+    ],
+    "environment/platforms": [
+      "environment/platforms/platform_moss_body_inner.png",
+      "environment/platforms/platform_moss_body_left.png",
+      "environment/platforms/platform_moss_body_right.png",
+      "environment/platforms/platform_moss_bottom_inner.png",
+      "environment/platforms/platform_moss_bottom_left.png",
+      "environment/platforms/platform_moss_bottom_right.png",
+      "environment/platforms/platform_moss_outer_left.png",
+      "environment/platforms/platform_moss_outer_right.png",
+      "environment/platforms/platform_moss_top_inner.png",
+      "environment/platforms/platform_moss_top_left.png",
+      "environment/platforms/platform_moss_top_right.png",
+      "environment/platforms/platform_stone_body_inner.png",
+      "environment/platforms/platform_stone_body_left.png",
+      "environment/platforms/platform_stone_body_right.png",
+      "environment/platforms/platform_stone_bottom_inner.png",
+      "environment/platforms/platform_stone_bottom_left.png",
+      "environment/platforms/platform_stone_bottom_right.png",
+      "environment/platforms/platform_stone_outer_left.png",
+      "environment/platforms/platform_stone_outer_right.png",
+      "environment/platforms/platform_stone_top_inner.png",
+      "environment/platforms/platform_stone_top_left.png",
+      "environment/platforms/platform_stone_top_right.png"
+    ],
+    "environment/relicShrines": [
+      "environment/relicShrines/ancient_beacon_1.png",
+      "environment/relicShrines/jump_pad_1.png",
+      "environment/relicShrines/relic_shrine_1.png"
+    ],
+    "environment/rocks": [
+      "environment/rocks/rock_cluster_moss_1.png",
+      "environment/rocks/rock_cluster_plain_1.png",
+      "environment/rocks/rock_moss_boulder_large_1.png",
+      "environment/rocks/rock_moss_boulder_small_1.png",
+      "environment/rocks/rock_rubble_small_1.png",
+      "environment/rocks/rock_rubble_wall_1.png",
+      "environment/rocks/rock_single_large_1.png",
+      "environment/rocks/rock_single_medium_1.png",
+      "environment/rocks/rock_single_small_1.png",
+      "environment/rocks/rock_slab_flat_1.png",
+      "environment/rocks/rock_spire_1.png",
+      "environment/rocks/rock_spire_moss_1.png",
+      "environment/rocks/rock_spire_snow_1.png",
+      "environment/rocks/rock_stack_moss_1.png",
+      "environment/rocks/rock_stack_plain_1.png",
+      "environment/rocks/rock_stack_snow_1.png",
+      "environment/rocks/stone_cap_1.png"
+    ],
+    "environment/ropeBridges": [
+      "environment/ropeBridges/rope_bridge_worn.png"
+    ],
+    "environment/ruinTiles": [
+      "environment/ruinTiles/rune_stone_tile.png"
+    ],
+    "environment/sheetElements": [
+      "environment/sheetElements/chain_hanging_long.png",
+      "environment/sheetElements/ice_hanging_column.png",
+      "environment/sheetElements/ladder_hanging_long.png",
+      "environment/sheetElements/moss_tile_cluster.png",
+      "environment/sheetElements/snow_tile_cluster.png",
+      "environment/sheetElements/stone_tile_cluster.png",
+      "environment/sheetElements/summit_tile_cluster.png"
+    ],
+    "environment/snowTiles": [
+      "environment/snowTiles/snow_cap_tile.png"
+    ],
+    "environment/snowTrees": [
+      "environment/snowTrees/frosted_bent_pine.png",
+      "environment/snowTrees/snow_pine.png"
+    ],
+    "environment/structures": [
+      "environment/structures/banner_blue_1.png",
+      "environment/structures/banner_red_1.png",
+      "environment/structures/barrel_1.png",
+      "environment/structures/crystal_marker_1.png",
+      "environment/structures/fence_1.png",
+      "environment/structures/gate_1.png",
+      "environment/structures/ladder_1.png",
+      "environment/structures/rope_bridge_1.png",
+      "environment/structures/ruin_arch_fragment_1.png",
+      "environment/structures/ruin_column_1.png",
+      "environment/structures/rune_stone_1.png",
+      "environment/structures/signpost_1.png",
+      "environment/structures/wooden_crate_1.png"
+    ],
+    "environment/terrainTiles": [
+      "environment/terrainTiles/stone_grass_tile.png"
+    ],
+    "environment/tiles": [
+      "environment/tiles/hazard_spikes.png",
+      "environment/tiles/ladder_tile.png",
+      "environment/tiles/stone_cracked.png",
+      "environment/tiles/stone_grass_top.png",
+      "environment/tiles/stone_rune.png",
+      "environment/tiles/stone_snow_top.png",
+      "environment/tiles/stone_solid.png",
+      "environment/tiles/wood_plank.png"
+    ],
+    "environment/ui": [
+      "environment/ui/crown_1.png",
+      "environment/ui/height_arrow_1.png",
+      "environment/ui/hud_panel_1.png"
+    ],
+    "environment/vegetation": [
+      "environment/vegetation/bush_1.png",
+      "environment/vegetation/bush_autumn_1.png",
+      "environment/vegetation/flower_patch_1.png",
+      "environment/vegetation/grass_clump_1.png",
+      "environment/vegetation/leaf_cluster_1.png",
+      "environment/vegetation/moss_patch_1.png",
+      "environment/vegetation/mushroom_cluster_1.png",
+      "environment/vegetation/pebble_cluster_1.png",
+      "environment/vegetation/stump_1.png",
+      "environment/vegetation/tree_dead_1.png",
+      "environment/vegetation/tree_oak_1.png",
+      "environment/vegetation/tree_pine_1.png",
+      "environment/vegetation/vine_hanging_1.png"
+    ],
+    "playable_characters/character1": [
+      "playable_characters/character1/falling_frame1.png",
+      "playable_characters/character1/falling_frame2.png",
+      "playable_characters/character1/hitting_frame1.png",
+      "playable_characters/character1/hitting_frame2.png",
+      "playable_characters/character1/hitting_frame3.png",
+      "playable_characters/character1/idle_body.png",
+      "playable_characters/character1/idle_frame1.png",
+      "playable_characters/character1/idle_frame2.png",
+      "playable_characters/character1/idle_frame3.png",
+      "playable_characters/character1/idle_frame4.png",
+      "playable_characters/character1/jumping_frame1.png",
+      "playable_characters/character1/jumping_frame2.png",
+      "playable_characters/character1/kick_frame1.png",
+      "playable_characters/character1/kick_frame2.png",
+      "playable_characters/character1/kick_frame3.png",
+      "playable_characters/character1/lying_dead_frame1.png",
+      "playable_characters/character1/lying_dead_frame2.png",
+      "playable_characters/character1/main_body.png",
+      "playable_characters/character1/punching_frame1.png",
+      "playable_characters/character1/punching_frame2.png",
+      "playable_characters/character1/punching_frame3.png",
+      "playable_characters/character1/running_frame1.png",
+      "playable_characters/character1/running_frame2.png",
+      "playable_characters/character1/running_frame3.png",
+      "playable_characters/character1/running_frame4.png",
+      "playable_characters/character1/running_frame5.png",
+      "playable_characters/character1/running_frame6.png",
+      "playable_characters/character1/shooting_frame1.png",
+      "playable_characters/character1/shooting_frame2.png",
+      "playable_characters/character1/shooting_frame3.png",
+      "playable_characters/character1/shooting_frame4.png",
+      "playable_characters/character1/taking_damage_frame1.png",
+      "playable_characters/character1/taking_damage_frame2.png",
+      "playable_characters/character1/walking_frame1.png",
+      "playable_characters/character1/walking_frame2.png",
+      "playable_characters/character1/walking_frame3.png",
+      "playable_characters/character1/walking_frame4.png",
+      "playable_characters/character1/walking_frame5.png",
+      "playable_characters/character1/walking_frame6.png",
+      "playable_characters/character1/walking_left_frame1.png",
+      "playable_characters/character1/walking_left_frame2.png",
+      "playable_characters/character1/walking_left_frame3.png",
+      "playable_characters/character1/walking_left_frame4.png",
+      "playable_characters/character1/walking_left_frame5.png",
+      "playable_characters/character1/walking_left_frame6.png",
+      "playable_characters/character1/walking_right_frame1.png",
+      "playable_characters/character1/walking_right_frame2.png",
+      "playable_characters/character1/walking_right_frame3.png",
+      "playable_characters/character1/walking_right_frame4.png",
+      "playable_characters/character1/walking_right_frame5.png",
+      "playable_characters/character1/walking_right_frame6.png"
+    ],
+    "playable_characters/character2": [
+      "playable_characters/character2/falling_frame1.png",
+      "playable_characters/character2/falling_frame2.png",
+      "playable_characters/character2/hitting_frame1.png",
+      "playable_characters/character2/hitting_frame2.png",
+      "playable_characters/character2/hitting_frame3.png",
+      "playable_characters/character2/idle_body.png",
+      "playable_characters/character2/idle_frame1.png",
+      "playable_characters/character2/idle_frame2.png",
+      "playable_characters/character2/idle_frame3.png",
+      "playable_characters/character2/idle_frame4.png",
+      "playable_characters/character2/jumping_frame1.png",
+      "playable_characters/character2/jumping_frame2.png",
+      "playable_characters/character2/kick_frame1.png",
+      "playable_characters/character2/kick_frame2.png",
+      "playable_characters/character2/kick_frame3.png",
+      "playable_characters/character2/lying_dead_frame1.png",
+      "playable_characters/character2/lying_dead_frame2.png",
+      "playable_characters/character2/main_body.png",
+      "playable_characters/character2/punching_frame1.png",
+      "playable_characters/character2/punching_frame2.png",
+      "playable_characters/character2/punching_frame3.png",
+      "playable_characters/character2/running_frame1.png",
+      "playable_characters/character2/running_frame2.png",
+      "playable_characters/character2/running_frame3.png",
+      "playable_characters/character2/running_frame4.png",
+      "playable_characters/character2/running_frame5.png",
+      "playable_characters/character2/running_frame6.png",
+      "playable_characters/character2/shooting_frame1.png",
+      "playable_characters/character2/shooting_frame2.png",
+      "playable_characters/character2/shooting_frame3.png",
+      "playable_characters/character2/shooting_frame4.png",
+      "playable_characters/character2/taking_damage_frame1.png",
+      "playable_characters/character2/taking_damage_frame2.png",
+      "playable_characters/character2/walking_frame1.png",
+      "playable_characters/character2/walking_frame2.png",
+      "playable_characters/character2/walking_frame3.png",
+      "playable_characters/character2/walking_frame4.png",
+      "playable_characters/character2/walking_frame5.png",
+      "playable_characters/character2/walking_frame6.png",
+      "playable_characters/character2/walking_left_frame1.png",
+      "playable_characters/character2/walking_left_frame2.png",
+      "playable_characters/character2/walking_left_frame3.png",
+      "playable_characters/character2/walking_left_frame4.png",
+      "playable_characters/character2/walking_left_frame5.png",
+      "playable_characters/character2/walking_left_frame6.png",
+      "playable_characters/character2/walking_right_frame1.png",
+      "playable_characters/character2/walking_right_frame2.png",
+      "playable_characters/character2/walking_right_frame3.png",
+      "playable_characters/character2/walking_right_frame4.png",
+      "playable_characters/character2/walking_right_frame5.png",
+      "playable_characters/character2/walking_right_frame6.png"
+    ],
+    "playable_characters/character3": [
+      "playable_characters/character3/falling_frame1.png",
+      "playable_characters/character3/falling_frame2.png",
+      "playable_characters/character3/hitting_frame1.png",
+      "playable_characters/character3/hitting_frame2.png",
+      "playable_characters/character3/hitting_frame3.png",
+      "playable_characters/character3/idle_body.png",
+      "playable_characters/character3/idle_frame1.png",
+      "playable_characters/character3/idle_frame2.png",
+      "playable_characters/character3/idle_frame3.png",
+      "playable_characters/character3/idle_frame4.png",
+      "playable_characters/character3/jumping_frame1.png",
+      "playable_characters/character3/jumping_frame2.png",
+      "playable_characters/character3/kick_frame1.png",
+      "playable_characters/character3/kick_frame2.png",
+      "playable_characters/character3/kick_frame3.png",
+      "playable_characters/character3/lying_dead_frame1.png",
+      "playable_characters/character3/lying_dead_frame2.png",
+      "playable_characters/character3/main_body.png",
+      "playable_characters/character3/punching_frame1.png",
+      "playable_characters/character3/punching_frame2.png",
+      "playable_characters/character3/punching_frame3.png",
+      "playable_characters/character3/running_frame1.png",
+      "playable_characters/character3/running_frame2.png",
+      "playable_characters/character3/running_frame3.png",
+      "playable_characters/character3/running_frame4.png",
+      "playable_characters/character3/running_frame5.png",
+      "playable_characters/character3/running_frame6.png",
+      "playable_characters/character3/shooting_frame1.png",
+      "playable_characters/character3/shooting_frame2.png",
+      "playable_characters/character3/shooting_frame3.png",
+      "playable_characters/character3/shooting_frame4.png",
+      "playable_characters/character3/taking_damage_frame1.png",
+      "playable_characters/character3/taking_damage_frame2.png",
+      "playable_characters/character3/walking_frame1.png",
+      "playable_characters/character3/walking_frame2.png",
+      "playable_characters/character3/walking_frame3.png",
+      "playable_characters/character3/walking_frame4.png",
+      "playable_characters/character3/walking_frame5.png",
+      "playable_characters/character3/walking_frame6.png",
+      "playable_characters/character3/walking_left_frame1.png",
+      "playable_characters/character3/walking_left_frame2.png",
+      "playable_characters/character3/walking_left_frame3.png",
+      "playable_characters/character3/walking_left_frame4.png",
+      "playable_characters/character3/walking_left_frame5.png",
+      "playable_characters/character3/walking_left_frame6.png",
+      "playable_characters/character3/walking_right_frame1.png",
+      "playable_characters/character3/walking_right_frame2.png",
+      "playable_characters/character3/walking_right_frame3.png",
+      "playable_characters/character3/walking_right_frame4.png",
+      "playable_characters/character3/walking_right_frame5.png",
+      "playable_characters/character3/walking_right_frame6.png"
+    ],
+    "playable_characters/character4": [
+      "playable_characters/character4/falling_frame1.png",
+      "playable_characters/character4/falling_frame2.png",
+      "playable_characters/character4/hitting_frame1.png",
+      "playable_characters/character4/hitting_frame2.png",
+      "playable_characters/character4/hitting_frame3.png",
+      "playable_characters/character4/idle_body.png",
+      "playable_characters/character4/idle_frame1.png",
+      "playable_characters/character4/idle_frame2.png",
+      "playable_characters/character4/idle_frame3.png",
+      "playable_characters/character4/idle_frame4.png",
+      "playable_characters/character4/jumping_frame1.png",
+      "playable_characters/character4/jumping_frame2.png",
+      "playable_characters/character4/kick_frame1.png",
+      "playable_characters/character4/kick_frame2.png",
+      "playable_characters/character4/kick_frame3.png",
+      "playable_characters/character4/lying_dead_frame1.png",
+      "playable_characters/character4/lying_dead_frame2.png",
+      "playable_characters/character4/main_body.png",
+      "playable_characters/character4/punching_frame1.png",
+      "playable_characters/character4/punching_frame2.png",
+      "playable_characters/character4/punching_frame3.png",
+      "playable_characters/character4/running_frame1.png",
+      "playable_characters/character4/running_frame2.png",
+      "playable_characters/character4/running_frame3.png",
+      "playable_characters/character4/running_frame4.png",
+      "playable_characters/character4/running_frame5.png",
+      "playable_characters/character4/running_frame6.png",
+      "playable_characters/character4/shooting_frame1.png",
+      "playable_characters/character4/shooting_frame2.png",
+      "playable_characters/character4/shooting_frame3.png",
+      "playable_characters/character4/shooting_frame4.png",
+      "playable_characters/character4/taking_damage_frame1.png",
+      "playable_characters/character4/taking_damage_frame2.png",
+      "playable_characters/character4/walking_frame1.png",
+      "playable_characters/character4/walking_frame2.png",
+      "playable_characters/character4/walking_frame3.png",
+      "playable_characters/character4/walking_frame4.png",
+      "playable_characters/character4/walking_frame5.png",
+      "playable_characters/character4/walking_frame6.png",
+      "playable_characters/character4/walking_left_frame1.png",
+      "playable_characters/character4/walking_left_frame2.png",
+      "playable_characters/character4/walking_left_frame3.png",
+      "playable_characters/character4/walking_left_frame4.png",
+      "playable_characters/character4/walking_left_frame5.png",
+      "playable_characters/character4/walking_left_frame6.png",
+      "playable_characters/character4/walking_right_frame1.png",
+      "playable_characters/character4/walking_right_frame2.png",
+      "playable_characters/character4/walking_right_frame3.png",
+      "playable_characters/character4/walking_right_frame4.png",
+      "playable_characters/character4/walking_right_frame5.png",
+      "playable_characters/character4/walking_right_frame6.png"
+    ],
+    "playable_characters/character5": [
+      "playable_characters/character5/falling_frame1.png",
+      "playable_characters/character5/falling_frame2.png",
+      "playable_characters/character5/hitting_frame1.png",
+      "playable_characters/character5/hitting_frame2.png",
+      "playable_characters/character5/hitting_frame3.png",
+      "playable_characters/character5/idle_body.png",
+      "playable_characters/character5/idle_frame1.png",
+      "playable_characters/character5/idle_frame2.png",
+      "playable_characters/character5/idle_frame3.png",
+      "playable_characters/character5/idle_frame4.png",
+      "playable_characters/character5/jumping_frame1.png",
+      "playable_characters/character5/jumping_frame2.png",
+      "playable_characters/character5/kick_frame1.png",
+      "playable_characters/character5/kick_frame2.png",
+      "playable_characters/character5/kick_frame3.png",
+      "playable_characters/character5/lying_dead_frame1.png",
+      "playable_characters/character5/lying_dead_frame2.png",
+      "playable_characters/character5/main_body.png",
+      "playable_characters/character5/punching_frame1.png",
+      "playable_characters/character5/punching_frame2.png",
+      "playable_characters/character5/punching_frame3.png",
+      "playable_characters/character5/running_frame1.png",
+      "playable_characters/character5/running_frame2.png",
+      "playable_characters/character5/running_frame3.png",
+      "playable_characters/character5/running_frame4.png",
+      "playable_characters/character5/running_frame5.png",
+      "playable_characters/character5/running_frame6.png",
+      "playable_characters/character5/shooting_frame1.png",
+      "playable_characters/character5/shooting_frame2.png",
+      "playable_characters/character5/shooting_frame3.png",
+      "playable_characters/character5/shooting_frame4.png",
+      "playable_characters/character5/taking_damage_frame1.png",
+      "playable_characters/character5/taking_damage_frame2.png",
+      "playable_characters/character5/walking_frame1.png",
+      "playable_characters/character5/walking_frame2.png",
+      "playable_characters/character5/walking_frame3.png",
+      "playable_characters/character5/walking_frame4.png",
+      "playable_characters/character5/walking_frame5.png",
+      "playable_characters/character5/walking_frame6.png",
+      "playable_characters/character5/walking_left_frame1.png",
+      "playable_characters/character5/walking_left_frame2.png",
+      "playable_characters/character5/walking_left_frame3.png",
+      "playable_characters/character5/walking_left_frame4.png",
+      "playable_characters/character5/walking_left_frame5.png",
+      "playable_characters/character5/walking_left_frame6.png",
+      "playable_characters/character5/walking_right_frame1.png",
+      "playable_characters/character5/walking_right_frame2.png",
+      "playable_characters/character5/walking_right_frame3.png",
+      "playable_characters/character5/walking_right_frame4.png",
+      "playable_characters/character5/walking_right_frame5.png",
+      "playable_characters/character5/walking_right_frame6.png"
+    ],
+    "playable_characters/character6": [
+      "playable_characters/character6/falling_frame1.png",
+      "playable_characters/character6/falling_frame2.png",
+      "playable_characters/character6/hitting_frame1.png",
+      "playable_characters/character6/hitting_frame2.png",
+      "playable_characters/character6/hitting_frame3.png",
+      "playable_characters/character6/idle_body.png",
+      "playable_characters/character6/idle_frame1.png",
+      "playable_characters/character6/idle_frame2.png",
+      "playable_characters/character6/idle_frame3.png",
+      "playable_characters/character6/idle_frame4.png",
+      "playable_characters/character6/jumping_frame1.png",
+      "playable_characters/character6/jumping_frame2.png",
+      "playable_characters/character6/kick_frame1.png",
+      "playable_characters/character6/kick_frame2.png",
+      "playable_characters/character6/kick_frame3.png",
+      "playable_characters/character6/lying_dead_frame1.png",
+      "playable_characters/character6/lying_dead_frame2.png",
+      "playable_characters/character6/main_body.png",
+      "playable_characters/character6/punching_frame1.png",
+      "playable_characters/character6/punching_frame2.png",
+      "playable_characters/character6/punching_frame3.png",
+      "playable_characters/character6/running_frame1.png",
+      "playable_characters/character6/running_frame2.png",
+      "playable_characters/character6/running_frame3.png",
+      "playable_characters/character6/running_frame4.png",
+      "playable_characters/character6/running_frame5.png",
+      "playable_characters/character6/running_frame6.png",
+      "playable_characters/character6/shooting_frame1.png",
+      "playable_characters/character6/shooting_frame2.png",
+      "playable_characters/character6/shooting_frame3.png",
+      "playable_characters/character6/shooting_frame4.png",
+      "playable_characters/character6/taking_damage_frame1.png",
+      "playable_characters/character6/taking_damage_frame2.png",
+      "playable_characters/character6/walking_frame1.png",
+      "playable_characters/character6/walking_frame2.png",
+      "playable_characters/character6/walking_frame3.png",
+      "playable_characters/character6/walking_frame4.png",
+      "playable_characters/character6/walking_frame5.png",
+      "playable_characters/character6/walking_frame6.png",
+      "playable_characters/character6/walking_left_frame1.png",
+      "playable_characters/character6/walking_left_frame2.png",
+      "playable_characters/character6/walking_left_frame3.png",
+      "playable_characters/character6/walking_left_frame4.png",
+      "playable_characters/character6/walking_left_frame5.png",
+      "playable_characters/character6/walking_left_frame6.png",
+      "playable_characters/character6/walking_right_frame1.png",
+      "playable_characters/character6/walking_right_frame2.png",
+      "playable_characters/character6/walking_right_frame3.png",
+      "playable_characters/character6/walking_right_frame4.png",
+      "playable_characters/character6/walking_right_frame5.png",
+      "playable_characters/character6/walking_right_frame6.png"
+    ],
+    "playable_characters/character7": [
+      "playable_characters/character7/falling_frame1.png",
+      "playable_characters/character7/falling_frame2.png",
+      "playable_characters/character7/hitting_frame1.png",
+      "playable_characters/character7/hitting_frame2.png",
+      "playable_characters/character7/hitting_frame3.png",
+      "playable_characters/character7/idle_body.png",
+      "playable_characters/character7/idle_frame1.png",
+      "playable_characters/character7/idle_frame2.png",
+      "playable_characters/character7/idle_frame3.png",
+      "playable_characters/character7/idle_frame4.png",
+      "playable_characters/character7/jumping_frame1.png",
+      "playable_characters/character7/jumping_frame2.png",
+      "playable_characters/character7/kick_frame1.png",
+      "playable_characters/character7/kick_frame2.png",
+      "playable_characters/character7/kick_frame3.png",
+      "playable_characters/character7/lying_dead_frame1.png",
+      "playable_characters/character7/lying_dead_frame2.png",
+      "playable_characters/character7/main_body.png",
+      "playable_characters/character7/punching_frame1.png",
+      "playable_characters/character7/punching_frame2.png",
+      "playable_characters/character7/punching_frame3.png",
+      "playable_characters/character7/running_frame1.png",
+      "playable_characters/character7/running_frame2.png",
+      "playable_characters/character7/running_frame3.png",
+      "playable_characters/character7/running_frame4.png",
+      "playable_characters/character7/running_frame5.png",
+      "playable_characters/character7/running_frame6.png",
+      "playable_characters/character7/shooting_frame1.png",
+      "playable_characters/character7/shooting_frame2.png",
+      "playable_characters/character7/shooting_frame3.png",
+      "playable_characters/character7/shooting_frame4.png",
+      "playable_characters/character7/taking_damage_frame1.png",
+      "playable_characters/character7/taking_damage_frame2.png",
+      "playable_characters/character7/walking_frame1.png",
+      "playable_characters/character7/walking_frame2.png",
+      "playable_characters/character7/walking_frame3.png",
+      "playable_characters/character7/walking_frame4.png",
+      "playable_characters/character7/walking_frame5.png",
+      "playable_characters/character7/walking_frame6.png",
+      "playable_characters/character7/walking_left_frame1.png",
+      "playable_characters/character7/walking_left_frame2.png",
+      "playable_characters/character7/walking_left_frame3.png",
+      "playable_characters/character7/walking_left_frame4.png",
+      "playable_characters/character7/walking_left_frame5.png",
+      "playable_characters/character7/walking_left_frame6.png",
+      "playable_characters/character7/walking_right_frame1.png",
+      "playable_characters/character7/walking_right_frame2.png",
+      "playable_characters/character7/walking_right_frame3.png",
+      "playable_characters/character7/walking_right_frame4.png",
+      "playable_characters/character7/walking_right_frame5.png",
+      "playable_characters/character7/walking_right_frame6.png"
+    ],
+    "playable_characters/character8": [
+      "playable_characters/character8/falling_frame1.png",
+      "playable_characters/character8/falling_frame2.png",
+      "playable_characters/character8/hitting_frame1.png",
+      "playable_characters/character8/hitting_frame2.png",
+      "playable_characters/character8/hitting_frame3.png",
+      "playable_characters/character8/idle_body.png",
+      "playable_characters/character8/idle_frame1.png",
+      "playable_characters/character8/idle_frame2.png",
+      "playable_characters/character8/idle_frame3.png",
+      "playable_characters/character8/idle_frame4.png",
+      "playable_characters/character8/jumping_frame1.png",
+      "playable_characters/character8/jumping_frame2.png",
+      "playable_characters/character8/kick_frame1.png",
+      "playable_characters/character8/kick_frame2.png",
+      "playable_characters/character8/kick_frame3.png",
+      "playable_characters/character8/lying_dead_frame1.png",
+      "playable_characters/character8/lying_dead_frame2.png",
+      "playable_characters/character8/main_body.png",
+      "playable_characters/character8/punching_frame1.png",
+      "playable_characters/character8/punching_frame2.png",
+      "playable_characters/character8/punching_frame3.png",
+      "playable_characters/character8/running_frame1.png",
+      "playable_characters/character8/running_frame2.png",
+      "playable_characters/character8/running_frame3.png",
+      "playable_characters/character8/running_frame4.png",
+      "playable_characters/character8/running_frame5.png",
+      "playable_characters/character8/running_frame6.png",
+      "playable_characters/character8/shooting_frame1.png",
+      "playable_characters/character8/shooting_frame2.png",
+      "playable_characters/character8/shooting_frame3.png",
+      "playable_characters/character8/shooting_frame4.png",
+      "playable_characters/character8/taking_damage_frame1.png",
+      "playable_characters/character8/taking_damage_frame2.png",
+      "playable_characters/character8/walking_frame1.png",
+      "playable_characters/character8/walking_frame2.png",
+      "playable_characters/character8/walking_frame3.png",
+      "playable_characters/character8/walking_frame4.png",
+      "playable_characters/character8/walking_frame5.png",
+      "playable_characters/character8/walking_frame6.png",
+      "playable_characters/character8/walking_left_frame1.png",
+      "playable_characters/character8/walking_left_frame2.png",
+      "playable_characters/character8/walking_left_frame3.png",
+      "playable_characters/character8/walking_left_frame4.png",
+      "playable_characters/character8/walking_left_frame5.png",
+      "playable_characters/character8/walking_left_frame6.png",
+      "playable_characters/character8/walking_right_frame1.png",
+      "playable_characters/character8/walking_right_frame2.png",
+      "playable_characters/character8/walking_right_frame3.png",
+      "playable_characters/character8/walking_right_frame4.png",
+      "playable_characters/character8/walking_right_frame5.png",
+      "playable_characters/character8/walking_right_frame6.png"
+    ]
+  },
   "assets": {
     "environment/backgrounds/cloud.png": {
       "png": "/assets/environment/backgrounds/cloud.png",
@@ -83,8 +966,58 @@
       "width": 768,
       "height": 432
     },
+    "environment/banners/pine_valley_banner.png": {
+      "png": "/assets/environment/banners/pine_valley_banner.png",
+      "width": 24,
+      "height": 40
+    },
+    "environment/banners/summit_banner.png": {
+      "png": "/assets/environment/banners/summit_banner.png",
+      "width": 24,
+      "height": 40
+    },
+    "environment/clouds/background_cloud_huge.png": {
+      "png": "/assets/environment/clouds/background_cloud_huge.png",
+      "width": 192,
+      "height": 64
+    },
+    "environment/clouds/fast_cloud_streak.png": {
+      "png": "/assets/environment/clouds/fast_cloud_streak.png",
+      "width": 224,
+      "height": 32
+    },
+    "environment/clouds/midground_cloud.png": {
+      "png": "/assets/environment/clouds/midground_cloud.png",
+      "width": 112,
+      "height": 40
+    },
     "environment/collectibles/coin_1.png": {
       "png": "/assets/environment/collectibles/coin_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/coin_copper_1.png": {
+      "png": "/assets/environment/collectibles/coin_copper_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/coin_gold_1.png": {
+      "png": "/assets/environment/collectibles/coin_gold_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/coin_rune_blue_1.png": {
+      "png": "/assets/environment/collectibles/coin_rune_blue_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/coin_rune_purple_1.png": {
+      "png": "/assets/environment/collectibles/coin_rune_purple_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/coin_silver_1.png": {
+      "png": "/assets/environment/collectibles/coin_silver_1.png",
       "width": 16,
       "height": 16
     },
@@ -108,9 +1041,84 @@
       "width": 16,
       "height": 16
     },
+    "environment/collectibles/crown_blue_1.png": {
+      "png": "/assets/environment/collectibles/crown_blue_1.png",
+      "width": 20,
+      "height": 18
+    },
+    "environment/collectibles/crown_gold_1.png": {
+      "png": "/assets/environment/collectibles/crown_gold_1.png",
+      "width": 20,
+      "height": 18
+    },
+    "environment/collectibles/elemental_burst_fire_frame1.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_fire_frame1.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_fire_frame2.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_fire_frame2.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_fire_frame3.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_fire_frame3.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_fire_frame4.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_fire_frame4.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_ice_frame1.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_ice_frame1.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_ice_frame2.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_ice_frame2.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_ice_frame3.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_ice_frame3.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/elemental_burst_ice_frame4.png": {
+      "png": "/assets/environment/collectibles/elemental_burst_ice_frame4.png",
+      "width": 24,
+      "height": 24
+    },
     "environment/collectibles/exp_badge_1.png": {
       "png": "/assets/environment/collectibles/exp_badge_1.png",
       "width": 24,
+      "height": 16
+    },
+    "environment/collectibles/gem_blue_1.png": {
+      "png": "/assets/environment/collectibles/gem_blue_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/gem_gold_1.png": {
+      "png": "/assets/environment/collectibles/gem_gold_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/gem_green_1.png": {
+      "png": "/assets/environment/collectibles/gem_green_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/gem_purple_1.png": {
+      "png": "/assets/environment/collectibles/gem_purple_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/gem_red_1.png": {
+      "png": "/assets/environment/collectibles/gem_red_1.png",
+      "width": 16,
       "height": 16
     },
     "environment/collectibles/gem_variant1.png": {
@@ -138,10 +1146,175 @@
       "width": 16,
       "height": 16
     },
+    "environment/collectibles/magic_orb_blue_1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_blue_1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_blue_frame1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_blue_frame1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_blue_frame2.png": {
+      "png": "/assets/environment/collectibles/magic_orb_blue_frame2.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_blue_frame3.png": {
+      "png": "/assets/environment/collectibles/magic_orb_blue_frame3.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_blue_frame4.png": {
+      "png": "/assets/environment/collectibles/magic_orb_blue_frame4.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_gold_1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_gold_1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_gold_frame1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_gold_frame1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_gold_frame2.png": {
+      "png": "/assets/environment/collectibles/magic_orb_gold_frame2.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_gold_frame3.png": {
+      "png": "/assets/environment/collectibles/magic_orb_gold_frame3.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_gold_frame4.png": {
+      "png": "/assets/environment/collectibles/magic_orb_gold_frame4.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_purple_1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_purple_1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_purple_frame1.png": {
+      "png": "/assets/environment/collectibles/magic_orb_purple_frame1.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_purple_frame2.png": {
+      "png": "/assets/environment/collectibles/magic_orb_purple_frame2.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_purple_frame3.png": {
+      "png": "/assets/environment/collectibles/magic_orb_purple_frame3.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/magic_orb_purple_frame4.png": {
+      "png": "/assets/environment/collectibles/magic_orb_purple_frame4.png",
+      "width": 20,
+      "height": 20
+    },
+    "environment/collectibles/medallion_gold_frame1.png": {
+      "png": "/assets/environment/collectibles/medallion_gold_frame1.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_gold_frame2.png": {
+      "png": "/assets/environment/collectibles/medallion_gold_frame2.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_gold_frame3.png": {
+      "png": "/assets/environment/collectibles/medallion_gold_frame3.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_gold_frame4.png": {
+      "png": "/assets/environment/collectibles/medallion_gold_frame4.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_green_frame1.png": {
+      "png": "/assets/environment/collectibles/medallion_green_frame1.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_green_frame2.png": {
+      "png": "/assets/environment/collectibles/medallion_green_frame2.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_green_frame3.png": {
+      "png": "/assets/environment/collectibles/medallion_green_frame3.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/collectibles/medallion_green_frame4.png": {
+      "png": "/assets/environment/collectibles/medallion_green_frame4.png",
+      "width": 24,
+      "height": 24
+    },
     "environment/collectibles/potion_blue_1.png": {
       "png": "/assets/environment/collectibles/potion_blue_1.png",
       "width": 16,
       "height": 16
+    },
+    "environment/collectibles/potion_gold_1.png": {
+      "png": "/assets/environment/collectibles/potion_gold_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/potion_red_1.png": {
+      "png": "/assets/environment/collectibles/potion_red_1.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/collectibles/relic_pedestal_blue_frame1.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_blue_frame1.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_blue_frame2.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_blue_frame2.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_blue_frame3.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_blue_frame3.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_blue_frame4.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_blue_frame4.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_fire_frame1.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_fire_frame1.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_fire_frame2.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_fire_frame2.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_fire_frame3.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_fire_frame3.png",
+      "width": 32,
+      "height": 40
+    },
+    "environment/collectibles/relic_pedestal_fire_frame4.png": {
+      "png": "/assets/environment/collectibles/relic_pedestal_fire_frame4.png",
+      "width": 32,
+      "height": 40
     },
     "environment/collectibles/relic_pink_frame1.png": {
       "png": "/assets/environment/collectibles/relic_pink_frame1.png",
@@ -208,6 +1381,266 @@
       "width": 32,
       "height": 24
     },
+    "environment/collectibles/treasure_chest_blue_1.png": {
+      "png": "/assets/environment/collectibles/treasure_chest_blue_1.png",
+      "width": 32,
+      "height": 24
+    },
+    "environment/collectibles/treasure_chest_red_1.png": {
+      "png": "/assets/environment/collectibles/treasure_chest_red_1.png",
+      "width": 32,
+      "height": 24
+    },
+    "environment/crystals/blue_movement_crystal.png": {
+      "png": "/assets/environment/crystals/blue_movement_crystal.png",
+      "width": 16,
+      "height": 24
+    },
+    "environment/crystals/green_healing_crystal.png": {
+      "png": "/assets/environment/crystals/green_healing_crystal.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/crystals/red_relic_crystal.png": {
+      "png": "/assets/environment/crystals/red_relic_crystal.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/decorations/banner_blue_large.png": {
+      "png": "/assets/environment/decorations/banner_blue_large.png",
+      "width": 28,
+      "height": 48
+    },
+    "environment/decorations/banner_gold_large.png": {
+      "png": "/assets/environment/decorations/banner_gold_large.png",
+      "width": 28,
+      "height": 48
+    },
+    "environment/decorations/banner_green_large.png": {
+      "png": "/assets/environment/decorations/banner_green_large.png",
+      "width": 28,
+      "height": 48
+    },
+    "environment/decorations/barrel_stack_rune.png": {
+      "png": "/assets/environment/decorations/barrel_stack_rune.png",
+      "width": 36,
+      "height": 32
+    },
+    "environment/decorations/barrel_stack_wood.png": {
+      "png": "/assets/environment/decorations/barrel_stack_wood.png",
+      "width": 36,
+      "height": 32
+    },
+    "environment/decorations/campfire_blue.png": {
+      "png": "/assets/environment/decorations/campfire_blue.png",
+      "width": 36,
+      "height": 28
+    },
+    "environment/decorations/campfire_green.png": {
+      "png": "/assets/environment/decorations/campfire_green.png",
+      "width": 36,
+      "height": 28
+    },
+    "environment/decorations/campfire_warm.png": {
+      "png": "/assets/environment/decorations/campfire_warm.png",
+      "width": 36,
+      "height": 28
+    },
+    "environment/decorations/crate_stack_rune.png": {
+      "png": "/assets/environment/decorations/crate_stack_rune.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/decorations/crate_stack_wood.png": {
+      "png": "/assets/environment/decorations/crate_stack_wood.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/decorations/crystal_totem_blue.png": {
+      "png": "/assets/environment/decorations/crystal_totem_blue.png",
+      "width": 32,
+      "height": 52
+    },
+    "environment/decorations/crystal_totem_green.png": {
+      "png": "/assets/environment/decorations/crystal_totem_green.png",
+      "width": 32,
+      "height": 52
+    },
+    "environment/decorations/crystal_totem_purple.png": {
+      "png": "/assets/environment/decorations/crystal_totem_purple.png",
+      "width": 32,
+      "height": 52
+    },
+    "environment/decorations/flower_crystal_blue.png": {
+      "png": "/assets/environment/decorations/flower_crystal_blue.png",
+      "width": 32,
+      "height": 32
+    },
+    "environment/decorations/flower_crystal_green.png": {
+      "png": "/assets/environment/decorations/flower_crystal_green.png",
+      "width": 32,
+      "height": 32
+    },
+    "environment/decorations/flower_crystal_purple.png": {
+      "png": "/assets/environment/decorations/flower_crystal_purple.png",
+      "width": 32,
+      "height": 32
+    },
+    "environment/decorations/flower_post_blue.png": {
+      "png": "/assets/environment/decorations/flower_post_blue.png",
+      "width": 24,
+      "height": 36
+    },
+    "environment/decorations/flower_post_pink.png": {
+      "png": "/assets/environment/decorations/flower_post_pink.png",
+      "width": 24,
+      "height": 36
+    },
+    "environment/decorations/flower_post_white.png": {
+      "png": "/assets/environment/decorations/flower_post_white.png",
+      "width": 24,
+      "height": 36
+    },
+    "environment/decorations/hanging_lantern_blue.png": {
+      "png": "/assets/environment/decorations/hanging_lantern_blue.png",
+      "width": 24,
+      "height": 40
+    },
+    "environment/decorations/hanging_lantern_gold.png": {
+      "png": "/assets/environment/decorations/hanging_lantern_gold.png",
+      "width": 24,
+      "height": 40
+    },
+    "environment/decorations/hanging_lantern_green.png": {
+      "png": "/assets/environment/decorations/hanging_lantern_green.png",
+      "width": 24,
+      "height": 40
+    },
+    "environment/decorations/pedestal_lamp_blue.png": {
+      "png": "/assets/environment/decorations/pedestal_lamp_blue.png",
+      "width": 32,
+      "height": 48
+    },
+    "environment/decorations/pedestal_lamp_gold.png": {
+      "png": "/assets/environment/decorations/pedestal_lamp_gold.png",
+      "width": 32,
+      "height": 48
+    },
+    "environment/decorations/pedestal_lamp_green.png": {
+      "png": "/assets/environment/decorations/pedestal_lamp_green.png",
+      "width": 32,
+      "height": 48
+    },
+    "environment/decorations/rope_gate_ice.png": {
+      "png": "/assets/environment/decorations/rope_gate_ice.png",
+      "width": 56,
+      "height": 36
+    },
+    "environment/decorations/rope_gate_lit.png": {
+      "png": "/assets/environment/decorations/rope_gate_lit.png",
+      "width": 56,
+      "height": 36
+    },
+    "environment/decorations/rope_gate_wood.png": {
+      "png": "/assets/environment/decorations/rope_gate_wood.png",
+      "width": 56,
+      "height": 36
+    },
+    "environment/decorations/rope_posts_lanterns.png": {
+      "png": "/assets/environment/decorations/rope_posts_lanterns.png",
+      "width": 56,
+      "height": 28
+    },
+    "environment/decorations/rope_posts_plain.png": {
+      "png": "/assets/environment/decorations/rope_posts_plain.png",
+      "width": 56,
+      "height": 28
+    },
+    "environment/decorations/sign_board_rune.png": {
+      "png": "/assets/environment/decorations/sign_board_rune.png",
+      "width": 40,
+      "height": 28
+    },
+    "environment/decorations/sign_board_wood.png": {
+      "png": "/assets/environment/decorations/sign_board_wood.png",
+      "width": 40,
+      "height": 28
+    },
+    "environment/decorations/skeleton_marker.png": {
+      "png": "/assets/environment/decorations/skeleton_marker.png",
+      "width": 32,
+      "height": 48
+    },
+    "environment/decorations/small_shrine_purple.png": {
+      "png": "/assets/environment/decorations/small_shrine_purple.png",
+      "width": 36,
+      "height": 42
+    },
+    "environment/decorations/small_shrine_snow.png": {
+      "png": "/assets/environment/decorations/small_shrine_snow.png",
+      "width": 36,
+      "height": 42
+    },
+    "environment/decorations/small_shrine_wood.png": {
+      "png": "/assets/environment/decorations/small_shrine_wood.png",
+      "width": 36,
+      "height": 42
+    },
+    "environment/decorations/snow_brazier_blue.png": {
+      "png": "/assets/environment/decorations/snow_brazier_blue.png",
+      "width": 28,
+      "height": 36
+    },
+    "environment/decorations/snow_brazier_gold.png": {
+      "png": "/assets/environment/decorations/snow_brazier_gold.png",
+      "width": 28,
+      "height": 36
+    },
+    "environment/decorations/snow_brazier_green.png": {
+      "png": "/assets/environment/decorations/snow_brazier_green.png",
+      "width": 28,
+      "height": 36
+    },
+    "environment/decorations/snow_lamp_blue.png": {
+      "png": "/assets/environment/decorations/snow_lamp_blue.png",
+      "width": 24,
+      "height": 48
+    },
+    "environment/decorations/snow_lamp_gold.png": {
+      "png": "/assets/environment/decorations/snow_lamp_gold.png",
+      "width": 24,
+      "height": 48
+    },
+    "environment/decorations/snow_lamp_purple.png": {
+      "png": "/assets/environment/decorations/snow_lamp_purple.png",
+      "width": 24,
+      "height": 48
+    },
+    "environment/decorations/statue_snow.png": {
+      "png": "/assets/environment/decorations/statue_snow.png",
+      "width": 36,
+      "height": 56
+    },
+    "environment/decorations/statue_stone.png": {
+      "png": "/assets/environment/decorations/statue_stone.png",
+      "width": 36,
+      "height": 56
+    },
+    "environment/decorations/tripod_blue.png": {
+      "png": "/assets/environment/decorations/tripod_blue.png",
+      "width": 36,
+      "height": 40
+    },
+    "environment/decorations/tripod_purple.png": {
+      "png": "/assets/environment/decorations/tripod_purple.png",
+      "width": 36,
+      "height": 40
+    },
+    "environment/decorations/tripod_red.png": {
+      "png": "/assets/environment/decorations/tripod_red.png",
+      "width": 36,
+      "height": 40
+    },
     "environment/effects/collectible_ring_1.png": {
       "png": "/assets/environment/effects/collectible_ring_1.png",
       "width": 24,
@@ -228,10 +1661,110 @@
       "width": 256,
       "height": 64
     },
+    "environment/effects/jump_pad_1.png": {
+      "png": "/assets/environment/effects/jump_pad_1.png",
+      "width": 32,
+      "height": 32
+    },
     "environment/effects/portal_arch_1.png": {
       "png": "/assets/environment/effects/portal_arch_1.png",
       "width": 64,
       "height": 64
+    },
+    "environment/enemies/archer_1.png": {
+      "png": "/assets/environment/enemies/archer_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/archer_bone_1.png": {
+      "png": "/assets/environment/enemies/archer_bone_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/archer_dark_1.png": {
+      "png": "/assets/environment/enemies/archer_dark_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/armored_brute_1.png": {
+      "png": "/assets/environment/enemies/armored_brute_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/goblin_1.png": {
+      "png": "/assets/environment/enemies/goblin_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/goblin_chief_1.png": {
+      "png": "/assets/environment/enemies/goblin_chief_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/goblin_dark_1.png": {
+      "png": "/assets/environment/enemies/goblin_dark_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/goblin_scout_1.png": {
+      "png": "/assets/environment/enemies/goblin_scout_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/ice_bat_1.png": {
+      "png": "/assets/environment/enemies/ice_bat_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/ice_bat_frost_1.png": {
+      "png": "/assets/environment/enemies/ice_bat_frost_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/ice_golem_1.png": {
+      "png": "/assets/environment/enemies/ice_golem_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/portal_blue_1.png": {
+      "png": "/assets/environment/enemies/portal_blue_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/skeleton_1.png": {
+      "png": "/assets/environment/enemies/skeleton_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/skeleton_armored_1.png": {
+      "png": "/assets/environment/enemies/skeleton_armored_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/skeleton_dark_1.png": {
+      "png": "/assets/environment/enemies/skeleton_dark_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/skeleton_mage_1.png": {
+      "png": "/assets/environment/enemies/skeleton_mage_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/skull_bat_1.png": {
+      "png": "/assets/environment/enemies/skull_bat_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/wind_spirit_1.png": {
+      "png": "/assets/environment/enemies/wind_spirit_1.png",
+      "width": 40,
+      "height": 36
+    },
+    "environment/enemies/yeti_1.png": {
+      "png": "/assets/environment/enemies/yeti_1.png",
+      "width": 40,
+      "height": 36
     },
     "environment/flora/flower_pink_1.png": {
       "png": "/assets/environment/flora/flower_pink_1.png",
@@ -265,18 +1798,153 @@
     },
     "environment/hazards/crystal_spikes_1.png": {
       "png": "/assets/environment/hazards/crystal_spikes_1.png",
+      "width": 32,
+      "height": 28
+    },
+    "environment/hazards/crystal_spikes_blue_1.png": {
+      "png": "/assets/environment/hazards/crystal_spikes_blue_1.png",
+      "width": 32,
+      "height": 28
+    },
+    "environment/hazards/crystal_spikes_green_1.png": {
+      "png": "/assets/environment/hazards/crystal_spikes_green_1.png",
+      "width": 32,
+      "height": 28
+    },
+    "environment/hazards/crystal_spikes_purple_1.png": {
+      "png": "/assets/environment/hazards/crystal_spikes_purple_1.png",
+      "width": 32,
+      "height": 28
+    },
+    "environment/hazards/falling_icicle_1.png": {
+      "png": "/assets/environment/hazards/falling_icicle_1.png",
       "width": 24,
+      "height": 36
+    },
+    "environment/hazards/falling_icicles_cluster_1.png": {
+      "png": "/assets/environment/hazards/falling_icicles_cluster_1.png",
+      "width": 48,
+      "height": 36
+    },
+    "environment/hazards/ice_spikes_1.png": {
+      "png": "/assets/environment/hazards/ice_spikes_1.png",
+      "width": 24,
+      "height": 20
+    },
+    "environment/hazards/lightning_1.png": {
+      "png": "/assets/environment/hazards/lightning_1.png",
+      "width": 28,
+      "height": 42
+    },
+    "environment/hazards/lightning_blue_1.png": {
+      "png": "/assets/environment/hazards/lightning_blue_1.png",
+      "width": 28,
+      "height": 42
+    },
+    "environment/hazards/lightning_purple_1.png": {
+      "png": "/assets/environment/hazards/lightning_purple_1.png",
+      "width": 28,
+      "height": 42
+    },
+    "environment/hazards/magic_arc_blue_1.png": {
+      "png": "/assets/environment/hazards/magic_arc_blue_1.png",
+      "width": 64,
       "height": 24
+    },
+    "environment/hazards/magic_arc_purple_1.png": {
+      "png": "/assets/environment/hazards/magic_arc_purple_1.png",
+      "width": 64,
+      "height": 24
+    },
+    "environment/hazards/magic_wind_green_1.png": {
+      "png": "/assets/environment/hazards/magic_wind_green_1.png",
+      "width": 64,
+      "height": 24
+    },
+    "environment/hazards/magic_wind_purple_1.png": {
+      "png": "/assets/environment/hazards/magic_wind_purple_1.png",
+      "width": 64,
+      "height": 24
+    },
+    "environment/hazards/rolling_boulder_1.png": {
+      "png": "/assets/environment/hazards/rolling_boulder_1.png",
+      "width": 34,
+      "height": 34
+    },
+    "environment/hazards/rolling_boulder_rune_1.png": {
+      "png": "/assets/environment/hazards/rolling_boulder_rune_1.png",
+      "width": 34,
+      "height": 34
+    },
+    "environment/hazards/rune_trap_gold_1.png": {
+      "png": "/assets/environment/hazards/rune_trap_gold_1.png",
+      "width": 40,
+      "height": 32
+    },
+    "environment/hazards/rune_trap_green_1.png": {
+      "png": "/assets/environment/hazards/rune_trap_green_1.png",
+      "width": 40,
+      "height": 32
+    },
+    "environment/hazards/spike_ball_1.png": {
+      "png": "/assets/environment/hazards/spike_ball_1.png",
+      "width": 32,
+      "height": 32
+    },
+    "environment/hazards/spike_boulder_1.png": {
+      "png": "/assets/environment/hazards/spike_boulder_1.png",
+      "width": 34,
+      "height": 34
+    },
+    "environment/hazards/spike_machine_1.png": {
+      "png": "/assets/environment/hazards/spike_machine_1.png",
+      "width": 40,
+      "height": 32
     },
     "environment/hazards/spikes_1.png": {
       "png": "/assets/environment/hazards/spikes_1.png",
-      "width": 16,
-      "height": 16
+      "width": 24,
+      "height": 20
+    },
+    "environment/hazards/stone_spikes_1.png": {
+      "png": "/assets/environment/hazards/stone_spikes_1.png",
+      "width": 24,
+      "height": 20
+    },
+    "environment/hazards/summit_spikes_1.png": {
+      "png": "/assets/environment/hazards/summit_spikes_1.png",
+      "width": 24,
+      "height": 20
     },
     "environment/hazards/thorn_vine_1.png": {
       "png": "/assets/environment/hazards/thorn_vine_1.png",
       "width": 32,
       "height": 16
+    },
+    "environment/hazards/wind_zone_1.png": {
+      "png": "/assets/environment/hazards/wind_zone_1.png",
+      "width": 64,
+      "height": 24
+    },
+    "environment/ladders/climbing_chain.png": {
+      "png": "/assets/environment/ladders/climbing_chain.png",
+      "width": 24,
+      "height": 64
+    },
+    "environment/ladders/frosted_wood_ladder.png": {
+      "png": "/assets/environment/ladders/frosted_wood_ladder.png",
+      "width": 24,
+      "height": 64
+    },
+    "environment/lanterns/crystal_lantern.png": {
+      "png": "/assets/environment/lanterns/crystal_lantern.png",
+      "width": 16,
+      "height": 24
+    },
+    "environment/lanterns/wood_lantern.png": {
+      "png": "/assets/environment/lanterns/wood_lantern.png",
+      "width": 16,
+      "height": 24
     },
     "environment/lights/lamp_post_1.png": {
       "png": "/assets/environment/lights/lamp_post_1.png",
@@ -298,50 +1966,550 @@
       "width": 16,
       "height": 32
     },
-    "environment/platforms/floating_island_1.png": {
-      "png": "/assets/environment/platforms/floating_island_1.png",
-      "width": 96,
-      "height": 56
+    "environment/midMountains/cloud_body.png": {
+      "png": "/assets/environment/midMountains/cloud_body.png",
+      "width": 16,
+      "height": 16
     },
-    "environment/platforms/grass_bridge_1.png": {
-      "png": "/assets/environment/platforms/grass_bridge_1.png",
+    "environment/midMountains/cloud_bottom.png": {
+      "png": "/assets/environment/midMountains/cloud_bottom.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/cloud_cap.png": {
+      "png": "/assets/environment/midMountains/cloud_cap.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/cloud_left.png": {
+      "png": "/assets/environment/midMountains/cloud_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/cloud_right.png": {
+      "png": "/assets/environment/midMountains/cloud_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/frozen_body.png": {
+      "png": "/assets/environment/midMountains/frozen_body.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/frozen_bottom.png": {
+      "png": "/assets/environment/midMountains/frozen_bottom.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/frozen_cap.png": {
+      "png": "/assets/environment/midMountains/frozen_cap.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/frozen_left.png": {
+      "png": "/assets/environment/midMountains/frozen_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/frozen_right.png": {
+      "png": "/assets/environment/midMountains/frozen_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/pine_body.png": {
+      "png": "/assets/environment/midMountains/pine_body.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/pine_bottom.png": {
+      "png": "/assets/environment/midMountains/pine_bottom.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/pine_cap.png": {
+      "png": "/assets/environment/midMountains/pine_cap.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/pine_left.png": {
+      "png": "/assets/environment/midMountains/pine_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/pine_right.png": {
+      "png": "/assets/environment/midMountains/pine_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/snow_body.png": {
+      "png": "/assets/environment/midMountains/snow_body.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/snow_bottom.png": {
+      "png": "/assets/environment/midMountains/snow_bottom.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/snow_cap.png": {
+      "png": "/assets/environment/midMountains/snow_cap.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/snow_left.png": {
+      "png": "/assets/environment/midMountains/snow_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/snow_right.png": {
+      "png": "/assets/environment/midMountains/snow_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/summit_body.png": {
+      "png": "/assets/environment/midMountains/summit_body.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/summit_bottom.png": {
+      "png": "/assets/environment/midMountains/summit_bottom.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/summit_cap.png": {
+      "png": "/assets/environment/midMountains/summit_cap.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/summit_left.png": {
+      "png": "/assets/environment/midMountains/summit_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/midMountains/summit_right.png": {
+      "png": "/assets/environment/midMountains/summit_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/mossTiles/mossy_stone_tile.png": {
+      "png": "/assets/environment/mossTiles/mossy_stone_tile.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/mountainBackgrounds/alpine_valley.png": {
+      "png": "/assets/environment/mountainBackgrounds/alpine_valley.png",
+      "width": 887,
+      "height": 1774
+    },
+    "environment/particleEffects/blue_rune_ring.png": {
+      "png": "/assets/environment/particleEffects/blue_rune_ring.png",
+      "width": 24,
+      "height": 24
+    },
+    "environment/particleEffects/wind_ribbon.png": {
+      "png": "/assets/environment/particleEffects/wind_ribbon.png",
       "width": 64,
       "height": 24
     },
-    "environment/platforms/moss_platform_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_1.png",
-      "width": 32,
-      "height": 24
+    "environment/pineTrees/alpine_pine.png": {
+      "png": "/assets/environment/pineTrees/alpine_pine.png",
+      "width": 64,
+      "height": 88
     },
-    "environment/platforms/moss_platform_cracked_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_cracked_1.png",
-      "width": 32,
-      "height": 24
+    "environment/pineTrees/autumn_block_tree.png": {
+      "png": "/assets/environment/pineTrees/autumn_block_tree.png",
+      "width": 80,
+      "height": 88
     },
-    "environment/platforms/moss_platform_flowers_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_flowers_1.png",
-      "width": 32,
-      "height": 24
+    "environment/pineTrees/dead_branch_tree.png": {
+      "png": "/assets/environment/pineTrees/dead_branch_tree.png",
+      "width": 52,
+      "height": 80
     },
-    "environment/platforms/moss_platform_overhang_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_overhang_1.png",
-      "width": 32,
-      "height": 24
+    "environment/pineTrees/forked_oak_tree.png": {
+      "png": "/assets/environment/pineTrees/forked_oak_tree.png",
+      "width": 88,
+      "height": 96
     },
-    "environment/platforms/moss_platform_roots_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_roots_1.png",
-      "width": 32,
-      "height": 24
+    "environment/pineTrees/round_canopy_tree.png": {
+      "png": "/assets/environment/pineTrees/round_canopy_tree.png",
+      "width": 96,
+      "height": 96
     },
-    "environment/platforms/moss_platform_runes_1.png": {
-      "png": "/assets/environment/platforms/moss_platform_runes_1.png",
-      "width": 32,
-      "height": 24
-    },
-    "environment/platforms/stone_ledge_1.png": {
-      "png": "/assets/environment/platforms/stone_ledge_1.png",
+    "environment/pineTrees/sapling_pine_tree.png": {
+      "png": "/assets/environment/pineTrees/sapling_pine_tree.png",
       "width": 48,
-      "height": 24
+      "height": 72
+    },
+    "environment/pineTrees/small_round_tree.png": {
+      "png": "/assets/environment/pineTrees/small_round_tree.png",
+      "width": 56,
+      "height": 64
+    },
+    "environment/pineTrees/tall_canopy_tree.png": {
+      "png": "/assets/environment/pineTrees/tall_canopy_tree.png",
+      "width": 84,
+      "height": 128
+    },
+    "environment/pineTrees/wide_bush_tree.png": {
+      "png": "/assets/environment/pineTrees/wide_bush_tree.png",
+      "width": 92,
+      "height": 74
+    },
+    "environment/pineTrees/wind_bent_leaf_tree.png": {
+      "png": "/assets/environment/pineTrees/wind_bent_leaf_tree.png",
+      "width": 80,
+      "height": 88
+    },
+    "environment/pineTrees/wind_bent_pine.png": {
+      "png": "/assets/environment/pineTrees/wind_bent_pine.png",
+      "width": 64,
+      "height": 88
+    },
+    "environment/platformVariants/platform_crumble_body_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_body_left.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_body_right.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_bottom_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_bottom_left.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_bottom_right.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_outer_left.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_outer_right.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_top_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_top_left.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_crumble_top_right.png": {
+      "png": "/assets/environment/platformVariants/platform_crumble_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_body_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_body_left.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_body_right.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_bottom_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_bottom_left.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_bottom_right.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_outer_left.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_outer_right.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_top_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_top_left.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_ice_top_right.png": {
+      "png": "/assets/environment/platformVariants/platform_ice_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_body_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_body_left.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_body_right.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_bottom_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_bottom_left.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_bottom_right.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_outer_left.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_outer_right.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_top_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_top_left.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_snow_top_right.png": {
+      "png": "/assets/environment/platformVariants/platform_snow_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_body_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_body_left.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_body_right.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_bottom_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_bottom_left.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_bottom_right.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_outer_left.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_outer_right.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_top_inner.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_top_left.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platformVariants/platform_summit_top_right.png": {
+      "png": "/assets/environment/platformVariants/platform_summit_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_body_inner.png": {
+      "png": "/assets/environment/platforms/platform_moss_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_body_left.png": {
+      "png": "/assets/environment/platforms/platform_moss_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_body_right.png": {
+      "png": "/assets/environment/platforms/platform_moss_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_bottom_inner.png": {
+      "png": "/assets/environment/platforms/platform_moss_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_bottom_left.png": {
+      "png": "/assets/environment/platforms/platform_moss_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_bottom_right.png": {
+      "png": "/assets/environment/platforms/platform_moss_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_outer_left.png": {
+      "png": "/assets/environment/platforms/platform_moss_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_outer_right.png": {
+      "png": "/assets/environment/platforms/platform_moss_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_top_inner.png": {
+      "png": "/assets/environment/platforms/platform_moss_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_top_left.png": {
+      "png": "/assets/environment/platforms/platform_moss_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_moss_top_right.png": {
+      "png": "/assets/environment/platforms/platform_moss_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_body_inner.png": {
+      "png": "/assets/environment/platforms/platform_stone_body_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_body_left.png": {
+      "png": "/assets/environment/platforms/platform_stone_body_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_body_right.png": {
+      "png": "/assets/environment/platforms/platform_stone_body_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_bottom_inner.png": {
+      "png": "/assets/environment/platforms/platform_stone_bottom_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_bottom_left.png": {
+      "png": "/assets/environment/platforms/platform_stone_bottom_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_bottom_right.png": {
+      "png": "/assets/environment/platforms/platform_stone_bottom_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_outer_left.png": {
+      "png": "/assets/environment/platforms/platform_stone_outer_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_outer_right.png": {
+      "png": "/assets/environment/platforms/platform_stone_outer_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_top_inner.png": {
+      "png": "/assets/environment/platforms/platform_stone_top_inner.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_top_left.png": {
+      "png": "/assets/environment/platforms/platform_stone_top_left.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/platforms/platform_stone_top_right.png": {
+      "png": "/assets/environment/platforms/platform_stone_top_right.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/relicShrines/ancient_beacon_1.png": {
+      "png": "/assets/environment/relicShrines/ancient_beacon_1.png",
+      "width": 40,
+      "height": 80
+    },
+    "environment/relicShrines/jump_pad_1.png": {
+      "png": "/assets/environment/relicShrines/jump_pad_1.png",
+      "width": 32,
+      "height": 32
+    },
+    "environment/relicShrines/relic_shrine_1.png": {
+      "png": "/assets/environment/relicShrines/relic_shrine_1.png",
+      "width": 48,
+      "height": 48
     },
     "environment/rocks/rock_cluster_moss_1.png": {
       "png": "/assets/environment/rocks/rock_cluster_moss_1.png",
@@ -353,8 +2521,73 @@
       "width": 48,
       "height": 32
     },
+    "environment/rocks/rock_moss_boulder_large_1.png": {
+      "png": "/assets/environment/rocks/rock_moss_boulder_large_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_moss_boulder_small_1.png": {
+      "png": "/assets/environment/rocks/rock_moss_boulder_small_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_rubble_small_1.png": {
+      "png": "/assets/environment/rocks/rock_rubble_small_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_rubble_wall_1.png": {
+      "png": "/assets/environment/rocks/rock_rubble_wall_1.png",
+      "width": 48,
+      "height": 48
+    },
+    "environment/rocks/rock_single_large_1.png": {
+      "png": "/assets/environment/rocks/rock_single_large_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_single_medium_1.png": {
+      "png": "/assets/environment/rocks/rock_single_medium_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_single_small_1.png": {
+      "png": "/assets/environment/rocks/rock_single_small_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_slab_flat_1.png": {
+      "png": "/assets/environment/rocks/rock_slab_flat_1.png",
+      "width": 48,
+      "height": 32
+    },
     "environment/rocks/rock_spire_1.png": {
       "png": "/assets/environment/rocks/rock_spire_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_spire_moss_1.png": {
+      "png": "/assets/environment/rocks/rock_spire_moss_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_spire_snow_1.png": {
+      "png": "/assets/environment/rocks/rock_spire_snow_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_stack_moss_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_moss_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_stack_plain_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_plain_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_stack_snow_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_snow_1.png",
       "width": 48,
       "height": 32
     },
@@ -362,6 +2595,66 @@
       "png": "/assets/environment/rocks/stone_cap_1.png",
       "width": 24,
       "height": 16
+    },
+    "environment/ropeBridges/rope_bridge_worn.png": {
+      "png": "/assets/environment/ropeBridges/rope_bridge_worn.png",
+      "width": 48,
+      "height": 16
+    },
+    "environment/ruinTiles/rune_stone_tile.png": {
+      "png": "/assets/environment/ruinTiles/rune_stone_tile.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/sheetElements/chain_hanging_long.png": {
+      "png": "/assets/environment/sheetElements/chain_hanging_long.png",
+      "width": 24,
+      "height": 64
+    },
+    "environment/sheetElements/ice_hanging_column.png": {
+      "png": "/assets/environment/sheetElements/ice_hanging_column.png",
+      "width": 24,
+      "height": 64
+    },
+    "environment/sheetElements/ladder_hanging_long.png": {
+      "png": "/assets/environment/sheetElements/ladder_hanging_long.png",
+      "width": 24,
+      "height": 64
+    },
+    "environment/sheetElements/moss_tile_cluster.png": {
+      "png": "/assets/environment/sheetElements/moss_tile_cluster.png",
+      "width": 48,
+      "height": 56
+    },
+    "environment/sheetElements/snow_tile_cluster.png": {
+      "png": "/assets/environment/sheetElements/snow_tile_cluster.png",
+      "width": 48,
+      "height": 56
+    },
+    "environment/sheetElements/stone_tile_cluster.png": {
+      "png": "/assets/environment/sheetElements/stone_tile_cluster.png",
+      "width": 48,
+      "height": 56
+    },
+    "environment/sheetElements/summit_tile_cluster.png": {
+      "png": "/assets/environment/sheetElements/summit_tile_cluster.png",
+      "width": 48,
+      "height": 56
+    },
+    "environment/snowTiles/snow_cap_tile.png": {
+      "png": "/assets/environment/snowTiles/snow_cap_tile.png",
+      "width": 16,
+      "height": 16
+    },
+    "environment/snowTrees/frosted_bent_pine.png": {
+      "png": "/assets/environment/snowTrees/frosted_bent_pine.png",
+      "width": 64,
+      "height": 88
+    },
+    "environment/snowTrees/snow_pine.png": {
+      "png": "/assets/environment/snowTrees/snow_pine.png",
+      "width": 64,
+      "height": 88
     },
     "environment/structures/banner_blue_1.png": {
       "png": "/assets/environment/structures/banner_blue_1.png",
@@ -428,10 +2721,15 @@
       "width": 32,
       "height": 32
     },
-    "environment/tiles/hazard_spikes.png": {
-      "png": "/assets/environment/tiles/hazard_spikes.png",
+    "environment/terrainTiles/stone_grass_tile.png": {
+      "png": "/assets/environment/terrainTiles/stone_grass_tile.png",
       "width": 16,
       "height": 16
+    },
+    "environment/tiles/hazard_spikes.png": {
+      "png": "/assets/environment/tiles/hazard_spikes.png",
+      "width": 24,
+      "height": 20
     },
     "environment/tiles/ladder_tile.png": {
       "png": "/assets/environment/tiles/ladder_tile.png",
@@ -550,623 +2848,2043 @@
     },
     "playable_characters/character1/falling_frame1.png": {
       "png": "/assets/playable_characters/character1/falling_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/falling_frame2.png": {
       "png": "/assets/playable_characters/character1/falling_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character1/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character1/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character1/hitting_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/idle_body.png": {
       "png": "/assets/playable_characters/character1/idle_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/idle_frame1.png": {
       "png": "/assets/playable_characters/character1/idle_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/idle_frame2.png": {
       "png": "/assets/playable_characters/character1/idle_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/idle_frame3.png": {
       "png": "/assets/playable_characters/character1/idle_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/idle_frame4.png": {
       "png": "/assets/playable_characters/character1/idle_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/jumping_frame1.png": {
       "png": "/assets/playable_characters/character1/jumping_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/jumping_frame2.png": {
       "png": "/assets/playable_characters/character1/jumping_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/kick_frame1.png": {
       "png": "/assets/playable_characters/character1/kick_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/kick_frame2.png": {
       "png": "/assets/playable_characters/character1/kick_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/kick_frame3.png": {
       "png": "/assets/playable_characters/character1/kick_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/lying_dead_frame1.png": {
       "png": "/assets/playable_characters/character1/lying_dead_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/lying_dead_frame2.png": {
       "png": "/assets/playable_characters/character1/lying_dead_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/main_body.png": {
       "png": "/assets/playable_characters/character1/main_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/punching_frame1.png": {
+      "png": "/assets/playable_characters/character1/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/punching_frame2.png": {
+      "png": "/assets/playable_characters/character1/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/punching_frame3.png": {
+      "png": "/assets/playable_characters/character1/punching_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame1.png": {
       "png": "/assets/playable_characters/character1/running_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame2.png": {
       "png": "/assets/playable_characters/character1/running_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame3.png": {
       "png": "/assets/playable_characters/character1/running_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame4.png": {
       "png": "/assets/playable_characters/character1/running_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame5.png": {
       "png": "/assets/playable_characters/character1/running_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/running_frame6.png": {
       "png": "/assets/playable_characters/character1/running_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/shooting_frame1.png": {
       "png": "/assets/playable_characters/character1/shooting_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/shooting_frame2.png": {
       "png": "/assets/playable_characters/character1/shooting_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/shooting_frame3.png": {
       "png": "/assets/playable_characters/character1/shooting_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/shooting_frame4.png": {
       "png": "/assets/playable_characters/character1/shooting_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character1/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character1/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame1.png": {
       "png": "/assets/playable_characters/character1/walking_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame2.png": {
       "png": "/assets/playable_characters/character1/walking_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame3.png": {
       "png": "/assets/playable_characters/character1/walking_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame4.png": {
       "png": "/assets/playable_characters/character1/walking_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame5.png": {
       "png": "/assets/playable_characters/character1/walking_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character1/walking_frame6.png": {
       "png": "/assets/playable_characters/character1/walking_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character1/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character1/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character1/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/falling_frame1.png": {
       "png": "/assets/playable_characters/character2/falling_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/falling_frame2.png": {
       "png": "/assets/playable_characters/character2/falling_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character2/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character2/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character2/hitting_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/idle_body.png": {
       "png": "/assets/playable_characters/character2/idle_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/idle_frame1.png": {
       "png": "/assets/playable_characters/character2/idle_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/idle_frame2.png": {
       "png": "/assets/playable_characters/character2/idle_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/idle_frame3.png": {
       "png": "/assets/playable_characters/character2/idle_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/idle_frame4.png": {
       "png": "/assets/playable_characters/character2/idle_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/jumping_frame1.png": {
       "png": "/assets/playable_characters/character2/jumping_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/jumping_frame2.png": {
       "png": "/assets/playable_characters/character2/jumping_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/kick_frame1.png": {
       "png": "/assets/playable_characters/character2/kick_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/kick_frame2.png": {
       "png": "/assets/playable_characters/character2/kick_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/kick_frame3.png": {
       "png": "/assets/playable_characters/character2/kick_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/lying_dead_frame1.png": {
       "png": "/assets/playable_characters/character2/lying_dead_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/lying_dead_frame2.png": {
       "png": "/assets/playable_characters/character2/lying_dead_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/main_body.png": {
       "png": "/assets/playable_characters/character2/main_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/punching_frame1.png": {
+      "png": "/assets/playable_characters/character2/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/punching_frame2.png": {
+      "png": "/assets/playable_characters/character2/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/punching_frame3.png": {
+      "png": "/assets/playable_characters/character2/punching_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame1.png": {
       "png": "/assets/playable_characters/character2/running_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame2.png": {
       "png": "/assets/playable_characters/character2/running_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame3.png": {
       "png": "/assets/playable_characters/character2/running_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame4.png": {
       "png": "/assets/playable_characters/character2/running_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame5.png": {
       "png": "/assets/playable_characters/character2/running_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/running_frame6.png": {
       "png": "/assets/playable_characters/character2/running_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/shooting_frame1.png": {
       "png": "/assets/playable_characters/character2/shooting_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/shooting_frame2.png": {
       "png": "/assets/playable_characters/character2/shooting_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/shooting_frame3.png": {
       "png": "/assets/playable_characters/character2/shooting_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/shooting_frame4.png": {
       "png": "/assets/playable_characters/character2/shooting_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character2/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character2/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame1.png": {
       "png": "/assets/playable_characters/character2/walking_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame2.png": {
       "png": "/assets/playable_characters/character2/walking_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame3.png": {
       "png": "/assets/playable_characters/character2/walking_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame4.png": {
       "png": "/assets/playable_characters/character2/walking_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame5.png": {
       "png": "/assets/playable_characters/character2/walking_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character2/walking_frame6.png": {
       "png": "/assets/playable_characters/character2/walking_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character2/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character2/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character2/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/falling_frame1.png": {
       "png": "/assets/playable_characters/character3/falling_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/falling_frame2.png": {
       "png": "/assets/playable_characters/character3/falling_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character3/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character3/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character3/hitting_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/idle_body.png": {
       "png": "/assets/playable_characters/character3/idle_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/idle_frame1.png": {
       "png": "/assets/playable_characters/character3/idle_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/idle_frame2.png": {
       "png": "/assets/playable_characters/character3/idle_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/idle_frame3.png": {
       "png": "/assets/playable_characters/character3/idle_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/idle_frame4.png": {
       "png": "/assets/playable_characters/character3/idle_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/jumping_frame1.png": {
       "png": "/assets/playable_characters/character3/jumping_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/jumping_frame2.png": {
       "png": "/assets/playable_characters/character3/jumping_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/kick_frame1.png": {
       "png": "/assets/playable_characters/character3/kick_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/kick_frame2.png": {
       "png": "/assets/playable_characters/character3/kick_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/kick_frame3.png": {
       "png": "/assets/playable_characters/character3/kick_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/lying_dead_frame1.png": {
       "png": "/assets/playable_characters/character3/lying_dead_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/lying_dead_frame2.png": {
       "png": "/assets/playable_characters/character3/lying_dead_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/main_body.png": {
       "png": "/assets/playable_characters/character3/main_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/punching_frame1.png": {
+      "png": "/assets/playable_characters/character3/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/punching_frame2.png": {
+      "png": "/assets/playable_characters/character3/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/punching_frame3.png": {
+      "png": "/assets/playable_characters/character3/punching_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame1.png": {
       "png": "/assets/playable_characters/character3/running_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame2.png": {
       "png": "/assets/playable_characters/character3/running_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame3.png": {
       "png": "/assets/playable_characters/character3/running_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame4.png": {
       "png": "/assets/playable_characters/character3/running_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame5.png": {
       "png": "/assets/playable_characters/character3/running_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/running_frame6.png": {
       "png": "/assets/playable_characters/character3/running_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/shooting_frame1.png": {
       "png": "/assets/playable_characters/character3/shooting_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/shooting_frame2.png": {
       "png": "/assets/playable_characters/character3/shooting_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/shooting_frame3.png": {
       "png": "/assets/playable_characters/character3/shooting_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/shooting_frame4.png": {
       "png": "/assets/playable_characters/character3/shooting_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character3/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character3/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame1.png": {
       "png": "/assets/playable_characters/character3/walking_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame2.png": {
       "png": "/assets/playable_characters/character3/walking_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame3.png": {
       "png": "/assets/playable_characters/character3/walking_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame4.png": {
       "png": "/assets/playable_characters/character3/walking_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame5.png": {
       "png": "/assets/playable_characters/character3/walking_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character3/walking_frame6.png": {
       "png": "/assets/playable_characters/character3/walking_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character3/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character3/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character3/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/falling_frame1.png": {
       "png": "/assets/playable_characters/character4/falling_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/falling_frame2.png": {
       "png": "/assets/playable_characters/character4/falling_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character4/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character4/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character4/hitting_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/idle_body.png": {
       "png": "/assets/playable_characters/character4/idle_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/idle_frame1.png": {
       "png": "/assets/playable_characters/character4/idle_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/idle_frame2.png": {
       "png": "/assets/playable_characters/character4/idle_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/idle_frame3.png": {
       "png": "/assets/playable_characters/character4/idle_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/idle_frame4.png": {
       "png": "/assets/playable_characters/character4/idle_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/jumping_frame1.png": {
       "png": "/assets/playable_characters/character4/jumping_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/jumping_frame2.png": {
       "png": "/assets/playable_characters/character4/jumping_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/kick_frame1.png": {
       "png": "/assets/playable_characters/character4/kick_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/kick_frame2.png": {
       "png": "/assets/playable_characters/character4/kick_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/kick_frame3.png": {
       "png": "/assets/playable_characters/character4/kick_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/lying_dead_frame1.png": {
       "png": "/assets/playable_characters/character4/lying_dead_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/lying_dead_frame2.png": {
       "png": "/assets/playable_characters/character4/lying_dead_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/main_body.png": {
       "png": "/assets/playable_characters/character4/main_body.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/punching_frame1.png": {
+      "png": "/assets/playable_characters/character4/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/punching_frame2.png": {
+      "png": "/assets/playable_characters/character4/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/punching_frame3.png": {
+      "png": "/assets/playable_characters/character4/punching_frame3.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame1.png": {
       "png": "/assets/playable_characters/character4/running_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame2.png": {
       "png": "/assets/playable_characters/character4/running_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame3.png": {
       "png": "/assets/playable_characters/character4/running_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame4.png": {
       "png": "/assets/playable_characters/character4/running_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame5.png": {
       "png": "/assets/playable_characters/character4/running_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/running_frame6.png": {
       "png": "/assets/playable_characters/character4/running_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/shooting_frame1.png": {
       "png": "/assets/playable_characters/character4/shooting_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/shooting_frame2.png": {
       "png": "/assets/playable_characters/character4/shooting_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/shooting_frame3.png": {
       "png": "/assets/playable_characters/character4/shooting_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/shooting_frame4.png": {
       "png": "/assets/playable_characters/character4/shooting_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character4/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character4/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame1.png": {
       "png": "/assets/playable_characters/character4/walking_frame1.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame2.png": {
       "png": "/assets/playable_characters/character4/walking_frame2.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame3.png": {
       "png": "/assets/playable_characters/character4/walking_frame3.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame4.png": {
       "png": "/assets/playable_characters/character4/walking_frame4.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame5.png": {
       "png": "/assets/playable_characters/character4/walking_frame5.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
     },
     "playable_characters/character4/walking_frame6.png": {
       "png": "/assets/playable_characters/character4/walking_frame6.png",
-      "width": 32,
-      "height": 48
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character4/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character4/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character4/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/falling_frame1.png": {
+      "png": "/assets/playable_characters/character5/falling_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/falling_frame2.png": {
+      "png": "/assets/playable_characters/character5/falling_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character5/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character5/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character5/hitting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/idle_body.png": {
+      "png": "/assets/playable_characters/character5/idle_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/idle_frame1.png": {
+      "png": "/assets/playable_characters/character5/idle_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/idle_frame2.png": {
+      "png": "/assets/playable_characters/character5/idle_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/idle_frame3.png": {
+      "png": "/assets/playable_characters/character5/idle_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/idle_frame4.png": {
+      "png": "/assets/playable_characters/character5/idle_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/jumping_frame1.png": {
+      "png": "/assets/playable_characters/character5/jumping_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/jumping_frame2.png": {
+      "png": "/assets/playable_characters/character5/jumping_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/kick_frame1.png": {
+      "png": "/assets/playable_characters/character5/kick_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/kick_frame2.png": {
+      "png": "/assets/playable_characters/character5/kick_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/kick_frame3.png": {
+      "png": "/assets/playable_characters/character5/kick_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/lying_dead_frame1.png": {
+      "png": "/assets/playable_characters/character5/lying_dead_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/lying_dead_frame2.png": {
+      "png": "/assets/playable_characters/character5/lying_dead_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/main_body.png": {
+      "png": "/assets/playable_characters/character5/main_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/punching_frame1.png": {
+      "png": "/assets/playable_characters/character5/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/punching_frame2.png": {
+      "png": "/assets/playable_characters/character5/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/punching_frame3.png": {
+      "png": "/assets/playable_characters/character5/punching_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame1.png": {
+      "png": "/assets/playable_characters/character5/running_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame2.png": {
+      "png": "/assets/playable_characters/character5/running_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame3.png": {
+      "png": "/assets/playable_characters/character5/running_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame4.png": {
+      "png": "/assets/playable_characters/character5/running_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame5.png": {
+      "png": "/assets/playable_characters/character5/running_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/running_frame6.png": {
+      "png": "/assets/playable_characters/character5/running_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/shooting_frame1.png": {
+      "png": "/assets/playable_characters/character5/shooting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/shooting_frame2.png": {
+      "png": "/assets/playable_characters/character5/shooting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/shooting_frame3.png": {
+      "png": "/assets/playable_characters/character5/shooting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/shooting_frame4.png": {
+      "png": "/assets/playable_characters/character5/shooting_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character5/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character5/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame1.png": {
+      "png": "/assets/playable_characters/character5/walking_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame2.png": {
+      "png": "/assets/playable_characters/character5/walking_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame3.png": {
+      "png": "/assets/playable_characters/character5/walking_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame4.png": {
+      "png": "/assets/playable_characters/character5/walking_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame5.png": {
+      "png": "/assets/playable_characters/character5/walking_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_frame6.png": {
+      "png": "/assets/playable_characters/character5/walking_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character5/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character5/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character5/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/falling_frame1.png": {
+      "png": "/assets/playable_characters/character6/falling_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/falling_frame2.png": {
+      "png": "/assets/playable_characters/character6/falling_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character6/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character6/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character6/hitting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/idle_body.png": {
+      "png": "/assets/playable_characters/character6/idle_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/idle_frame1.png": {
+      "png": "/assets/playable_characters/character6/idle_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/idle_frame2.png": {
+      "png": "/assets/playable_characters/character6/idle_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/idle_frame3.png": {
+      "png": "/assets/playable_characters/character6/idle_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/idle_frame4.png": {
+      "png": "/assets/playable_characters/character6/idle_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/jumping_frame1.png": {
+      "png": "/assets/playable_characters/character6/jumping_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/jumping_frame2.png": {
+      "png": "/assets/playable_characters/character6/jumping_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/kick_frame1.png": {
+      "png": "/assets/playable_characters/character6/kick_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/kick_frame2.png": {
+      "png": "/assets/playable_characters/character6/kick_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/kick_frame3.png": {
+      "png": "/assets/playable_characters/character6/kick_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/lying_dead_frame1.png": {
+      "png": "/assets/playable_characters/character6/lying_dead_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/lying_dead_frame2.png": {
+      "png": "/assets/playable_characters/character6/lying_dead_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/main_body.png": {
+      "png": "/assets/playable_characters/character6/main_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/punching_frame1.png": {
+      "png": "/assets/playable_characters/character6/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/punching_frame2.png": {
+      "png": "/assets/playable_characters/character6/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/punching_frame3.png": {
+      "png": "/assets/playable_characters/character6/punching_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame1.png": {
+      "png": "/assets/playable_characters/character6/running_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame2.png": {
+      "png": "/assets/playable_characters/character6/running_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame3.png": {
+      "png": "/assets/playable_characters/character6/running_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame4.png": {
+      "png": "/assets/playable_characters/character6/running_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame5.png": {
+      "png": "/assets/playable_characters/character6/running_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/running_frame6.png": {
+      "png": "/assets/playable_characters/character6/running_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/shooting_frame1.png": {
+      "png": "/assets/playable_characters/character6/shooting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/shooting_frame2.png": {
+      "png": "/assets/playable_characters/character6/shooting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/shooting_frame3.png": {
+      "png": "/assets/playable_characters/character6/shooting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/shooting_frame4.png": {
+      "png": "/assets/playable_characters/character6/shooting_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character6/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character6/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame1.png": {
+      "png": "/assets/playable_characters/character6/walking_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame2.png": {
+      "png": "/assets/playable_characters/character6/walking_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame3.png": {
+      "png": "/assets/playable_characters/character6/walking_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame4.png": {
+      "png": "/assets/playable_characters/character6/walking_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame5.png": {
+      "png": "/assets/playable_characters/character6/walking_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_frame6.png": {
+      "png": "/assets/playable_characters/character6/walking_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character6/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character6/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character6/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/falling_frame1.png": {
+      "png": "/assets/playable_characters/character7/falling_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/falling_frame2.png": {
+      "png": "/assets/playable_characters/character7/falling_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character7/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character7/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character7/hitting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/idle_body.png": {
+      "png": "/assets/playable_characters/character7/idle_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/idle_frame1.png": {
+      "png": "/assets/playable_characters/character7/idle_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/idle_frame2.png": {
+      "png": "/assets/playable_characters/character7/idle_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/idle_frame3.png": {
+      "png": "/assets/playable_characters/character7/idle_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/idle_frame4.png": {
+      "png": "/assets/playable_characters/character7/idle_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/jumping_frame1.png": {
+      "png": "/assets/playable_characters/character7/jumping_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/jumping_frame2.png": {
+      "png": "/assets/playable_characters/character7/jumping_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/kick_frame1.png": {
+      "png": "/assets/playable_characters/character7/kick_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/kick_frame2.png": {
+      "png": "/assets/playable_characters/character7/kick_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/kick_frame3.png": {
+      "png": "/assets/playable_characters/character7/kick_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/lying_dead_frame1.png": {
+      "png": "/assets/playable_characters/character7/lying_dead_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/lying_dead_frame2.png": {
+      "png": "/assets/playable_characters/character7/lying_dead_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/main_body.png": {
+      "png": "/assets/playable_characters/character7/main_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/punching_frame1.png": {
+      "png": "/assets/playable_characters/character7/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/punching_frame2.png": {
+      "png": "/assets/playable_characters/character7/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/punching_frame3.png": {
+      "png": "/assets/playable_characters/character7/punching_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame1.png": {
+      "png": "/assets/playable_characters/character7/running_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame2.png": {
+      "png": "/assets/playable_characters/character7/running_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame3.png": {
+      "png": "/assets/playable_characters/character7/running_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame4.png": {
+      "png": "/assets/playable_characters/character7/running_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame5.png": {
+      "png": "/assets/playable_characters/character7/running_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/running_frame6.png": {
+      "png": "/assets/playable_characters/character7/running_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/shooting_frame1.png": {
+      "png": "/assets/playable_characters/character7/shooting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/shooting_frame2.png": {
+      "png": "/assets/playable_characters/character7/shooting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/shooting_frame3.png": {
+      "png": "/assets/playable_characters/character7/shooting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/shooting_frame4.png": {
+      "png": "/assets/playable_characters/character7/shooting_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character7/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character7/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame1.png": {
+      "png": "/assets/playable_characters/character7/walking_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame2.png": {
+      "png": "/assets/playable_characters/character7/walking_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame3.png": {
+      "png": "/assets/playable_characters/character7/walking_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame4.png": {
+      "png": "/assets/playable_characters/character7/walking_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame5.png": {
+      "png": "/assets/playable_characters/character7/walking_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_frame6.png": {
+      "png": "/assets/playable_characters/character7/walking_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character7/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character7/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character7/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/falling_frame1.png": {
+      "png": "/assets/playable_characters/character8/falling_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/falling_frame2.png": {
+      "png": "/assets/playable_characters/character8/falling_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/hitting_frame1.png": {
+      "png": "/assets/playable_characters/character8/hitting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/hitting_frame2.png": {
+      "png": "/assets/playable_characters/character8/hitting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/hitting_frame3.png": {
+      "png": "/assets/playable_characters/character8/hitting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/idle_body.png": {
+      "png": "/assets/playable_characters/character8/idle_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/idle_frame1.png": {
+      "png": "/assets/playable_characters/character8/idle_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/idle_frame2.png": {
+      "png": "/assets/playable_characters/character8/idle_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/idle_frame3.png": {
+      "png": "/assets/playable_characters/character8/idle_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/idle_frame4.png": {
+      "png": "/assets/playable_characters/character8/idle_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/jumping_frame1.png": {
+      "png": "/assets/playable_characters/character8/jumping_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/jumping_frame2.png": {
+      "png": "/assets/playable_characters/character8/jumping_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/kick_frame1.png": {
+      "png": "/assets/playable_characters/character8/kick_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/kick_frame2.png": {
+      "png": "/assets/playable_characters/character8/kick_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/kick_frame3.png": {
+      "png": "/assets/playable_characters/character8/kick_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/lying_dead_frame1.png": {
+      "png": "/assets/playable_characters/character8/lying_dead_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/lying_dead_frame2.png": {
+      "png": "/assets/playable_characters/character8/lying_dead_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/main_body.png": {
+      "png": "/assets/playable_characters/character8/main_body.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/punching_frame1.png": {
+      "png": "/assets/playable_characters/character8/punching_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/punching_frame2.png": {
+      "png": "/assets/playable_characters/character8/punching_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/punching_frame3.png": {
+      "png": "/assets/playable_characters/character8/punching_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame1.png": {
+      "png": "/assets/playable_characters/character8/running_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame2.png": {
+      "png": "/assets/playable_characters/character8/running_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame3.png": {
+      "png": "/assets/playable_characters/character8/running_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame4.png": {
+      "png": "/assets/playable_characters/character8/running_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame5.png": {
+      "png": "/assets/playable_characters/character8/running_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/running_frame6.png": {
+      "png": "/assets/playable_characters/character8/running_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/shooting_frame1.png": {
+      "png": "/assets/playable_characters/character8/shooting_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/shooting_frame2.png": {
+      "png": "/assets/playable_characters/character8/shooting_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/shooting_frame3.png": {
+      "png": "/assets/playable_characters/character8/shooting_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/shooting_frame4.png": {
+      "png": "/assets/playable_characters/character8/shooting_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/taking_damage_frame1.png": {
+      "png": "/assets/playable_characters/character8/taking_damage_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/taking_damage_frame2.png": {
+      "png": "/assets/playable_characters/character8/taking_damage_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame1.png": {
+      "png": "/assets/playable_characters/character8/walking_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame2.png": {
+      "png": "/assets/playable_characters/character8/walking_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame3.png": {
+      "png": "/assets/playable_characters/character8/walking_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame4.png": {
+      "png": "/assets/playable_characters/character8/walking_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame5.png": {
+      "png": "/assets/playable_characters/character8/walking_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_frame6.png": {
+      "png": "/assets/playable_characters/character8/walking_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame1.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame2.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame3.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame4.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame5.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_left_frame6.png": {
+      "png": "/assets/playable_characters/character8/walking_left_frame6.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame1.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame1.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame2.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame2.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame3.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame3.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame4.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame4.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame5.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame5.png",
+      "width": 48,
+      "height": 56
+    },
+    "playable_characters/character8/walking_right_frame6.png": {
+      "png": "/assets/playable_characters/character8/walking_right_frame6.png",
+      "width": 48,
+      "height": 56
     }
   }
 }

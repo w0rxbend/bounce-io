@@ -16,54 +16,110 @@ BACKGROUND_SOURCE = ROOT / "tools" / "assets" / "alpine_mountain_background.png"
 
 
 PAL = {
-    "ink": (22, 24, 35, 255),
-    "outline": (12, 15, 24, 255),
-    "shadow": (0, 0, 0, 86),
-    "skin": (255, 208, 144, 255),
-    "skin_shadow": (210, 138, 90, 255),
-    "hair": (42, 26, 16, 255),
-    "scarf": (184, 48, 32, 255),
-    "scarf_dark": (112, 24, 24, 255),
-    "gold": (248, 200, 48, 255),
-    "gold_dark": (176, 112, 32, 255),
-    "gold_light": (255, 232, 112, 255),
-    "stone_deep": (40, 34, 26, 255),
-    "stone_dark": (80, 64, 48, 255),
-    "stone_mid": (144, 120, 88, 255),
-    "stone_light": (200, 168, 120, 255),
-    "stone_cool": (96, 104, 88, 255),
-    "soil": (122, 80, 48, 255),
-    "soil_dark": (64, 40, 24, 255),
-    "grass": (144, 216, 56, 255),
-    "grass_dark": (58, 120, 24, 255),
-    "moss": (72, 144, 48, 255),
-    "moss_light": (104, 192, 64, 255),
-    "leaf_dark": (26, 56, 24, 255),
-    "leaf_mid": (46, 104, 64, 255),
-    "leaf_light": (106, 200, 64, 255),
-    "bark": (106, 72, 32, 255),
-    "bark_dark": (64, 40, 24, 255),
-    "snow": (233, 242, 255, 255),
-    "snow_shadow": (166, 196, 224, 255),
-    "cyan": (64, 216, 248, 255),
-    "cyan_light": (160, 240, 255, 255),
-    "cyan_dark": (18, 72, 90, 255),
-    "red": (232, 64, 48, 255),
-    "orange": (255, 160, 96, 255),
-    "pink": (208, 82, 158, 255),
-    "violet": (154, 90, 255, 255),
-    "blue": (64, 136, 216, 255),
-    "green": (93, 255, 156, 255),
-    "white": (255, 255, 240, 255),
-    "cloud": (232, 240, 248, 220),
-    "cloud_mid": (168, 192, 216, 210),
-    "cloud_shadow": (104, 136, 184, 190),
+    "ink": (12, 13, 18, 255),
+    "outline": (5, 7, 11, 255),
+    "shadow": (0, 0, 0, 110),
+    "skin": (226, 178, 118, 255),
+    "skin_shadow": (142, 86, 60, 255),
+    "hair": (27, 18, 12, 255),
+    "scarf": (178, 44, 34, 255),
+    "scarf_dark": (82, 19, 25, 255),
+    "gold": (214, 157, 42, 255),
+    "gold_dark": (118, 73, 28, 255),
+    "gold_light": (255, 218, 84, 255),
+    "stone_deep": (20, 22, 28, 255),
+    "stone_dark": (43, 48, 55, 255),
+    "stone_mid": (84, 90, 91, 255),
+    "stone_light": (155, 159, 146, 255),
+    "stone_cool": (73, 83, 88, 255),
+    "soil": (77, 52, 33, 255),
+    "soil_dark": (29, 23, 18, 255),
+    "grass": (105, 144, 61, 255),
+    "grass_dark": (40, 77, 37, 255),
+    "moss": (61, 107, 47, 255),
+    "moss_light": (133, 174, 76, 255),
+    "leaf_dark": (18, 45, 30, 255),
+    "leaf_mid": (40, 86, 52, 255),
+    "leaf_light": (111, 166, 70, 255),
+    "bark": (86, 56, 33, 255),
+    "bark_dark": (35, 25, 18, 255),
+    "snow": (222, 234, 242, 255),
+    "snow_shadow": (121, 152, 172, 255),
+    "cyan": (54, 224, 232, 255),
+    "cyan_light": (174, 255, 245, 255),
+    "cyan_dark": (14, 71, 79, 255),
+    "red": (221, 47, 43, 255),
+    "orange": (255, 120, 48, 255),
+    "pink": (214, 74, 162, 255),
+    "violet": (177, 79, 255, 255),
+    "blue": (45, 114, 203, 255),
+    "green": (74, 245, 135, 255),
+    "white": (246, 247, 226, 255),
+    "cloud": (211, 224, 231, 220),
+    "cloud_mid": (134, 164, 184, 210),
+    "cloud_shadow": (62, 91, 126, 190),
 }
 
 
 def rgba(hex_rgb: str, alpha: int = 255) -> tuple[int, int, int, int]:
     hex_rgb = hex_rgb.removeprefix("#")
     return (int(hex_rgb[0:2], 16), int(hex_rgb[2:4], 16), int(hex_rgb[4:6], 16), alpha)
+
+
+def clamp_channel(value: int) -> int:
+    return max(0, min(255, value))
+
+
+def stable_hash(text: str) -> int:
+    value = 2166136261
+    for ch in text:
+        value ^= ord(ch)
+        value = (value * 16777619) & 0xFFFFFFFF
+    return value
+
+
+def noita_polish(img: Image.Image, rel: str) -> Image.Image:
+    """Add gritty high-contrast pixel clustering without changing transparency."""
+    out = img.copy()
+    px = out.load()
+    seed = stable_hash(rel)
+    is_reward = "/collectibles/" in rel or "/ui/" in rel
+    is_effect = "/effects/" in rel or "/particleEffects/" in rel
+    is_background = "/backgrounds/" in rel or "/mountainBackgrounds/" in rel or "/clouds/" in rel
+    brightness = 0.74 if is_background else 0.88 if not (is_reward or is_effect) else 1.0
+    grain_scale = 1.35 if not is_reward else 0.55
+    for y in range(out.height):
+        for x in range(out.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            emissive = (
+                (g > 185 and b > 165 and r < 130) or
+                (r > 190 and g > 125 and b < 95) or
+                (r > 150 and b > 180 and g < 125) or
+                (r > 215 and g > 205 and b > 165)
+            )
+            grain = int((((x * 17 + y * 31 + seed) % 9) - 4) * grain_scale)
+            if (x * 11 + y * 7 + seed) % 23 == 0:
+                grain += 14 if is_reward else 20
+            elif (x * 5 + y * 13 + seed) % 19 == 0:
+                grain -= 12 if is_reward else 24
+
+            saturation_bias = 1.18 if emissive else 1.03 if max(r, g, b) - min(r, g, b) > 38 else 0.88
+            avg = (r + g + b) // 3
+            shade = 1.0 if emissive else brightness
+            r = clamp_channel(int((avg + (r - avg) * saturation_bias) * shade) + grain)
+            g = clamp_channel(int((avg + (g - avg) * saturation_bias) * shade) + grain)
+            b = clamp_channel(int((avg + (b - avg) * saturation_bias) * shade) + grain)
+            if not emissive and not is_reward:
+                step = 13 if is_background else 17
+                r = (r // step) * step
+                g = (g // step) * step
+                b = (b // step) * step
+            if not (is_reward or is_effect) and (x * 29 + y * 37 + seed) % 97 == 0:
+                r, g, b = max(0, r - 42), max(0, g - 42), max(0, b - 42)
+            px[x, y] = (r, g, b, a)
+    return out
 
 
 def clean() -> None:
@@ -80,6 +136,7 @@ def canvas(w: int, h: int) -> Image.Image:
 def save(img: Image.Image, rel: str, manifest: dict[str, dict]) -> None:
     path = OUT / rel
     path.parent.mkdir(parents=True, exist_ok=True)
+    img = noita_polish(img, rel)
     img.save(path)
     manifest[rel] = {"png": f"/assets/{rel}", "width": img.width, "height": img.height}
 
@@ -89,81 +146,42 @@ def draw_shadow(d: ImageDraw.ImageDraw, x: int, y: int, w: int) -> None:
 
 
 def draw_character(kind: str, pose: str, frame: int, palette: dict[str, tuple[int, int, int, int]]) -> Image.Image:
-    img = canvas(32, 48)
+    img = canvas(40, 56)
     d = ImageDraw.Draw(img)
 
     if pose == "lying_dead":
-        draw_shadow(d, 7, 42, 20)
-        d.rectangle((6, 31, 27, 40), fill=PAL["outline"])
-        d.rectangle((8, 30, 25, 38), fill=palette["jacket"])
-        d.rectangle((20, 24, 29, 33), fill=PAL["outline"])
-        d.rectangle((21, 25, 28, 32), fill=palette["skin"])
-        d.rectangle((21, 24, 29, 27), fill=palette["hair"])
-        d.rectangle((9, 38, 14, 43), fill=palette["boots"])
-        d.rectangle((20, 38, 25, 43), fill=palette["boots"])
-        d.rectangle((12, 28, 22, 30), fill=palette["accent"])
+        draw_shadow(d, 7, 50, 26)
+        d.rectangle((6, 39, 31, 48), fill=PAL["outline"])
+        d.rectangle((8, 38, 29, 46), fill=palette["jacket_dark"])
+        d.rectangle((11, 38, 25, 45), fill=palette["jacket"])
+        d.rectangle((24, 31, 35, 40), fill=PAL["outline"])
+        d.rectangle((25, 32, 34, 39), fill=palette["skin"])
+        if kind in {"rogue", "hunter"}:
+            d.rectangle((24, 30, 35, 35), fill=palette["hood"])
+        else:
+            d.rectangle((24, 30, 35, 34), fill=palette["hair"])
+        d.rectangle((9, 46, 15, 52), fill=palette["boots"])
+        d.rectangle((23, 46, 30, 52), fill=palette["boots"])
+        d.rectangle((12, 35, 27, 37), fill=palette["accent"])
+        if kind == "mage":
+            d.rectangle((3, 32, 5, 50), fill=palette["weapon"])
+            d.rectangle((1, 30, 7, 35), fill=PAL["cyan"])
         if frame % 2 == 0:
-            d.rectangle((27, 27, 28, 28), fill=PAL["ink"])
+            d.rectangle((34, 34, 35, 35), fill=PAL["ink"])
         return img
 
-    bob = 0
-    if pose == "idle":
-        bob = [0, -1, 0, 1][frame % 4]
+    bob = [0, -1, 0, 1][frame % 4] if pose == "idle" else 0
     if pose in {"jumping", "shooting"}:
-        bob = -3
+        bob -= 3
     if pose == "falling":
-        bob = 2
+        bob += 2
 
-    lean = 0
-    if pose == "running":
-        lean = 2
-    if pose == "shooting":
-        lean = -1
-
-    body_x = 11 + lean
-    body_y = 18 + bob
-    head_x = 10 + lean
-    head_y = 9 + bob
-    scarf_len = 7
-    if pose == "running":
-        scarf_len = 12 + (frame % 2) * 2
-    if pose in {"jumping", "falling"}:
-        scarf_len = 10
-    if pose == "shooting":
-        scarf_len = 14
-
-    draw_shadow(d, 8, 43, 16)
-
-    if kind == "mage":
-        d.polygon([(9 + lean, head_y + 1), (16 + lean, head_y - 7), (24 + lean, head_y + 2)], fill=PAL["outline"])
-        d.polygon([(11 + lean, head_y), (16 + lean, head_y - 6), (22 + lean, head_y + 1)], fill=palette["hat"])
-        d.rectangle((13 + lean, head_y + 1, 23 + lean, head_y + 3), fill=palette["hat_band"])
-    elif kind == "rogue":
-        d.polygon([(8 + lean, head_y + 4), (16 + lean, head_y - 1), (24 + lean, head_y + 4), (22 + lean, head_y + 11), (10 + lean, head_y + 11)], fill=PAL["outline"])
-        d.polygon([(10 + lean, head_y + 4), (16 + lean, head_y), (22 + lean, head_y + 4), (20 + lean, head_y + 10), (12 + lean, head_y + 10)], fill=palette["hood"])
-    elif kind == "hunter":
-        d.polygon([(9 + lean, head_y + 2), (16 + lean, head_y - 3), (23 + lean, head_y + 2), (23 + lean, head_y + 5), (9 + lean, head_y + 5)], fill=PAL["outline"])
-        d.polygon([(11 + lean, head_y + 2), (16 + lean, head_y - 2), (21 + lean, head_y + 2), (21 + lean, head_y + 4), (11 + lean, head_y + 4)], fill=palette["hood"])
-    else:
-        d.rectangle((head_x - 1, head_y - 2, head_x + 13, head_y + 4), fill=PAL["outline"])
-        d.rectangle((head_x, head_y - 2, head_x + 12, head_y + 2), fill=palette["hair"])
-
-    d.rectangle((head_x - 1, head_y + 2, head_x + 13, head_y + 13), fill=PAL["outline"])
-    d.rectangle((head_x, head_y + 3, head_x + 12, head_y + 12), fill=palette["skin"])
-    if kind != "rogue":
-        d.rectangle((head_x, head_y + 3, head_x + 12, head_y + 5), fill=palette["hair"])
-    d.rectangle((head_x + 8, head_y + 7, head_x + 10, head_y + 9), fill=PAL["ink"])
-    d.point((head_x + 10, head_y + 7), fill=PAL["white"])
-    d.rectangle((head_x + 2, head_y + 12, head_x + 10, head_y + 14), fill=palette["skin_shadow"])
-
-    d.rectangle((body_x - scarf_len, body_y + 5, body_x + 3, body_y + 7), fill=palette["scarf"])
-    d.rectangle((body_x - scarf_len - 3, body_y + 8, body_x - 2, body_y + 9), fill=palette["scarf_dark"])
-
-    d.rectangle((body_x - 2, body_y - 1, body_x + 14, body_y + 21), fill=PAL["outline"])
-    d.rectangle((body_x, body_y, body_x + 12, body_y + 20), fill=palette["jacket_dark"])
-    d.rectangle((body_x + 2, body_y + 2, body_x + 10, body_y + 17), fill=palette["jacket"])
-    d.rectangle((body_x + 5, body_y + 1, body_x + 7, body_y + 18), fill=palette["belt"])
-    d.rectangle((body_x + 2, body_y + 10, body_x + 10, body_y + 12), fill=palette["belt"])
+    lean = 2 if pose == "running" else -1 if pose == "shooting" else 0
+    body_x = 14 + lean
+    body_y = 20 + bob
+    head_x = 13 + lean
+    head_y = 7 + bob
+    face_x = head_x + 1
 
     if pose in {"walking", "running"}:
         swing = [-3, -1, 2, 3, 1, -2][frame % 6]
@@ -174,37 +192,136 @@ def draw_character(kind: str, pose: str, frame: int, palette: dict[str, tuple[in
     else:
         swing = 0
 
-    d.rectangle((body_x, body_y + 19 + max(0, swing), body_x + 4, body_y + 27 + max(0, swing)), fill=PAL["outline"])
-    d.rectangle((body_x + 1, body_y + 19 + max(0, swing), body_x + 3, body_y + 26 + max(0, swing)), fill=palette["boots"])
-    d.rectangle((body_x + 8, body_y + 19 + max(0, -swing), body_x + 12, body_y + 27 + max(0, -swing)), fill=PAL["outline"])
-    d.rectangle((body_x + 9, body_y + 19 + max(0, -swing), body_x + 11, body_y + 26 + max(0, -swing)), fill=palette["boots"])
+    draw_shadow(d, 9, 51, 22)
+
+    scarf_len = 7
+    if pose == "running":
+        scarf_len = 12 + (frame % 2) * 2
+    if pose in {"jumping", "falling", "shooting"}:
+        scarf_len = 12
+    cloak_sway = 2 if pose == "running" and frame % 2 else -1 if pose in {"jumping", "falling"} else 0
+    d.polygon(
+        [
+            (body_x - 5, body_y + 2),
+            (body_x + 8, body_y + 1),
+            (body_x + 13 + cloak_sway, body_y + 28),
+            (body_x + 3, body_y + 35),
+            (body_x - 9 - abs(cloak_sway), body_y + 28),
+        ],
+        fill=PAL["outline"],
+    )
+    d.polygon(
+        [
+            (body_x - 3, body_y + 3),
+            (body_x + 7, body_y + 3),
+            (body_x + 10 + cloak_sway, body_y + 27),
+            (body_x + 3, body_y + 32),
+            (body_x - 7 - abs(cloak_sway), body_y + 27),
+        ],
+        fill=palette["jacket_dark"],
+    )
+    d.rectangle((body_x - scarf_len, body_y + 6, body_x + 3, body_y + 8), fill=palette["scarf"])
+    d.rectangle((body_x - scarf_len - 3, body_y + 9, body_x - 2, body_y + 10), fill=palette["scarf_dark"])
+
+    if kind == "warrior":
+        for ox, oy in ((1, -4), (-3, -2), (8, -3), (12, 0)):
+            d.rectangle((head_x + ox, head_y + oy, head_x + ox + 4, head_y + oy + 4), fill=PAL["outline"])
+            d.rectangle((head_x + ox + 1, head_y + oy, head_x + ox + 3, head_y + oy + 3), fill=palette["hair"])
+        d.rectangle((head_x - 2, head_y + 1, head_x + 14, head_y + 5), fill=PAL["outline"])
+        d.rectangle((head_x, head_y, head_x + 12, head_y + 3), fill=palette["hair"])
+    elif kind == "rogue":
+        d.polygon([(head_x - 3, head_y + 4), (head_x + 6, head_y - 2), (head_x + 15, head_y + 4), (head_x + 13, head_y + 13), (head_x - 1, head_y + 13)], fill=PAL["outline"])
+        d.polygon([(head_x - 1, head_y + 4), (head_x + 6, head_y), (head_x + 13, head_y + 4), (head_x + 11, head_y + 11), (head_x + 1, head_y + 11)], fill=palette["hood"])
+    elif kind == "mage":
+        d.polygon([(head_x - 3, head_y + 1), (head_x + 6, head_y - 8), (head_x + 15, head_y + 2)], fill=PAL["outline"])
+        d.polygon([(head_x - 1, head_y), (head_x + 6, head_y - 7), (head_x + 13, head_y + 1)], fill=palette["hat"])
+        d.rectangle((head_x - 2, head_y + 2, head_x + 16, head_y + 4), fill=PAL["outline"])
+        d.rectangle((head_x, head_y + 1, head_x + 14, head_y + 3), fill=palette["hat"])
+        d.rectangle((head_x + 3, head_y + 2, head_x + 13, head_y + 3), fill=palette["hat_band"])
+    elif kind == "hunter":
+        d.polygon([(head_x - 3, head_y + 2), (head_x + 6, head_y - 4), (head_x + 16, head_y + 2), (head_x + 14, head_y + 6), (head_x - 2, head_y + 6)], fill=PAL["outline"])
+        d.polygon([(head_x - 1, head_y + 2), (head_x + 6, head_y - 3), (head_x + 14, head_y + 2), (head_x + 12, head_y + 5), (head_x, head_y + 5)], fill=palette["hood"])
+
+    d.rectangle((face_x - 1, head_y + 4, face_x + 11, head_y + 14), fill=PAL["outline"])
+    d.rectangle((face_x, head_y + 5, face_x + 10, head_y + 13), fill=palette["skin"])
+    if kind not in {"rogue", "hunter"}:
+        d.rectangle((face_x, head_y + 5, face_x + 10, head_y + 6), fill=palette["hair"])
+        d.rectangle((face_x - 3, head_y + 6, face_x, head_y + 17 + abs(cloak_sway)), fill=PAL["outline"])
+        d.rectangle((face_x - 2, head_y + 6, face_x - 1, head_y + 16 + abs(cloak_sway)), fill=palette["hair"])
+    d.rectangle((face_x + 7, head_y + 8, face_x + 9, head_y + 10), fill=PAL["ink"])
+    d.point((face_x + 9, head_y + 8), fill=PAL["white"])
+    d.rectangle((face_x + 2, head_y + 13, face_x + 8, head_y + 15), fill=palette["skin_shadow"])
+
+    d.rectangle((body_x - 2, body_y - 1, body_x + 13, body_y + 25), fill=PAL["outline"])
+    d.rectangle((body_x, body_y, body_x + 11, body_y + 24), fill=palette["jacket_dark"])
+    d.rectangle((body_x + 2, body_y + 2, body_x + 9, body_y + 21), fill=palette["jacket"])
+    d.rectangle((body_x + 5, body_y + 1, body_x + 6, body_y + 22), fill=palette["belt"])
+    d.rectangle((body_x + 1, body_y + 12, body_x + 11, body_y + 14), fill=palette["belt"])
+    if kind == "warrior":
+        d.rectangle((body_x + 2, body_y + 3, body_x + 10, body_y + 5), fill=palette["accent"])
+    if kind == "mage":
+        d.rectangle((body_x + 3, body_y + 5, body_x + 9, body_y + 6), fill=PAL["cyan_light"])
+        d.rectangle((body_x + 6, body_y + 3, body_x + 6, body_y + 16), fill=PAL["cyan"])
+
+    front_step = max(0, swing)
+    back_step = max(0, -swing)
+    d.rectangle((body_x + 1, body_y + 24 + front_step, body_x + 5, body_y + 38 + front_step), fill=PAL["outline"])
+    d.rectangle((body_x + 2, body_y + 25 + front_step, body_x + 4, body_y + 37 + front_step), fill=palette["boots"])
+    d.rectangle((body_x + 8, body_y + 24 + back_step, body_x + 12, body_y + 38 + back_step), fill=PAL["outline"])
+    d.rectangle((body_x + 9, body_y + 25 + back_step, body_x + 11, body_y + 37 + back_step), fill=palette["boots"])
+    d.rectangle((body_x + 1, body_y + 37 + front_step, body_x + 8, body_y + 40 + front_step), fill=PAL["outline"])
+    d.rectangle((body_x + 8, body_y + 37 + back_step, body_x + 15, body_y + 40 + back_step), fill=PAL["outline"])
 
     arm_y = body_y + 6
+    arm_swing = -swing if pose in {"walking", "running"} else 0
     if pose == "shooting":
-        d.rectangle((body_x + 12, arm_y, body_x + 24, arm_y + 4), fill=PAL["outline"])
-        d.rectangle((body_x + 13, arm_y + 1, body_x + 23, arm_y + 3), fill=palette["skin"])
-        if kind == "hunter":
-            d.arc((body_x + 20, arm_y - 8, body_x + 30, arm_y + 12), 260, 95, fill=palette["weapon"], width=2)
-            d.line((body_x + 25, arm_y - 6, body_x + 25, arm_y + 10), fill=PAL["gold_light"], width=1)
-            d.rectangle((body_x + 27, arm_y + 1, body_x + 31, arm_y + 2), fill=PAL["gold_light"])
-        elif kind == "mage":
-            d.rectangle((body_x + 20, arm_y - 2, body_x + 22, arm_y + 12), fill=palette["weapon"])
-            d.rectangle((body_x + 19, arm_y - 5, body_x + 23, arm_y - 1), fill=PAL["cyan"])
-            d.rectangle((body_x + 24, arm_y - 4, body_x + 27, arm_y - 2), fill=PAL["cyan_light"])
-        else:
-            d.rectangle((body_x + 22, arm_y + 1, body_x + 31, arm_y + 2), fill=palette["weapon"])
-            d.rectangle((body_x + 28, arm_y, body_x + 31, arm_y + 3), fill=PAL["cyan_light"])
+        d.rectangle((body_x + 11, arm_y, body_x + 24, arm_y + 4), fill=PAL["outline"])
+        d.rectangle((body_x + 12, arm_y + 1, body_x + 23, arm_y + 3), fill=palette["skin"])
     else:
-        arm_swing = -swing if pose in {"walking", "running"} else 0
-        d.rectangle((body_x - 5, arm_y + max(0, arm_swing), body_x + 1, arm_y + 4 + max(0, arm_swing)), fill=PAL["outline"])
-        d.rectangle((body_x - 4, arm_y + 1 + max(0, arm_swing), body_x, arm_y + 3 + max(0, arm_swing)), fill=palette["skin"])
-        d.rectangle((body_x + 11, arm_y + max(0, -arm_swing), body_x + 16, arm_y + 4 + max(0, -arm_swing)), fill=PAL["outline"])
-        d.rectangle((body_x + 12, arm_y + 1 + max(0, -arm_swing), body_x + 15, arm_y + 3 + max(0, -arm_swing)), fill=palette["skin"])
+        d.rectangle((body_x - 6, arm_y + max(0, arm_swing), body_x + 1, arm_y + 4 + max(0, arm_swing)), fill=PAL["outline"])
+        d.rectangle((body_x - 5, arm_y + 1 + max(0, arm_swing), body_x, arm_y + 3 + max(0, arm_swing)), fill=palette["skin"])
+        d.rectangle((body_x + 11, arm_y + max(0, -arm_swing), body_x + 17, arm_y + 4 + max(0, -arm_swing)), fill=PAL["outline"])
+        d.rectangle((body_x + 12, arm_y + 1 + max(0, -arm_swing), body_x + 16, arm_y + 3 + max(0, -arm_swing)), fill=palette["skin"])
+
+    if kind == "warrior":
+        shield_y = arm_y + (1 if pose == "falling" else 0)
+        d.ellipse((body_x - 9, shield_y - 3, body_x - 1, shield_y + 8), fill=PAL["outline"])
+        d.ellipse((body_x - 8, shield_y - 2, body_x - 2, shield_y + 7), fill=rgba("#7f9ebf"))
+        d.rectangle((body_x - 6, shield_y, body_x - 4, shield_y + 5), fill=palette["accent"])
+        sx = body_x + 19
+        sy = arm_y + (3 if pose != "shooting" else 0)
+        d.rectangle((sx, sy - 7, sx + 2, sy + 7), fill=PAL["outline"])
+        d.rectangle((sx + 1, sy - 7, sx + 1, sy + 6), fill=palette["weapon"])
+        d.rectangle((sx - 2, sy + 4, sx + 5, sy + 5), fill=palette["accent"])
+    elif kind == "rogue":
+        blade_y = arm_y + (2 if pose != "shooting" else 0)
+        d.line((body_x + 15, blade_y + 2, body_x + 28, blade_y - 3), fill=PAL["outline"], width=3)
+        d.line((body_x + 16, blade_y + 1, body_x + 27, blade_y - 3), fill=palette["weapon"], width=1)
+        d.rectangle((body_x + 13, blade_y + 1, body_x + 16, blade_y + 3), fill=palette["accent"])
+    elif kind == "mage":
+        staff_x = body_x + (23 if pose == "shooting" else 18)
+        d.rectangle((staff_x, arm_y - 7, staff_x + 2, arm_y + 13), fill=PAL["outline"])
+        d.rectangle((staff_x + 1, arm_y - 6, staff_x + 1, arm_y + 12), fill=palette["weapon"])
+        orb_x = staff_x + 1 + (frame % 2 if pose == "shooting" else 0)
+        d.rectangle((orb_x - 3, arm_y - 10, orb_x + 3, arm_y - 4), fill=PAL["cyan"])
+        d.rectangle((orb_x - 1, arm_y - 12, orb_x + 1, arm_y - 2), fill=PAL["cyan_light"])
+        if pose == "shooting":
+            d.rectangle((32, arm_y - 8, 37, arm_y - 3), fill=PAL["cyan"])
+            d.rectangle((34, arm_y - 11, 35, arm_y), fill=PAL["cyan_light"])
+    elif kind == "hunter":
+        bow_x = body_x + 20
+        bow_y = arm_y + 2
+        d.arc((bow_x - 4, bow_y - 11, bow_x + 8, bow_y + 13), 260, 100, fill=PAL["outline"], width=3)
+        d.arc((bow_x - 3, bow_y - 10, bow_x + 7, bow_y + 12), 260, 100, fill=palette["weapon"], width=1)
+        d.line((bow_x + 2, bow_y - 8, bow_x + 2, bow_y + 10), fill=PAL["gold_light"], width=1)
+        if pose == "shooting":
+            d.rectangle((bow_x + 2, bow_y, 38, bow_y + 1), fill=PAL["gold_light"])
+            d.polygon([(38, bow_y), (35, bow_y - 2), (35, bow_y + 3)], fill=PAL["gold_light"])
 
     if pose == "kick":
-        d.rectangle((body_x + 12, body_y + 20, body_x + 26, body_y + 25), fill=PAL["outline"])
-        d.rectangle((body_x + 13, body_y + 21, body_x + 25, body_y + 24), fill=palette["jacket"])
-        d.rectangle((body_x + 23, body_y + 20, body_x + 29, body_y + 25), fill=palette["boots"])
+        d.rectangle((body_x + 12, body_y + 28, body_x + 31, body_y + 33), fill=PAL["outline"])
+        d.rectangle((body_x + 13, body_y + 29, body_x + 28, body_y + 32), fill=palette["jacket"])
+        d.rectangle((body_x + 28, body_y + 28, body_x + 36, body_y + 33), fill=palette["boots"])
 
     return img
 
@@ -239,27 +356,301 @@ def character_palettes() -> dict[str, tuple[str, dict[str, tuple[int, int, int, 
             "accent": rgba("#5dff9c"), "weapon": rgba("#8a5a30"), "hood": rgba("#3d6f2e"),
             "hat": rgba("#3d6f2e"), "hat_band": rgba("#ff9f4a"),
         }),
+        "character5": ("warrior", {
+            "jacket": rgba("#d86f3d"), "jacket_dark": rgba("#55352a"), "belt": rgba("#2a1c16"),
+            "hair": rgba("#583018"), "skin": PAL["skin"], "skin_shadow": PAL["skin_shadow"],
+            "boots": rgba("#202b26"), "scarf": rgba("#48d6ff"), "scarf_dark": rgba("#1a6f91"),
+            "accent": PAL["cyan_light"], "weapon": rgba("#e9f2ff"), "hood": rgba("#6a4820"),
+            "hat": rgba("#d86f3d"), "hat_band": rgba("#55352a"),
+        }),
+        "character6": ("rogue", {
+            "jacket": rgba("#463b65"), "jacket_dark": rgba("#171322"), "belt": rgba("#d69b39"),
+            "hair": rgba("#111827"), "skin": rgba("#d98d65"), "skin_shadow": rgba("#8d503d"),
+            "boots": rgba("#151520"), "scarf": rgba("#c84a4a"), "scarf_dark": rgba("#6f1f2d"),
+            "accent": rgba("#e2b84f"), "weapon": rgba("#d9e7f0"), "hood": rgba("#292037"),
+            "hat": rgba("#292037"), "hat_band": rgba("#c84a4a"),
+        }),
+        "character7": ("mage", {
+            "jacket": rgba("#6d5dff"), "jacket_dark": rgba("#1b2356"), "belt": rgba("#ffe870"),
+            "hair": rgba("#201030"), "skin": rgba("#ffd0a0"), "skin_shadow": rgba("#c17c55"),
+            "boots": rgba("#1c2540"), "scarf": rgba("#55b6ff"), "scarf_dark": rgba("#245cbb"),
+            "accent": PAL["cyan_light"], "weapon": rgba("#8a5a30"), "hood": rgba("#4088d8"),
+            "hat": rgba("#3146a8"), "hat_band": PAL["gold_light"],
+        }),
+        "character8": ("hunter", {
+            "jacket": rgba("#7d9a5b"), "jacket_dark": rgba("#2a442b"), "belt": rgba("#a86b32"),
+            "hair": rgba("#5a3018"), "skin": rgba("#ffc080"), "skin_shadow": rgba("#ba7048"),
+            "boots": rgba("#233118"), "scarf": rgba("#55b6ff"), "scarf_dark": rgba("#245cbb"),
+            "accent": rgba("#e2b84f"), "weapon": rgba("#8a5a30"), "hood": rgba("#4f6f3f"),
+            "hat": rgba("#4f6f3f"), "hat_band": rgba("#e2b84f"),
+        }),
     }
+
+
+def grim_character_palette(palette: dict[str, tuple[int, int, int, int]]) -> dict[str, tuple[int, int, int, int]]:
+    keep_bright = {"accent", "scarf", "weapon", "hat_band"}
+    adjusted: dict[str, tuple[int, int, int, int]] = {}
+    for name, color in palette.items():
+        r, g, b, a = color
+        if name in keep_bright:
+            adjusted[name] = (
+                clamp_channel(int(r * 0.88 + 18)),
+                clamp_channel(int(g * 0.88 + 14)),
+                clamp_channel(int(b * 0.88 + 10)),
+                a,
+            )
+        elif name in {"skin", "skin_shadow"}:
+            adjusted[name] = (
+                clamp_channel(int(r * 0.82)),
+                clamp_channel(int(g * 0.76)),
+                clamp_channel(int(b * 0.70)),
+                a,
+            )
+        else:
+            adjusted[name] = (
+                clamp_channel(int(r * 0.58)),
+                clamp_channel(int(g * 0.62)),
+                clamp_channel(int(b * 0.68)),
+                a,
+            )
+    return adjusted
+
+
+CHARACTER_SUIT_SPECS: dict[str, dict[str, tuple[int, int, int, int] | str]] = {
+    "character1": {
+        "kind": "horned_cloak",
+        "body": rgba("#202234"),
+        "body_dark": rgba("#090b12"),
+        "armor": rgba("#4f566f"),
+        "trim": PAL["violet"],
+        "trim_dark": rgba("#3e1686"),
+        "visor": PAL["violet"],
+        "glass": rgba("#ecf2ff"),
+    },
+    "character2": {
+        "kind": "horned_knight",
+        "body": rgba("#343638"),
+        "body_dark": rgba("#0a0c0f"),
+        "armor": rgba("#d8d4cf"),
+        "trim": PAL["red"],
+        "trim_dark": rgba("#811421"),
+        "visor": PAL["red"],
+        "glass": rgba("#fff3ee"),
+    },
+    "character3": {
+        "kind": "horned_cloak",
+        "body": rgba("#171a18"),
+        "body_dark": rgba("#030506"),
+        "armor": rgba("#39433d"),
+        "trim": PAL["red"],
+        "trim_dark": rgba("#781828"),
+        "visor": rgba("#ff2f72"),
+        "glass": rgba("#cbd6d2"),
+    },
+    "character4": {
+        "kind": "tank",
+        "body": rgba("#243044"),
+        "body_dark": rgba("#0a111d"),
+        "armor": rgba("#2f73c8"),
+        "trim": PAL["cyan"],
+        "trim_dark": rgba("#174c80"),
+        "visor": PAL["cyan"],
+        "glass": rgba("#60b8ff"),
+    },
+    "character5": {
+        "kind": "ninja",
+        "body": rgba("#15171b"),
+        "body_dark": rgba("#030406"),
+        "armor": rgba("#252b32"),
+        "trim": rgba("#7b0f22"),
+        "trim_dark": rgba("#430814"),
+        "visor": PAL["gold_light"],
+        "glass": rgba("#171b20"),
+    },
+    "character6": {
+        "kind": "tank",
+        "body": rgba("#252629"),
+        "body_dark": rgba("#09090b"),
+        "armor": rgba("#95172f"),
+        "trim": PAL["red"],
+        "trim_dark": rgba("#4f0c19"),
+        "visor": PAL["red"],
+        "glass": rgba("#a80f2c"),
+    },
+    "character7": {
+        "kind": "bio_mech",
+        "body": rgba("#e2ded2"),
+        "body_dark": rgba("#242730"),
+        "armor": rgba("#c9c2b8"),
+        "trim": PAL["cyan"],
+        "trim_dark": rgba("#a8344d"),
+        "visor": PAL["cyan_light"],
+        "glass": rgba("#f2eee4"),
+    },
+    "character8": {
+        "kind": "robot",
+        "body": rgba("#2a332e"),
+        "body_dark": rgba("#0c1110"),
+        "armor": rgba("#58665c"),
+        "trim": rgba("#a74a2f"),
+        "trim_dark": rgba("#4d2119"),
+        "visor": PAL["gold_light"],
+        "glass": rgba("#2f3b36"),
+    },
+}
+
+
+def draw_suit_character(spec: dict[str, tuple[int, int, int, int] | str], pose: str, frame: int) -> Image.Image:
+    img = canvas(48, 56)
+    d = ImageDraw.Draw(img)
+    kind = str(spec["kind"])
+    body = spec["body"]  # type: ignore[assignment]
+    body_dark = spec["body_dark"]  # type: ignore[assignment]
+    armor = spec["armor"]  # type: ignore[assignment]
+    trim = spec["trim"]  # type: ignore[assignment]
+    trim_dark = spec["trim_dark"]  # type: ignore[assignment]
+    visor = spec["visor"]  # type: ignore[assignment]
+    glass = spec["glass"]  # type: ignore[assignment]
+
+    direction = -1 if pose.endswith("_left") else 1
+    base_pose = pose.removesuffix("_left").removesuffix("_right")
+    bob = [0, -1, 0, 1][frame % 4] if base_pose == "idle" else 0
+    if base_pose in {"walking", "running"}:
+        bob = [0, -1, 0, 1, 0, -1][frame % 6]
+    if base_pose == "jumping":
+        bob = -4
+    if base_pose == "falling":
+        bob = 3
+    if base_pose == "taking_damage":
+        bob = 1
+    if base_pose == "lying_dead":
+        draw_shadow(d, 11, 48, 28)
+        d.rectangle((9, 39, 39, 49), fill=PAL["outline"])
+        d.rectangle((12, 38, 36, 47), fill=body_dark)
+        d.rectangle((16, 36, 29, 43), fill=armor)
+        d.rectangle((30, 33, 42, 43), fill=PAL["outline"])
+        d.rectangle((31, 34, 39, 41), fill=glass)
+        d.rectangle((14, 47, 21, 52), fill=PAL["outline"])
+        d.rectangle((29, 47, 37, 52), fill=PAL["outline"])
+        d.rectangle((20, 37, 28, 38), fill=trim)
+        return img
+
+    x = 15 + (1 if base_pose in {"running", "hitting", "shooting"} else 0)
+    y = 11 + bob
+    swing = [-3, -1, 2, 3, 1, -2][frame % 6] if base_pose in {"walking", "running"} else 0
+    attack_reach = 10 if base_pose in {"punching", "hitting", "kick", "shooting"} else 0
+    hurt_shift = -2 if base_pose == "taking_damage" and frame % 2 == 0 else 0
+
+    draw_shadow(d, 11, 50, 27)
+
+    # Cloak / backpack silhouette.
+    if kind in {"horned_cloak", "ninja"}:
+        d.polygon([(x - 6, y + 15), (x + 18, y + 14), (x + 22, y + 42), (x + 12, y + 49), (x - 8, y + 40)], fill=PAL["outline"])
+        d.polygon([(x - 4, y + 17), (x + 16, y + 16), (x + 18, y + 40), (x + 10, y + 45), (x - 5, y + 38)], fill=body_dark)
+    elif kind == "bio_mech":
+        d.line((x - 5, y + 21, x - 12, y + 39), fill=PAL["outline"], width=5)
+        d.line((x - 4, y + 22, x - 10, y + 38), fill=trim_dark, width=3)
+        for ox, oy in [(-13, 36), (-9, 42), (-5, 39)]:
+            d.rectangle((x + ox, y + oy, x + ox + 4, y + oy + 4), fill=trim)
+    elif kind == "tank":
+        d.rectangle((x - 8, y + 14, x - 3, y + 39), fill=PAL["outline"])
+        d.rectangle((x - 7, y + 16, x - 4, y + 37), fill=body_dark)
+        d.rectangle((x - 6, y + 19, x - 4, y + 23), fill=visor)
+
+    # Body.
+    d.rectangle((x + 1 + hurt_shift, y + 22, x + 24 + hurt_shift, y + 42), fill=PAL["outline"])
+    d.rectangle((x + 4 + hurt_shift, y + 23, x + 21 + hurt_shift, y + 40), fill=body)
+    d.rectangle((x + 7 + hurt_shift, y + 24, x + 18 + hurt_shift, y + 31), fill=armor)
+    d.rectangle((x + 4 + hurt_shift, y + 38, x + 21 + hurt_shift, y + 41), fill=body_dark)
+    d.rectangle((x + 10 + hurt_shift, y + 33, x + 15 + hurt_shift, y + 34), fill=trim)
+
+    # Legs.
+    front = max(0, swing)
+    back = max(0, -swing)
+    if base_pose in {"jumping", "falling"}:
+        front, back = 2, 0
+    d.rectangle((x + 5, y + 40 + front, x + 10, y + 50 + front), fill=PAL["outline"])
+    d.rectangle((x + 7, y + 41 + front, x + 9, y + 48 + front), fill=body_dark)
+    d.rectangle((x + 16, y + 40 + back, x + 21, y + 50 + back), fill=PAL["outline"])
+    d.rectangle((x + 17, y + 41 + back, x + 19, y + 48 + back), fill=body_dark)
+    d.rectangle((x + 5, y + 49 + front, x + 12, y + 52 + front), fill=PAL["outline"])
+    d.rectangle((x + 15, y + 49 + back, x + 22, y + 52 + back), fill=PAL["outline"])
+
+    # Head and helmets.
+    if kind in {"tank"}:
+        d.rectangle((x + 2, y + 5, x + 25, y + 25), fill=PAL["outline"])
+        d.rectangle((x + 4, y + 6, x + 23, y + 23), fill=glass)
+        d.rectangle((x + 5, y + 7, x + 22, y + 9), fill=rgba("#7fe7ff") if trim == PAL["cyan"] else rgba("#ff4e6f"))
+        d.rectangle((x + 7, y + 23, x + 20, y + 26), fill=trim_dark)
+    elif kind in {"horned_cloak", "horned_knight"}:
+        d.rectangle((x + 3, y + 8, x + 25, y + 27), fill=PAL["outline"])
+        d.rectangle((x + 5, y + 9, x + 23, y + 25), fill=armor if kind == "horned_knight" else body)
+        d.rectangle((x + 6, y + 18, x + 22, y + 21), fill=trim_dark)
+        d.rectangle((x + 8, y + 18, x + 11, y + 20), fill=visor)
+        d.rectangle((x + 18, y + 18, x + 21, y + 20), fill=visor)
+        for side in (-1, 1):
+            hx = x + (4 if side < 0 else 22)
+            d.line((hx, y + 9, hx + side * 6, y - 3), fill=PAL["outline"], width=5)
+            d.line((hx, y + 8, hx + side * 5, y - 2), fill=trim, width=3)
+            d.point((hx + side * 3, y + 1), fill=PAL["white"])
+    elif kind == "bio_mech":
+        d.rectangle((x + 1, y + 9, x + 25, y + 31), fill=PAL["outline"])
+        d.rectangle((x + 4, y + 10, x + 22, y + 28), fill=glass)
+        d.rectangle((x + 6, y + 25, x + 20, y + 28), fill=trim_dark)
+        d.rectangle((x + 4, y + 4, x + 8, y + 11), fill=PAL["outline"])
+        d.rectangle((x + 17, y + 3, x + 22, y + 11), fill=PAL["outline"])
+        d.rectangle((x + 5, y + 5, x + 7, y + 10), fill=trim)
+        d.rectangle((x + 18, y + 4, x + 21, y + 10), fill=trim)
+    else:
+        d.rectangle((x + 4, y + 11, x + 25, y + 29), fill=PAL["outline"])
+        d.rectangle((x + 6, y + 12, x + 23, y + 27), fill=body_dark if kind == "ninja" else armor)
+        d.rectangle((x + 9, y + 18, x + 21, y + 22), fill=trim_dark)
+        d.rectangle((x + 11, y + 18, x + 14, y + 21), fill=visor)
+        d.rectangle((x + 18, y + 18, x + 21, y + 21), fill=visor)
+
+    # Arms / attacks.
+    arm_y = y + 27
+    left_arm_x = x - 4
+    right_arm_x = x + 22 + attack_reach
+    d.rectangle((left_arm_x, arm_y + max(0, swing), left_arm_x + 8, arm_y + 5 + max(0, swing)), fill=PAL["outline"])
+    d.rectangle((left_arm_x + 1, arm_y + 1 + max(0, swing), left_arm_x + 7, arm_y + 4 + max(0, swing)), fill=armor)
+    d.rectangle((x + 20, arm_y + max(0, -swing), right_arm_x + 5, arm_y + 5 + max(0, -swing)), fill=PAL["outline"])
+    d.rectangle((x + 21, arm_y + 1 + max(0, -swing), right_arm_x + 4, arm_y + 4 + max(0, -swing)), fill=armor)
+    if base_pose in {"hitting", "shooting"}:
+        d.rectangle((right_arm_x + 4, arm_y - 1, right_arm_x + 10, arm_y + 6), fill=trim)
+        d.rectangle((right_arm_x + 8, arm_y + 1, right_arm_x + 15, arm_y + 3), fill=PAL["white"])
+    if base_pose == "taking_damage":
+        d.rectangle((x - 3, y + 5, x + 1, y + 8), fill=PAL["red"])
+        d.rectangle((x + 28, y + 20, x + 31, y + 23), fill=PAL["red"])
+
+    if direction < 0:
+        img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    return img
 
 
 def generate_characters(manifest: dict[str, dict]) -> None:
     animations = {
         "idle": 4,
         "walking": 6,
+        "walking_left": 6,
+        "walking_right": 6,
         "running": 6,
         "jumping": 2,
         "falling": 2,
         "kick": 3,
+        "punching": 3,
+        "hitting": 3,
+        "taking_damage": 2,
         "shooting": 4,
         "lying_dead": 2,
     }
-    for char_id, (kind, pal) in character_palettes().items():
-        main = draw_character(kind, "idle", 0, pal)
+    for char_id, spec in CHARACTER_SUIT_SPECS.items():
+        main = draw_suit_character(spec, "idle", 0)
         save(main, f"playable_characters/{char_id}/main_body.png", manifest)
         save(main, f"playable_characters/{char_id}/idle_body.png", manifest)
         for anim, count in animations.items():
             for i in range(count):
-                img = draw_character(kind, anim, i, pal)
+                img = draw_suit_character(spec, anim, i)
                 save(img, f"playable_characters/{char_id}/{anim}_frame{i + 1}.png", manifest)
 
 
@@ -316,59 +707,509 @@ def platform(w: int = 32, h: int = 18, variant: str = "moss") -> Image.Image:
     return img
 
 
+PLATFORM_COMPONENT_ROLES = (
+    "top_left",
+    "top_inner",
+    "top_right",
+    "body_left",
+    "body_inner",
+    "body_right",
+    "bottom_left",
+    "bottom_inner",
+    "bottom_right",
+    "outer_left",
+    "outer_right",
+)
+
+
+def platform_component(kind: str, role: str) -> Image.Image:
+    img = canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    if kind == "moss":
+        outline = rgba("#07100b")
+        body = rgba("#263229")
+        mid = rgba("#465444")
+        hi = rgba("#7b895f")
+        cap = rgba("#3d6b35")
+        cap_hi = rgba("#8eb35b")
+        soil = rgba("#322719")
+        accent = rgba("#74bf57")
+    elif kind == "stone":
+        outline = rgba("#080d13")
+        body = rgba("#27333b")
+        mid = rgba("#46525c")
+        hi = rgba("#7e8b91")
+        cap = rgba("#51635a")
+        cap_hi = rgba("#8fa18a")
+        soil = rgba("#2a2521")
+        accent = rgba("#5bd0d8")
+    elif kind == "snow":
+        outline = rgba("#08101c")
+        body = rgba("#1f2e3e")
+        mid = rgba("#40576a")
+        hi = rgba("#91a6b5")
+        cap = rgba("#a8c2dc")
+        cap_hi = rgba("#f4fbff")
+        soil = rgba("#2c3b4f")
+        accent = rgba("#d8f6ff")
+    elif kind == "ice":
+        outline = rgba("#050c18")
+        body = rgba("#18243b")
+        mid = rgba("#2c4b68")
+        hi = rgba("#65b7d7")
+        cap = rgba("#779cc4")
+        cap_hi = rgba("#e9fbff")
+        soil = rgba("#172239")
+        accent = rgba("#55e8ff")
+    elif kind == "summit":
+        outline = rgba("#17151f")
+        body = rgba("#74808b")
+        mid = rgba("#aab4bd")
+        hi = rgba("#f0f6ff")
+        cap = rgba("#d8d8d0")
+        cap_hi = rgba("#fff6d0")
+        soil = rgba("#6f6580")
+        accent = rgba("#e9b84f")
+    else:
+        outline = rgba("#140d12")
+        body = rgba("#40353a")
+        mid = rgba("#6c5f67")
+        hi = rgba("#aca6aa")
+        cap = rgba("#9aa0a5")
+        cap_hi = rgba("#e8edf2")
+        soil = rgba("#31222b")
+        accent = rgba("#c84a4a")
+
+    is_left = role.endswith("_left") or role == "outer_left"
+    is_right = role.endswith("_right") or role == "outer_right"
+    is_top = role.startswith("top")
+    is_bottom = role.startswith("bottom")
+    is_outer = role.startswith("outer")
+
+    # Chunky outline mask. Edge pieces deliberately have an irregular outside
+    # silhouette, while inner/body tiles stay clean so they can repeat.
+    if is_left:
+        pts = [(1, 0), (15, 0), (15, 16), (3, 16), (0, 12), (0, 4)]
+    elif is_right:
+        pts = [(0, 0), (14, 0), (16, 5), (16, 12), (13, 16), (0, 16)]
+    else:
+        pts = [(0, 0), (16, 0), (16, 16), (0, 16)]
+    if is_bottom:
+        if is_left:
+            pts = [(2, 0), (16, 0), (14, 10), (8, 16), (2, 13), (0, 6)]
+        elif is_right:
+            pts = [(0, 0), (14, 0), (16, 6), (14, 13), (8, 16), (2, 10)]
+        else:
+            pts = [(0, 0), (16, 0), (13, 12), (8, 16), (3, 12)]
+    d.polygon(pts, fill=outline)
+
+    inset_left = 2 if is_left else 1
+    inset_right = 13 if is_right else 14
+    d.rectangle((inset_left, 1, inset_right, 14), fill=body)
+    d.rectangle((inset_left + 1, 2, inset_right - 1, 6), fill=mid)
+    d.rectangle((inset_left + 2, 3, min(inset_right - 2, inset_left + 7), 4), fill=hi)
+
+    if is_top:
+        d.rectangle((inset_left, 3, inset_right, 9), fill=soil)
+        d.rectangle((inset_left, 0, inset_right, 3), fill=cap)
+        d.rectangle((inset_left + 1, 0, inset_right - 1, 1), fill=cap_hi)
+        if kind in {"snow", "ice", "summit", "crumble"}:
+            d.rectangle((inset_left, 0, inset_right, 4), fill=cap)
+            d.rectangle((inset_left + 1, 0, inset_right - 1, 2), fill=cap_hi)
+            if role == "top_inner":
+                d.rectangle((5, 3, 9, 4), fill=rgba("#ffffff"))
+        else:
+            for x in range(inset_left + 2, inset_right, 5):
+                d.rectangle((x, -1, x, 1 + (x % 2)), fill=cap_hi)
+        d.rectangle((inset_left + 1, 10, inset_right - 1, 14), fill=body)
+
+    if role.startswith("body"):
+        d.rectangle((inset_left + 1, 1, inset_right - 1, 14), fill=body)
+        d.rectangle((inset_left + 2, 2, inset_right - 2, 3), fill=mid)
+        d.line((inset_left + 3, 7, inset_right - 3, 10), fill=outline, width=1)
+        if kind in {"ice", "summit"}:
+            d.rectangle((7, 5, 9, 12), fill=rgba("#1f708d"))
+            d.rectangle((8, 4, 8, 10), fill=accent)
+        elif kind == "crumble":
+            d.line((6, 3, 8, 8, 7, 13), fill=accent, width=1)
+
+    if is_bottom:
+        d.rectangle((inset_left + 1, 1, inset_right - 1, 7), fill=body)
+        d.rectangle((inset_left + 2, 2, inset_right - 2, 3), fill=mid)
+        d.polygon([(inset_left + 2, 8), (8, 15), (inset_right - 2, 8)], fill=outline)
+        d.polygon([(inset_left + 4, 8), (8, 13), (inset_right - 4, 8)], fill=body)
+        if kind in {"snow", "ice"}:
+            d.polygon([(5, 0), (7, 9), (9, 0)], fill=cap_hi)
+
+    if is_outer:
+        d.rectangle((5 if is_left else 0, 1, 15 if is_left else 10, 14), fill=body)
+        d.rectangle((7 if is_left else 2, 2, 13 if is_left else 8, 3), fill=hi)
+        d.rectangle((2 if is_left else 13, 4, 3 if is_left else 14, 12), fill=outline)
+
+    if kind == "moss" and role in {"body_left", "bottom_left", "outer_left"}:
+        d.rectangle((3, 0, 5, 5), fill=rgba("#314f28"))
+        d.rectangle((3, 0, 4, 1), fill=accent)
+    if kind == "summit" and "inner" in role:
+        d.rectangle((6, 7, 10, 8), fill=accent)
+        d.rectangle((8, 5, 8, 10), fill=rgba("#d8f6ff"))
+    if kind == "crumble":
+        for x, y in [(4, 11), (10, 6), (12, 13)]:
+            d.point((x, y), fill=outline)
+    return img
+
+
+def platform_component_assets(folder: str, kind: str) -> list[tuple[str, Image.Image]]:
+    return [
+        (f"environment/{folder}/platform_{kind}_{role}.png", platform_component(kind, role))
+        for role in PLATFORM_COMPONENT_ROLES
+    ]
+
+
 def platform_variant(kind: str) -> Image.Image:
     if kind == "pillar":
         img = canvas(32, 56)
         d = ImageDraw.Draw(img)
-        d.rectangle((6, 4, 26, 52), fill=PAL["stone_deep"])
-        d.rectangle((8, 5, 24, 50), fill=rgba("#4c5e78"))
-        d.rectangle((4, 0, 28, 8), fill=PAL["snow_shadow"])
-        d.rectangle((6, 0, 26, 4), fill=PAL["snow"])
-        d.rectangle((10, 17, 22, 18), fill=rgba("#7f96b8"))
-        d.rectangle((9, 34, 23, 35), fill=rgba("#26354a"))
+        d.polygon([(5, 7), (25, 3), (28, 52), (9, 55)], fill=PAL["outline"])
+        d.polygon([(8, 8), (23, 5), (25, 49), (11, 52)], fill=rgba("#283642"))
+        for y in range(9, 49, 9):
+            d.rectangle((8, y, 24, y + 1), fill=rgba("#111821"))
+            d.rectangle((10 + (y % 3), y + 3, 17 + (y % 5), y + 4), fill=rgba("#6f7f82"))
+            d.point((22, y + 5), fill=rgba("#9ba99d"))
+        d.rectangle((4, 1, 28, 8), fill=PAL["snow_shadow"])
+        d.rectangle((6, 0, 25, 4), fill=PAL["snow"])
+        d.rectangle((12, 22, 18, 23), fill=PAL["cyan"])
+        d.rectangle((15, 18, 15, 30), fill=PAL["cyan_light"])
         return img
     if kind == "cliff":
         img = canvas(64, 40)
         d = ImageDraw.Draw(img)
-        d.polygon([(0, 8), (60, 6), (63, 17), (47, 39), (15, 34), (2, 19)], fill=PAL["stone_deep"])
-        d.polygon([(3, 9), (59, 8), (60, 17), (45, 35), (16, 31), (5, 19)], fill=rgba("#4c5e78"))
-        d.rectangle((0, 3, 62, 8), fill=PAL["snow_shadow"])
-        d.rectangle((4, 0, 58, 4), fill=PAL["snow"])
-        for x in (14, 28, 45):
-            d.line((x, 11, x + 8, 29), fill=rgba("#26354a"), width=1)
+        d.polygon([(0, 10), (13, 7), (31, 8), (47, 5), (62, 8), (63, 17), (54, 27), (42, 38), (19, 35), (5, 24)], fill=PAL["outline"])
+        d.polygon([(3, 11), (15, 9), (31, 10), (47, 7), (59, 10), (59, 17), (51, 25), (40, 34), (20, 31), (7, 23)], fill=rgba("#2f3b45"))
+        d.rectangle((2, 4, 59, 9), fill=PAL["snow_shadow"])
+        d.rectangle((5, 1, 55, 4), fill=PAL["snow"])
+        for x, y, w in [(9, 17, 9), (25, 14, 14), (43, 18, 10), (33, 27, 11)]:
+            d.rectangle((x, y, x + w, y + 3), fill=rgba("#56666c"))
+            d.rectangle((x + 1, y, x + w - 2, y), fill=rgba("#9fa99f"))
+        for x in (16, 31, 49):
+            d.line((x, 11, x + 8, 30), fill=rgba("#111821"), width=1)
+            d.point((x + 2, 18), fill=PAL["cyan"])
         return img
     if kind == "floating_snow":
         img = floating_island()
         d = ImageDraw.Draw(img)
         d.rectangle((8, 2, 86, 10), fill=PAL["snow_shadow"])
         d.rectangle((12, 0, 78, 5), fill=PAL["snow"])
+        for x in range(18, 81, 17):
+            d.polygon([(x, 7), (x + 2, 23), (x + 4, 7)], fill=PAL["snow"])
         return img
     return platform(32, 18, kind)
+
+
+def chunky_platform(kind: str, w: int = 48, h: int = 30) -> Image.Image:
+    img = canvas(w, h)
+    d = ImageDraw.Draw(img)
+    if kind.startswith("moss"):
+        outline = rgba("#07100b")
+        body = rgba("#263229")
+        mid = rgba("#465444")
+        light = rgba("#7b895f")
+        top = rgba("#3d6b35")
+        top_hi = rgba("#8eb35b")
+        soil = rgba("#322719")
+        glow = rgba("#76f29a")
+    elif kind.startswith("snow") or kind.startswith("ice"):
+        outline = rgba("#08101c")
+        body = rgba("#1f2e3e")
+        mid = rgba("#40576a")
+        light = rgba("#91a6b5")
+        top = PAL["snow_shadow"]
+        top_hi = PAL["snow"]
+        soil = rgba("#374556")
+        glow = PAL["cyan"]
+    elif kind.startswith("summit"):
+        outline = rgba("#1d2230")
+        body = rgba("#6f7777")
+        mid = rgba("#a5a99a")
+        light = rgba("#fff2bf")
+        top = rgba("#cadbe5")
+        top_hi = rgba("#fffdf0")
+        soil = rgba("#8f6427")
+        glow = PAL["gold_light"]
+    else:
+        outline = rgba("#091019")
+        body = rgba("#2d3944")
+        mid = rgba("#53636a")
+        light = rgba("#9aa69f")
+        top = rgba("#68777a")
+        top_hi = rgba("#bdc5b8")
+        soil = rgba("#353b3d")
+        glow = PAL["cyan"]
+
+    top_y = 6
+    top_jag = [((i * 7 + len(kind)) % 3) - 1 for i in range(8)]
+    top_points = []
+    for i in range(8):
+        x = round(i * (w - 1) / 7)
+        top_points.append((x, top_y + top_jag[i]))
+
+    if "triangle" in kind:
+        outer = [(3, top_y + 2), (w - 4, top_y), (w - 8, top_y + 11), (w // 2 + 6, h - 2), (w // 2 - 8, h - 1), (7, top_y + 13)]
+        inner = [(6, top_y + 3), (w - 7, top_y + 2), (w - 11, top_y + 10), (w // 2 + 4, h - 5), (w // 2 - 6, h - 5), (10, top_y + 12)]
+    elif "thin" in kind:
+        outer = [(1, top_y + 5), (w - 3, top_y + 4), (w - 2, top_y + 14), (5, top_y + 16)]
+        inner = [(4, top_y + 6), (w - 6, top_y + 6), (w - 7, top_y + 12), (6, top_y + 13)]
+    else:
+        outer = [(1, top_y + 4), (9, top_y + 2), (w // 2, top_y + 3), (w - 5, top_y + 1), (w - 1, top_y + 11), (w - 10, h - 5), (w // 2 + 3, h - 2), (w // 2 - 5, h - 4), (10, h - 7), (1, top_y + 14)]
+        inner = [(4, top_y + 5), (10, top_y + 4), (w // 2, top_y + 5), (w - 8, top_y + 4), (w - 5, top_y + 11), (w - 12, h - 8), (w // 2 + 2, h - 5), (w // 2 - 4, h - 7), (12, h - 10), (5, top_y + 13)]
+
+    d.polygon(outer, fill=outline)
+    d.polygon(inner, fill=body)
+    for x in range(6, w - 8, 10):
+        y = top_y + 9 + ((x * 7 + h) % 8)
+        d.rectangle((x, y, min(w - 8, x + 7), y + 3), fill=mid)
+        d.rectangle((x + 1, y, min(w - 9, x + 5), y), fill=light)
+    for x in range(5, w - 6, 7):
+        y = top_y + 11 + ((x * 5 + len(kind)) % max(5, h - top_y - 14))
+        c = light if (x + y) % 3 == 0 else mid if (x + y) % 3 == 1 else outline
+        d.point((x, y), fill=c)
+        if x + 1 < w - 2 and (x + y) % 4 == 0:
+            d.point((x + 1, y), fill=c)
+
+    for i in range(len(top_points) - 1):
+        x0, y0 = top_points[i]
+        x1, y1 = top_points[i + 1]
+        d.polygon([(x0, y0 + 1), (x1, y1 + 1), (x1, y1 + 6), (x0, y0 + 6)], fill=soil)
+        d.line((x0, y0, x1, y1), fill=top, width=4)
+        d.line((x0 + 1, y0 - 2, x1 - 1, y1 - 2), fill=top_hi, width=2)
+
+    for x in range(9, w - 9, 13):
+        if kind.startswith("moss"):
+            d.rectangle((x, top_y + 1, x + 1, top_y + 7 + (x % 5)), fill=rgba("#2f5428"))
+            d.point((x, top_y + 8 + (x % 5)), fill=top_hi)
+        elif kind.startswith("snow") or kind.startswith("ice"):
+            d.polygon([(x, top_y + 3), (x + 2, top_y + 15 + (x % 6)), (x + 4, top_y + 3)], fill=PAL["snow"])
+            d.point((x + 1, top_y + 7), fill=PAL["cyan_light"])
+        elif kind.startswith("summit"):
+            d.rectangle((x, top_y + 8, x + 5, top_y + 9), fill=PAL["gold_light"])
+            d.rectangle((x + 2, top_y + 5, x + 3, top_y + 13), fill=PAL["cyan_light"])
+    if "broken" in kind or "crumble" in kind:
+        for x in range(12, w - 8, 14):
+            d.line((x, top_y + 2, x - 3, top_y + 10, x + 1, top_y + 16), fill=outline, width=1)
+    if "rune" in kind or "stone" in kind or "summit" in kind:
+        d.rectangle((w // 2 - 3, top_y + 12, w // 2 + 3, top_y + 13), fill=glow)
+        d.point((w // 2, top_y + 10), fill=PAL["white"])
+    return img
+
+
+def tile_cluster(kind: str) -> Image.Image:
+    img = canvas(48, 56)
+    d = ImageDraw.Draw(img)
+    snow = "snow" in kind or "ice" in kind
+    moss = "moss" in kind
+    summit = "summit" in kind
+    base = rgba("#4c5e78")
+    shade = rgba("#26354a")
+    hi = rgba("#8fa3bb")
+    if moss:
+        base, shade, hi = rgba("#51624f"), rgba("#253122"), rgba("#91a06e")
+    if summit:
+        base, shade, hi = rgba("#bdc8d4"), rgba("#50607a"), rgba("#fff2bf")
+    for row in range(3):
+        for col in range(3):
+            x = 4 + col * 14 + ((row + col) % 2)
+            y = 4 + row * 14
+            d.rectangle((x, y, x + 11, y + 11), fill=shade)
+            d.rectangle((x + 1, y + 1, x + 10, y + 10), fill=base)
+            d.rectangle((x + 1, y + 1, x + 9, y + 2), fill=hi)
+            if snow:
+                d.rectangle((x, y, x + 11, y + 3), fill=PAL["snow_shadow"])
+                d.rectangle((x + 1, y, x + 9, y + 1), fill=PAL["snow"])
+            if moss and (row + col) % 2 == 0:
+                d.rectangle((x + 2, y, x + 8, y + 2), fill=rgba("#6d8c47"))
+                d.rectangle((x + 4, y - 2, x + 4, y), fill=rgba("#9fb76b"))
+            if summit and (row + col) % 2 == 0:
+                d.rectangle((x + 4, y + 4, x + 7, y + 5), fill=PAL["gold_light"])
+    return img
+
+
+def hanging_connector(kind: str) -> Image.Image:
+    img = canvas(24, 64)
+    d = ImageDraw.Draw(img)
+    if kind == "chain":
+        col = rgba("#5f6978")
+        hi = rgba("#b5c2d0")
+        for y in range(2, 60, 10):
+            d.rectangle((10, y, 14, y + 7), fill=PAL["outline"])
+            d.rectangle((11, y + 1, 13, y + 6), fill=col)
+            d.point((12, y + 1), fill=hi)
+        return img
+    if kind == "ladder":
+        rail = rgba("#8a5a2c")
+        rung = rgba("#c4914a")
+        d.rectangle((6, 2, 8, 61), fill=rail)
+        d.rectangle((16, 2, 18, 61), fill=rail)
+        for y in range(7, 60, 9):
+            d.rectangle((5, y, 19, y + 2), fill=rung)
+            d.point((6, y), fill=PAL["snow"])
+        return img
+    d.rectangle((9, 0, 15, 50), fill=rgba("#26354a"))
+    d.rectangle((10, 1, 14, 48), fill=rgba("#536982"))
+    d.rectangle((8, 0, 16, 3), fill=PAL["snow"])
+    return img
+
+
+def mid_mountain(kind: str) -> Image.Image:
+    img = canvas(192, 144)
+    d = ImageDraw.Draw(img)
+    if kind == "pine":
+        far = rgba("#1f3a57", 170)
+        mid = rgba("#274d68", 190)
+        hi = rgba("#5f7d86", 150)
+        snow = rgba("#c8dcec", 145)
+    elif kind == "snow":
+        far = rgba("#20375a", 170)
+        mid = rgba("#314e76", 190)
+        hi = rgba("#7f9ebf", 165)
+        snow = rgba("#eef6ff", 180)
+    elif kind == "summit":
+        far = rgba("#405479", 155)
+        mid = rgba("#7d8fa8", 180)
+        hi = rgba("#fff2bf", 155)
+        snow = rgba("#f8fbff", 190)
+    else:
+        far = rgba("#1a2f4f", 160)
+        mid = rgba("#283f66", 185)
+        hi = rgba("#687a98", 150)
+        snow = rgba("#d8e7f6", 145)
+    peaks = [(0, 124), (24, 74), (44, 104), (72, 44), (100, 96), (130, 58), (158, 116), (192, 72), (192, 144), (0, 144)]
+    d.polygon(peaks, fill=far)
+    d.polygon([(42, 134), (72, 48), (101, 140)], fill=mid)
+    d.polygon([(104, 138), (132, 62), (164, 140)], fill=mid)
+    d.polygon([(72, 48), (84, 79), (75, 72), (66, 95)], fill=snow)
+    d.polygon([(132, 62), (143, 91), (132, 84), (122, 108)], fill=snow)
+    d.line((75, 70, 54, 124), fill=hi, width=2)
+    d.line((137, 86, 116, 130), fill=hi, width=2)
+    if kind in {"ruins", "summit"}:
+        for x, y, h in [(30, 88, 28), (146, 80, 34), (156, 94, 23)]:
+            d.rectangle((x, y, x + 8, y + h), fill=rgba("#26354a", 150))
+            d.rectangle((x - 2, y - 4, x + 10, y), fill=hi)
+            d.rectangle((x + 3, y + 7, x + 5, y + 16), fill=rgba("#55b6ff", 110))
+    if kind == "pine":
+        for x in range(6, 188, 13):
+            y = 120 - ((x * 5) % 24)
+            d.rectangle((x + 3, y + 10, x + 4, y + 22), fill=rgba("#162b24", 160))
+            d.polygon([(x + 3, y), (x - 1, y + 10), (x + 8, y + 10)], fill=rgba("#1f4a36", 175))
+            d.polygon([(x + 3, y + 6), (x - 3, y + 17), (x + 10, y + 17)], fill=rgba("#1f4a36", 175))
+    return img
+
+
+def mid_mountain_tile(biome: str, role: str) -> Image.Image:
+    img = canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    palettes = {
+        "pine": (rgba("#151c20"), rgba("#2d393b"), rgba("#576052"), rgba("#8aa65b"), rgba("#0f1418"), rgba("#334f2f")),
+        "cloud": (rgba("#121a26"), rgba("#2f465b"), rgba("#637d8b"), PAL["cyan"], rgba("#0b111a"), rgba("#465a69")),
+        "snow": (rgba("#101824"), rgba("#293a4b"), rgba("#6f8ca0"), PAL["snow"], rgba("#080e17"), rgba("#455d72")),
+        "frozen": (rgba("#09111d"), rgba("#1e2f45"), rgba("#5894bd"), PAL["cyan_light"], rgba("#050912"), rgba("#314d68")),
+        "summit": (rgba("#28303c"), rgba("#7e8584"), rgba("#c0b07b"), PAL["white"], rgba("#171c25"), rgba("#a16f2c")),
+    }
+    outline, body, accent, highlight, shadow, vein = palettes[biome]
+    d.rectangle((0, 0, 15, 15), fill=(0, 0, 0, 0))
+
+    if role == "cap":
+        d.rectangle((0, 5, 15, 15), fill=body)
+        d.rectangle((0, 13, 15, 15), fill=shadow)
+        d.rectangle((0, 5, 15, 6), fill=outline)
+        if biome == "pine":
+            d.rectangle((0, 2, 15, 6), fill=vein)
+            d.rectangle((1, 0, 7, 2), fill=accent)
+            d.rectangle((9, 0, 14, 2), fill=accent)
+            for x in (2, 6, 11, 14):
+                d.rectangle((x, 0, x, 4), fill=highlight)
+        else:
+            d.rectangle((0, 2, 15, 6), fill=accent)
+            d.rectangle((2, 0, 12, 2), fill=highlight)
+            d.rectangle((13, 1, 15, 3), fill=highlight)
+        d.rectangle((2, 9, 5, 10), fill=highlight if biome == "summit" else vein)
+        d.rectangle((8, 11, 12, 12), fill=shadow)
+        d.point((14, 8), fill=highlight)
+    elif role == "left":
+        d.polygon([(4, 0), (15, 0), (15, 15), (1, 15), (0, 6)], fill=body)
+        d.line((1, 6, 3, 0), fill=outline, width=2)
+        d.line((0, 7, 1, 15), fill=outline, width=1)
+        d.line((4, 2, 2, 10), fill=highlight, width=1)
+        d.rectangle((10, 3, 15, 4), fill=vein)
+        d.rectangle((6, 9, 13, 10), fill=shadow)
+        if biome in {"snow", "frozen", "summit"}:
+            d.rectangle((5, 0, 15, 2), fill=highlight)
+            d.point((3, 3), fill=highlight)
+    elif role == "right":
+        d.polygon([(0, 0), (11, 0), (15, 6), (14, 15), (0, 15)], fill=body)
+        d.line((12, 0, 15, 6), fill=outline, width=2)
+        d.line((15, 7, 14, 15), fill=outline, width=1)
+        d.line((11, 2, 14, 10), fill=shadow, width=1)
+        d.rectangle((1, 4, 6, 5), fill=highlight)
+        d.rectangle((3, 10, 10, 11), fill=vein)
+        if biome in {"snow", "frozen", "summit"}:
+            d.rectangle((0, 0, 10, 2), fill=highlight)
+            d.point((12, 3), fill=highlight)
+    elif role == "bottom":
+        d.polygon([(0, 0), (15, 0), (12, 9), (8, 15), (4, 9)], fill=body)
+        d.line((4, 9, 8, 15, 12, 9), fill=outline, width=1)
+        d.rectangle((0, 0, 15, 1), fill=body)
+        d.line((6, 2, 8, 12), fill=highlight, width=1)
+        d.line((10, 2, 8, 12), fill=shadow, width=1)
+        d.rectangle((3, 4, 6, 5), fill=vein)
+        d.rectangle((10, 6, 12, 7), fill=shadow)
+        if biome == "frozen":
+            d.rectangle((7, 3, 9, 11), fill=PAL["cyan_dark"])
+            d.rectangle((8, 3, 8, 9), fill=PAL["cyan_light"])
+    else:
+        d.rectangle((0, 0, 15, 15), fill=body)
+        d.rectangle((2, 2, 6, 3), fill=highlight)
+        d.rectangle((9, 4, 13, 5), fill=vein)
+        d.rectangle((3, 10, 8, 11), fill=shadow)
+        d.point((13, 12), fill=highlight)
+        d.point((2, 6), fill=shadow)
+        if biome == "pine":
+            d.rectangle((1, 1, 4, 2), fill=accent)
+            d.rectangle((11, 0, 14, 1), fill=accent)
+            d.rectangle((6, 7, 7, 9), fill=rgba("#1b2f1e"))
+        if biome == "summit":
+            d.rectangle((6, 7, 10, 8), fill=PAL["gold_light"])
+            d.rectangle((8, 4, 8, 11), fill=PAL["cyan_light"])
+    return img
 
 
 def floating_island() -> Image.Image:
     img = canvas(96, 56)
     d = ImageDraw.Draw(img)
-    d.polygon([(8, 12), (84, 10), (92, 22), (70, 44), (48, 54), (25, 43), (4, 25)], fill=PAL["stone_deep"])
-    d.polygon([(12, 12), (82, 11), (88, 21), (68, 39), (48, 49), (27, 38), (9, 24)], fill=PAL["stone_dark"])
-    for x, y, w, h in [(18, 20, 12, 9), (35, 17, 16, 11), (56, 20, 18, 12), (30, 32, 13, 8), (50, 36, 12, 7)]:
-        d.rectangle((x, y, x + w, y + h), fill=PAL["stone_mid"])
-        d.rectangle((x, y, x + w, y + 1), fill=PAL["stone_light"])
+    d.polygon([(7, 13), (24, 9), (52, 10), (79, 7), (91, 18), (84, 29), (69, 43), (48, 54), (27, 44), (12, 32), (3, 24)], fill=PAL["outline"])
+    d.polygon([(11, 14), (25, 11), (52, 12), (77, 10), (87, 19), (80, 28), (66, 39), (48, 49), (29, 40), (14, 30), (8, 24)], fill=rgba("#28343b"))
+    for x, y, ww, hh in [(17, 20, 13, 8), (34, 17, 17, 11), (57, 20, 18, 11), (28, 32, 15, 7), (50, 36, 13, 7), (65, 29, 9, 5)]:
+        d.rectangle((x, y, x + ww, y + hh), fill=rgba("#56635f"))
+        d.rectangle((x, y, x + ww - 2, y), fill=rgba("#a1aa98"))
+        d.point((x + ww - 2, y + hh - 1), fill=PAL["outline"])
+    for x in range(14, 83, 11):
+        y = 19 + ((x * 5) % 20)
+        d.point((x, y), fill=PAL["cyan"] if x % 3 == 0 else rgba("#8a946d"))
     d.rectangle((8, 7, 86, 14), fill=PAL["soil"])
-    d.rectangle((7, 5, 88, 8), fill=PAL["grass_dark"])
-    d.rectangle((12, 3, 78, 5), fill=PAL["grass"])
-    for x in (22, 35, 63, 75):
-        d.rectangle((x, 0, x + 1, 5), fill=PAL["grass"])
+    d.line((7, 7, 22, 5, 42, 6, 59, 4, 88, 6), fill=PAL["grass_dark"], width=4)
+    d.line((11, 3, 29, 2, 46, 3, 66, 1, 80, 3), fill=PAL["grass"], width=2)
+    for x in (20, 33, 62, 74, 83):
+        d.rectangle((x, 0, x + 1, 5 + (x % 3)), fill=PAL["moss_light"])
     return img
 
 
 def grass_clump() -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
-    d.rectangle((1, 13, 14, 15), fill=PAL["grass_dark"])
-    for x, h in [(2, 5), (5, 8), (8, 6), (12, 7)]:
-        d.rectangle((x, 13 - h, x + 1, 13), fill=PAL["moss_light"])
-        d.point((x, 13 - h), fill=PAL["grass"])
+    d.rectangle((1, 13, 14, 15), fill=rgba("#152317"))
+    for x, h in [(2, 5), (5, 9), (8, 6), (12, 8), (14, 4)]:
+        d.rectangle((x, 13 - h, x + 1, 13), fill=PAL["moss"])
+        d.point((x, 13 - h), fill=PAL["moss_light"])
+        if x % 2 == 0:
+            d.point((x + 1, 12 - h // 2), fill=rgba("#35472c"))
     return img
 
 
@@ -384,13 +1225,20 @@ def flower_patch() -> Image.Image:
 def bush(w: int = 32, h: int = 24, autumn: bool = False) -> Image.Image:
     img = canvas(w, h)
     d = ImageDraw.Draw(img)
-    leaf = rgba("#cf6b4f") if autumn else PAL["leaf_mid"]
-    light = rgba("#f08a5f") if autumn else PAL["leaf_light"]
-    d.rectangle((5, 13, w - 6, h - 4), fill=PAL["leaf_dark"])
-    for box in [(2, 10, 14, 19), (9, 6, 23, 17), (18, 9, 30, 20), (7, 14, 25, 23)]:
-        d.ellipse(box, fill=leaf)
-    for box in [(8, 8, 15, 12), (16, 7, 23, 11), (21, 11, 28, 15)]:
+    leaf = rgba("#884333") if autumn else PAL["leaf_mid"]
+    light = rgba("#c05c3d") if autumn else PAL["moss_light"]
+    d.rectangle((5, 13, w - 6, h - 4), fill=rgba("#102319"))
+    for pts in [
+        [(2, 15), (7, 9), (15, 11), (17, 19), (8, 21)],
+        [(9, 9), (17, 4), (25, 8), (25, 17), (14, 18)],
+        [(18, 12), (26, 8), (31, 14), (28, 21), (19, 20)],
+        [(7, 16), (14, 13), (25, 16), (24, 23), (8, 23)],
+    ]:
+        d.polygon(pts, fill=leaf)
+    for box in [(8, 8, 13, 10), (16, 7, 22, 9), (21, 12, 26, 14)]:
         d.rectangle(box, fill=light)
+    for x, y in [(6, 18), (15, 13), (28, 16)]:
+        d.point((x, y), fill=PAL["cyan"] if not autumn else PAL["orange"])
     d.rectangle((10, h - 5, 22, h - 3), fill=PAL["shadow"])
     return img
 
@@ -408,8 +1256,10 @@ def leaf_cluster() -> Image.Image:
 def tree(kind: str = "pine") -> Image.Image:
     img = canvas(64, 88)
     d = ImageDraw.Draw(img)
-    d.rectangle((29, 44, 36, 82), fill=PAL["bark_dark"])
-    d.rectangle((31, 42, 38, 82), fill=PAL["bark"])
+    d.rectangle((29, 44, 36, 82), fill=PAL["outline"])
+    d.rectangle((31, 42, 37, 82), fill=PAL["bark_dark"])
+    for y in range(48, 80, 9):
+        d.point((33, y), fill=PAL["bark"])
     if kind == "dead":
         d.rectangle((20, 28, 43, 34), fill=PAL["bark_dark"])
         d.line((34, 42, 48, 24), fill=PAL["bark"], width=3)
@@ -419,14 +1269,22 @@ def tree(kind: str = "pine") -> Image.Image:
         return img
     if kind == "pine":
         for y, half in [(8, 15), (20, 21), (34, 26), (50, 30)]:
-            d.polygon([(32, y), (32 - half, y + 25), (32 + half, y + 25)], fill=PAL["leaf_dark"])
-            d.polygon([(32, y + 3), (32 - half + 4, y + 22), (32 + half - 4, y + 22)], fill=PAL["leaf_mid"])
-            d.rectangle((25, y + 17, 36, y + 19), fill=PAL["leaf_light"])
+            d.polygon([(32, y), (32 - half, y + 25), (32 + half, y + 25)], fill=PAL["outline"])
+            d.polygon([(32, y + 3), (32 - half + 4, y + 22), (32 + half - 4, y + 22)], fill=PAL["leaf_dark"])
+            d.polygon([(32, y + 7), (32 - half + 8, y + 20), (32 + half - 8, y + 20)], fill=PAL["leaf_mid"])
+            d.rectangle((25, y + 17, 35, y + 18), fill=PAL["moss_light"])
+            d.point((39, y + 22), fill=PAL["cyan_dark"])
     else:
-        for box in [(6, 8, 35, 36), (24, 5, 57, 35), (14, 26, 48, 57), (0, 29, 26, 55), (36, 31, 63, 59)]:
-            d.ellipse(box, fill=PAL["leaf_dark"])
-        for box in [(10, 11, 32, 29), (27, 8, 51, 28), (18, 28, 43, 47)]:
-            d.ellipse(box, fill=PAL["leaf_light"])
+        for pts in [
+            [(5, 26), (13, 9), (35, 8), (37, 31), (20, 39)],
+            [(24, 10), (42, 4), (58, 15), (55, 35), (35, 33)],
+            [(13, 42), (24, 25), (49, 28), (48, 56), (22, 58)],
+            [(0, 43), (8, 29), (27, 31), (28, 54), (8, 56)],
+            [(36, 43), (45, 30), (63, 35), (62, 59), (42, 58)],
+        ]:
+            d.polygon(pts, fill=PAL["leaf_dark"])
+        for pts in [[(12, 15), (31, 13), (28, 24), (11, 28)], [(29, 10), (50, 12), (47, 23), (30, 25)], [(20, 31), (42, 33), (39, 45), (18, 46)]]:
+            d.polygon(pts, fill=PAL["leaf_mid"])
     return img
 
 
@@ -444,6 +1302,123 @@ def snow_tree(kind: str = "snow") -> Image.Image:
     for box in [(18, 19, 41, 24), (13, 34, 49, 39), (6, 52, 55, 58), (23, 66, 44, 70)]:
         d.rectangle(box, fill=PAL["snow"])
         d.rectangle((box[0], box[3], box[2], box[3] + 1), fill=PAL["snow_shadow"])
+    return img
+
+
+def canopy_blob(d: ImageDraw.ImageDraw, x: int, y: int, w: int, h: int, seed: int, autumn: bool = False) -> None:
+    dark = rgba("#173923") if not autumn else rgba("#513020")
+    mid = rgba("#2f7a3b") if not autumn else rgba("#8e5131")
+    light = rgba("#86b84e") if not autumn else rgba("#c46a3f")
+    acid = rgba("#aacf52") if not autumn else PAL["orange"]
+    outline = rgba("#10261b")
+    blocks = [
+        (x + w * 0.18, y + h * 0.02, w * 0.44, h * 0.20, light),
+        (x + w * 0.04, y + h * 0.18, w * 0.34, h * 0.26, mid),
+        (x + w * 0.36, y + h * 0.14, w * 0.42, h * 0.28, mid),
+        (x + w * 0.64, y + h * 0.26, w * 0.30, h * 0.30, mid),
+        (x + w * 0.12, y + h * 0.43, w * 0.36, h * 0.30, dark),
+        (x + w * 0.42, y + h * 0.40, w * 0.46, h * 0.34, dark),
+        (x + w * 0.24, y + h * 0.28, w * 0.24, h * 0.18, acid),
+        (x + w * 0.56, y + h * 0.08, w * 0.18, h * 0.18, acid),
+    ]
+    for bx, by, bw, bh, col in blocks:
+        d.rectangle((round(bx), round(by), round(bx + bw), round(by + bh)), fill=outline)
+        d.rectangle((round(bx) + 2, round(by) + 2, round(bx + bw) - 1, round(by + bh) - 1), fill=col)
+    for i in range(22):
+        px = x + 4 + ((i * 13 + seed * 7) % max(8, w - 8))
+        py = y + 4 + ((i * 17 + seed * 11) % max(8, h - 8))
+        color = [dark, mid, light, acid][(i + seed) % 4]
+        d.rectangle((px, py, px + 3 + (i % 3), py + 2 + (i % 2)), fill=color)
+
+
+def pixel_tree_variant(kind: str) -> Image.Image:
+    sizes = {
+        "round_canopy": (96, 96),
+        "tall_canopy": (84, 128),
+        "forked_oak": (88, 96),
+        "small_round": (56, 64),
+        "sapling_pine": (48, 72),
+        "dead_branch": (52, 80),
+        "wind_bent_leaf": (80, 88),
+        "wide_bush_tree": (92, 74),
+        "autumn_block": (80, 88),
+    }
+    w, h = sizes[kind]
+    img = canvas(w, h)
+    d = ImageDraw.Draw(img)
+    trunk = rgba("#6b3c1f")
+    trunk_dark = rgba("#2b1820")
+    trunk_hi = rgba("#a4603b")
+
+    if kind == "dead_branch":
+        d.rectangle((w // 2 - 4, 24, w // 2 + 5, h - 8), fill=trunk_dark)
+        d.rectangle((w // 2 - 2, 22, w // 2 + 3, h - 10), fill=rgba("#747565"))
+        branches = [
+            (w // 2, 35, 14, 18),
+            (w // 2 + 1, 43, 40, 24),
+            (w // 2, 55, 18, 49),
+            (w // 2 + 2, 28, 35, 14),
+        ]
+        for x0, y0, x1, y1 in branches:
+            d.line((x0, y0, x1, y1), fill=trunk_dark, width=5)
+            d.line((x0, y0, x1, y1), fill=rgba("#7f806e"), width=3)
+        for x, y in [(13, 18), (39, 22), (18, 49), (35, 14)]:
+            d.rectangle((x, y, x + 3, y + 4), fill=rgba("#a0a188"))
+        return img
+
+    if kind == "sapling_pine":
+        d.rectangle((w // 2 - 3, 31, w // 2 + 4, h - 6), fill=trunk_dark)
+        d.rectangle((w // 2 - 1, 30, w // 2 + 2, h - 7), fill=trunk)
+        for y, half in [(6, 9), (17, 14), (30, 20), (44, 24)]:
+            d.polygon([(w // 2, y), (w // 2 - half, y + 22), (w // 2 + half, y + 22)], fill=rgba("#10261b"))
+            d.polygon([(w // 2, y + 2), (w // 2 - half + 4, y + 19), (w // 2 + half - 4, y + 19)], fill=rgba("#2f7a3b"))
+            d.rectangle((w // 2 - 4, y + 14, w // 2 + 8, y + 16), fill=rgba("#86b84e"))
+        return img
+
+    if kind == "tall_canopy":
+        d.rectangle((w // 2 - 7, 44, w // 2 + 8, h - 8), fill=trunk_dark)
+        d.rectangle((w // 2 - 3, 42, w // 2 + 6, h - 10), fill=trunk)
+        d.line((w // 2, 61, w // 2 - 24, 43), fill=trunk_dark, width=5)
+        d.line((w // 2 + 2, 57, w // 2 + 25, 37), fill=trunk_dark, width=5)
+        d.rectangle((w // 2 + 5, 75, w // 2 + 13, 78), fill=trunk_hi)
+        canopy_blob(d, 8, 2, 68, 58, 5)
+        canopy_blob(d, 3, 33, 38, 36, 6)
+        canopy_blob(d, 42, 34, 36, 36, 7)
+    elif kind == "forked_oak":
+        d.rectangle((w // 2 - 8, 44, w // 2 + 6, h - 8), fill=trunk_dark)
+        d.rectangle((w // 2 - 4, 43, w // 2 + 4, h - 10), fill=trunk)
+        for x1, y1 in [(22, 44), (31, 32), (56, 33), (68, 46)]:
+            d.line((w // 2, 57, x1, y1), fill=trunk_dark, width=6)
+            d.line((w // 2, 56, x1, y1), fill=trunk, width=3)
+        canopy_blob(d, 2, 8, 42, 42, 8)
+        canopy_blob(d, 28, 3, 50, 44, 9)
+        canopy_blob(d, 45, 27, 38, 36, 10)
+    elif kind == "small_round":
+        d.rectangle((w // 2 - 4, 31, w // 2 + 5, h - 6), fill=trunk_dark)
+        d.rectangle((w // 2 - 1, 29, w // 2 + 3, h - 7), fill=trunk)
+        canopy_blob(d, 4, 3, 48, 39, 11)
+    elif kind == "wind_bent_leaf":
+        d.line((w // 2 - 2, h - 8, w // 2 + 3, 44, w // 2 + 16, 28), fill=trunk_dark, width=12)
+        d.line((w // 2, h - 10, w // 2 + 5, 45, w // 2 + 17, 29), fill=trunk, width=6)
+        d.line((w // 2 + 5, 53, w // 2 - 18, 37), fill=trunk_dark, width=5)
+        canopy_blob(d, 16, 2, 58, 45, 12)
+        canopy_blob(d, 3, 25, 36, 30, 13)
+    elif kind == "wide_bush_tree":
+        d.rectangle((w // 2 - 5, 38, w // 2 + 6, h - 6), fill=trunk_dark)
+        d.rectangle((w // 2 - 2, 36, w // 2 + 4, h - 7), fill=trunk)
+        canopy_blob(d, 3, 2, 86, 50, 14)
+    elif kind == "autumn_block":
+        d.rectangle((w // 2 - 6, 39, w // 2 + 7, h - 7), fill=trunk_dark)
+        d.rectangle((w // 2 - 2, 38, w // 2 + 5, h - 8), fill=trunk)
+        canopy_blob(d, 6, 3, 68, 54, 15, autumn=True)
+    else:
+        d.rectangle((w // 2 - 8, 42, w // 2 + 8, h - 8), fill=trunk_dark)
+        d.rectangle((w // 2 - 3, 40, w // 2 + 5, h - 10), fill=trunk)
+        d.rectangle((w // 2 + 2, 58, w // 2 + 11, 61), fill=trunk_hi)
+        canopy_blob(d, 6, 0, w - 12, 56, 16)
+
+    d.rectangle((w // 2 - 14, h - 7, w // 2 + 16, h - 3), fill=rgba("#10261b"))
+    d.rectangle((w // 2 - 5, h - 10, w // 2 + 5, h - 5), fill=trunk_hi)
     return img
 
 
@@ -473,7 +1448,7 @@ def cloud(w: int, h: int, flat: bool = False) -> Image.Image:
     img = canvas(w, h)
     d = ImageDraw.Draw(img)
     y = h // 2
-    d.rectangle((w // 12, y, w - w // 10, y + h // 4), fill=PAL["cloud_shadow"])
+    d.rectangle((w // 12, y, w - w // 10, y + h // 4), fill=rgba("#233246", 205))
     parts = [
         (w * 0.06, y - h * 0.08, w * 0.30, y + h * 0.30),
         (w * 0.22, y - h * 0.34, w * 0.52, y + h * 0.24),
@@ -483,10 +1458,14 @@ def cloud(w: int, h: int, flat: bool = False) -> Image.Image:
     for i, box in enumerate(parts):
         if flat and i == 1:
             box = (box[0], y - h * 0.18, box[2], y + h * 0.18)
-        d.ellipse(tuple(map(int, box)), fill=PAL["cloud_mid"])
+        x0, y0, x1, y1 = map(int, box)
+        d.rectangle((x0, y0 + (i % 2) * 2, x1, y1), fill=PAL["cloud_mid"])
+        d.rectangle((x0 + max(1, w // 30), y0, x1 - max(1, w // 25), y0 + max(2, h // 8)), fill=rgba("#7d94a3", 190))
     for box in parts[1:3]:
         x0, y0, x1, y1 = map(int, box)
-        d.rectangle((x0 + 5, y0 + 4, x1 - 5, y0 + 8), fill=PAL["cloud"])
+        d.rectangle((x0 + 5, y0 + 4, x1 - 5, y0 + 7), fill=PAL["cloud"])
+    for x in range(4, w - 4, max(9, w // 12)):
+        d.point((x, y + (x * 7) % max(2, h // 3)), fill=rgba("#111827", 180))
     return img
 
 
@@ -505,6 +1484,19 @@ def coin(width: int = 10) -> Image.Image:
     return img
 
 
+def coin_variant(color: tuple[int, int, int, int] = PAL["gold"], glow: tuple[int, int, int, int] = PAL["gold_light"]) -> Image.Image:
+    img = canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    dark = tuple(max(0, c - 70) for c in color[:3]) + (255,)
+    d.ellipse((2, 1, 14, 15), fill=PAL["outline"])
+    d.ellipse((3, 2, 13, 14), fill=dark)
+    d.ellipse((5, 3, 11, 13), fill=color)
+    d.rectangle((6, 4, 10, 5), fill=glow)
+    d.rectangle((5, 7, 11, 9), fill=dark)
+    d.rectangle((7, 7, 9, 9), fill=glow)
+    return img
+
+
 def gem(color: tuple[int, int, int, int], light: tuple[int, int, int, int], dark: tuple[int, int, int, int]) -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
@@ -512,6 +1504,19 @@ def gem(color: tuple[int, int, int, int], light: tuple[int, int, int, int], dark
     d.polygon([(8, 2), (13, 6), (10, 13), (6, 13), (3, 6)], fill=color)
     d.polygon([(7, 3), (11, 6), (8, 8), (5, 6)], fill=light)
     d.rectangle((6, 12, 10, 13), fill=PAL["white"])
+    return img
+
+
+def crown_collectible(color: tuple[int, int, int, int] = PAL["gold"]) -> Image.Image:
+    img = canvas(20, 18)
+    d = ImageDraw.Draw(img)
+    dark = tuple(max(0, c - 85) for c in color[:3]) + (255,)
+    d.rectangle((3, 11, 17, 15), fill=PAL["outline"])
+    d.rectangle((4, 10, 16, 14), fill=dark)
+    d.polygon([(4, 11), (4, 4), (8, 9), (10, 3), (12, 9), (16, 4), (16, 11)], fill=PAL["outline"])
+    d.polygon([(5, 10), (5, 6), (8, 10), (10, 5), (12, 10), (15, 6), (15, 10)], fill=color)
+    for x in (5, 10, 15):
+        d.rectangle((x - 1, 3, x + 1, 5), fill=PAL["white"])
     return img
 
 
@@ -552,14 +1557,26 @@ def sparkle() -> Image.Image:
     return img
 
 
-def spikes() -> Image.Image:
-    img = canvas(16, 16)
+def spikes(kind: str = "stone") -> Image.Image:
+    img = canvas(24, 20)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 11, 15, 15), fill=PAL["stone_deep"])
-    for x in (1, 6, 11):
-        d.polygon([(x, 11), (x + 2, 1), (x + 4, 11)], fill=PAL["red"])
-        d.line((x + 2, 2, x + 2, 9), fill=PAL["orange"])
-        d.point((x + 2, 1), fill=PAL["white"])
+    base = rgba("#2c3748")
+    spike = rgba("#9ba6b3")
+    shine = rgba("#e9f2ff")
+    if kind == "ice":
+        base = rgba("#1a3550")
+        spike = rgba("#a8d8f8")
+        shine = PAL["white"]
+    if kind == "summit":
+        base = rgba("#5a4b2d")
+        spike = rgba("#d9d2bd")
+        shine = PAL["gold_light"]
+    d.rectangle((0, 15, 23, 19), fill=base)
+    d.rectangle((0, 14, 23, 15), fill=rgba("#607086"))
+    for x, h in ((1, 11), (6, 15), (11, 13), (16, 16), (20, 10)):
+        d.polygon([(x, 15), (x + 2, 15 - h), (x + 5, 15)], fill=PAL["outline"])
+        d.polygon([(x + 1, 14), (x + 2, 16 - h), (x + 4, 14)], fill=spike)
+        d.line((x + 2, 14 - h, x + 2, 12), fill=shine, width=1)
     return img
 
 
@@ -577,6 +1594,280 @@ def lantern(glow: tuple[int, int, int, int] = PAL["cyan"], post: bool = False) -
     d.rectangle((6, y + 8, 10, y + 16), fill=glow)
     d.rectangle((7, y + 9, 9, y + 15), fill=PAL["gold_light"])
     d.rectangle((4, y + 19, 12, y + 21), fill=PAL["bark_dark"])
+    return img
+
+
+def banner_stand(color: tuple[int, int, int, int] = PAL["blue"], symbol: str = "rune") -> Image.Image:
+    img = canvas(28, 48)
+    d = ImageDraw.Draw(img)
+    d.rectangle((5, 2, 7, 45), fill=PAL["bark_dark"])
+    d.rectangle((21, 2, 23, 45), fill=PAL["bark_dark"])
+    d.rectangle((3, 4, 25, 7), fill=PAL["gold_dark"])
+    d.rectangle((6, 7, 22, 33), fill=PAL["outline"])
+    dark = tuple(max(0, c - 75) for c in color[:3]) + (255,)
+    d.rectangle((8, 8, 20, 31), fill=dark)
+    d.rectangle((9, 9, 19, 28), fill=color)
+    d.polygon([(8, 31), (14, 26), (20, 31)], fill=color)
+    if symbol == "crown":
+        d.polygon([(11, 20), (12, 15), (14, 19), (16, 14), (17, 20)], fill=PAL["gold_light"])
+    else:
+        d.rectangle((13, 14, 15, 24), fill=PAL["gold_light"])
+        d.rectangle((11, 18, 17, 19), fill=PAL["gold_light"])
+    d.rectangle((2, 44, 26, 47), fill=PAL["stone_deep"])
+    return img
+
+
+def hanging_lantern(kind: str = "blue") -> Image.Image:
+    img = canvas(24, 40)
+    d = ImageDraw.Draw(img)
+    glow = PAL["cyan"] if kind == "blue" else PAL["gold_light"] if kind == "gold" else PAL["green"]
+    d.rectangle((11, 0, 13, 8), fill=PAL["bark_dark"])
+    d.rectangle((7, 6, 17, 8), fill=PAL["gold_dark"])
+    d.rectangle((5, 9, 19, 28), fill=PAL["outline"])
+    d.rectangle((7, 11, 17, 26), fill=PAL["cyan_dark"])
+    d.rectangle((8, 13, 16, 24), fill=glow)
+    d.rectangle((10, 14, 14, 21), fill=PAL["white"])
+    d.rectangle((7, 28, 17, 31), fill=PAL["gold_dark"])
+    d.rectangle((4, 34, 20, 37), fill=PAL["stone_deep"])
+    return img
+
+
+def pedestal_lamp(kind: str = "blue") -> Image.Image:
+    img = canvas(32, 48)
+    d = ImageDraw.Draw(img)
+    glow = PAL["cyan"] if kind == "blue" else PAL["green"] if kind == "green" else PAL["gold_light"]
+    d.rectangle((10, 28, 22, 44), fill=PAL["stone_deep"])
+    d.rectangle((12, 26, 20, 42), fill=rgba("#4c5e78"))
+    d.rectangle((6, 42, 26, 47), fill=PAL["stone_deep"])
+    d.rectangle((8, 24, 24, 29), fill=PAL["stone_light"])
+    d.polygon([(16, 5), (24, 16), (16, 27), (8, 16)], fill=PAL["outline"])
+    d.polygon([(16, 7), (22, 16), (16, 25), (10, 16)], fill=glow)
+    d.rectangle((14, 10, 18, 12), fill=PAL["white"])
+    return img
+
+
+def sign_board(kind: str = "wood") -> Image.Image:
+    img = canvas(40, 28)
+    d = ImageDraw.Draw(img)
+    d.rectangle((7, 18, 10, 27), fill=PAL["bark_dark"])
+    d.rectangle((30, 18, 33, 27), fill=PAL["bark_dark"])
+    trim = PAL["gold_dark"] if kind == "wood" else PAL["cyan"]
+    d.rectangle((3, 7, 36, 20), fill=PAL["outline"])
+    d.rectangle((5, 9, 34, 18), fill=PAL["bark"] if kind == "wood" else rgba("#4c5e78"))
+    d.rectangle((7, 11, 32, 12), fill=trim)
+    d.rectangle((14, 15, 23, 16), fill=trim)
+    return img
+
+
+def rope_posts(kind: str = "plain") -> Image.Image:
+    img = canvas(56, 28)
+    d = ImageDraw.Draw(img)
+    post = PAL["bark"] if kind == "plain" else rgba("#4c5e78")
+    for x in (4, 28, 48):
+        d.rectangle((x, 6, x + 4, 27), fill=PAL["outline"])
+        d.rectangle((x + 1, 5, x + 3, 26), fill=post)
+        d.rectangle((x - 2, 4, x + 6, 7), fill=PAL["gold_dark"])
+    d.line((6, 12, 30, 16, 50, 12), fill=PAL["bark_dark"], width=2)
+    d.line((6, 18, 30, 22, 50, 18), fill=PAL["bark_dark"], width=1)
+    if kind == "lanterns":
+        for x in (19, 39):
+            d.rectangle((x, 14, x + 4, 20), fill=PAL["outline"])
+            d.rectangle((x + 1, 15, x + 3, 19), fill=PAL["gold_light"])
+    return img
+
+
+def flower_crystal_cluster(kind: str = "blue") -> Image.Image:
+    img = canvas(32, 32)
+    d = ImageDraw.Draw(img)
+    crystal = PAL["cyan"] if kind == "blue" else PAL["green"] if kind == "green" else PAL["violet"]
+    d.rectangle((2, 27, 29, 31), fill=PAL["grass_dark"])
+    for x, h in [(5, 10), (9, 14), (24, 12), (28, 9)]:
+        d.rectangle((x, 27 - h, x + 1, 27), fill=PAL["leaf_mid"])
+        d.rectangle((x - 1, 25 - h, x + 2, 28 - h), fill=PAL["white"] if x % 2 else PAL["pink"])
+    d.polygon([(16, 5), (23, 16), (16, 28), (9, 16)], fill=PAL["outline"])
+    d.polygon([(16, 7), (21, 16), (16, 25), (11, 16)], fill=crystal)
+    d.rectangle((14, 10, 18, 12), fill=PAL["white"])
+    return img
+
+
+def skeleton_marker() -> Image.Image:
+    img = canvas(32, 48)
+    d = ImageDraw.Draw(img)
+    d.rectangle((6, 42, 26, 47), fill=PAL["stone_deep"])
+    d.rectangle((9, 36, 23, 43), fill=rgba("#4c5e78"))
+    d.rectangle((14, 13, 18, 37), fill=rgba("#d8d0bd"))
+    d.rectangle((10, 20, 22, 22), fill=rgba("#d8d0bd"))
+    d.rectangle((9, 6, 23, 18), fill=PAL["outline"])
+    d.rectangle((11, 7, 21, 17), fill=rgba("#e7ddc8"))
+    d.rectangle((13, 11, 15, 13), fill=PAL["ink"])
+    d.rectangle((18, 11, 20, 13), fill=PAL["ink"])
+    d.rectangle((6, 25, 10, 36), fill=rgba("#d8d0bd"))
+    d.rectangle((22, 25, 26, 36), fill=rgba("#d8d0bd"))
+    return img
+
+
+def snow_brazier(kind: str = "gold") -> Image.Image:
+    img = canvas(28, 36)
+    d = ImageDraw.Draw(img)
+    flame = PAL["gold_light"] if kind == "gold" else PAL["cyan"] if kind == "blue" else PAL["green"]
+    d.rectangle((8, 22, 20, 33), fill=PAL["outline"])
+    d.rectangle((10, 21, 18, 31), fill=rgba("#4c5e78"))
+    d.rectangle((6, 31, 22, 35), fill=PAL["stone_deep"])
+    d.rectangle((6, 19, 22, 23), fill=PAL["stone_light"])
+    d.polygon([(14, 4), (21, 16), (14, 22), (7, 16)], fill=flame)
+    d.polygon([(14, 8), (18, 16), (14, 20), (10, 16)], fill=PAL["white"])
+    d.rectangle((5, 18, 23, 19), fill=PAL["snow"])
+    return img
+
+
+def campfire_prop(kind: str = "warm") -> Image.Image:
+    img = canvas(36, 28)
+    d = ImageDraw.Draw(img)
+    d.rectangle((7, 21, 29, 25), fill=PAL["shadow"])
+    d.line((7, 23, 17, 18, 29, 23), fill=PAL["bark_dark"], width=3)
+    d.line((8, 20, 19, 24, 28, 19), fill=PAL["bark"], width=2)
+    flame = PAL["cyan"] if kind == "blue" else PAL["green"] if kind == "green" else PAL["orange"]
+    core = PAL["white"] if kind != "warm" else PAL["gold_light"]
+    d.polygon([(18, 4), (26, 17), (18, 24), (10, 17)], fill=flame)
+    d.polygon([(18, 9), (22, 17), (18, 22), (14, 17)], fill=core)
+    return img
+
+
+def tripod_prop(kind: str = "red") -> Image.Image:
+    img = canvas(36, 40)
+    d = ImageDraw.Draw(img)
+    cloth = PAL["red"] if kind == "red" else PAL["blue"] if kind == "blue" else PAL["violet"]
+    d.line((18, 4, 7, 37), fill=PAL["bark_dark"], width=3)
+    d.line((18, 4, 29, 37), fill=PAL["bark_dark"], width=3)
+    d.line((18, 4, 18, 37), fill=PAL["bark"], width=2)
+    d.polygon([(18, 8), (28, 30), (8, 30)], fill=PAL["outline"])
+    d.polygon([(18, 10), (25, 29), (11, 29)], fill=cloth)
+    d.rectangle((15, 20, 21, 21), fill=PAL["gold_light"])
+    d.rectangle((16, 12, 20, 14), fill=PAL["gold_light"])
+    return img
+
+
+def rope_gate_prop(kind: str = "wood") -> Image.Image:
+    img = canvas(56, 36)
+    d = ImageDraw.Draw(img)
+    post = PAL["bark"] if kind == "wood" else rgba("#8796a9")
+    rope = PAL["bark_dark"] if kind == "wood" else PAL["cyan"]
+    for x in (4, 48):
+        d.rectangle((x, 7, x + 5, 35), fill=PAL["outline"])
+        d.rectangle((x + 1, 6, x + 4, 34), fill=post)
+        d.rectangle((x - 2, 4, x + 7, 8), fill=PAL["gold_dark"])
+    d.line((8, 15, 28, 21, 51, 15), fill=rope, width=2)
+    d.line((8, 24, 28, 30, 51, 24), fill=rope, width=2)
+    if kind == "lit":
+        for x in (16, 40):
+            d.rectangle((x, 16, x + 5, 23), fill=PAL["outline"])
+            d.rectangle((x + 1, 17, x + 4, 22), fill=PAL["gold_light"])
+    return img
+
+
+def crate_stack_prop(kind: str = "wood") -> Image.Image:
+    img = canvas(40, 36)
+    d = ImageDraw.Draw(img)
+    trim = PAL["cyan"] if kind == "rune" else PAL["gold_dark"]
+    boxes = [(3, 15, 18, 31), (19, 15, 36, 31), (11, 3, 28, 19)]
+    for box in boxes:
+        x0, y0, x1, y1 = box
+        d.rectangle((x0, y0, x1, y1), fill=PAL["outline"])
+        d.rectangle((x0 + 2, y0 + 2, x1 - 2, y1 - 2), fill=PAL["bark"])
+        d.line((x0 + 3, y0 + 3, x1 - 3, y1 - 3), fill=PAL["bark_dark"], width=1)
+        d.rectangle((x0 + 5, y0 + 6, x1 - 5, y0 + 7), fill=trim)
+    return img
+
+
+def barrel_stack_prop(kind: str = "wood") -> Image.Image:
+    img = canvas(36, 32)
+    d = ImageDraw.Draw(img)
+    band = PAL["stone_mid"] if kind == "wood" else PAL["cyan"]
+    for x, y in [(3, 9), (17, 9), (10, 2)]:
+        d.ellipse((x, y, x + 15, y + 6), fill=PAL["outline"])
+        d.rectangle((x, y + 3, x + 15, y + 23), fill=PAL["outline"])
+        d.rectangle((x + 2, y + 4, x + 13, y + 22), fill=PAL["bark"])
+        d.rectangle((x + 1, y + 10, x + 14, y + 12), fill=band)
+        d.rectangle((x + 1, y + 18, x + 14, y + 20), fill=band)
+    return img
+
+
+def crystal_totem_prop(kind: str = "blue") -> Image.Image:
+    img = canvas(32, 52)
+    d = ImageDraw.Draw(img)
+    crystal = PAL["cyan"] if kind == "blue" else PAL["violet"] if kind == "purple" else PAL["green"]
+    d.rectangle((10, 30, 22, 48), fill=PAL["stone_deep"])
+    d.rectangle((12, 28, 20, 46), fill=rgba("#4c5e78"))
+    d.rectangle((6, 46, 26, 51), fill=PAL["stone_deep"])
+    d.polygon([(16, 3), (26, 17), (16, 34), (6, 17)], fill=PAL["outline"])
+    d.polygon([(16, 5), (24, 17), (16, 31), (8, 17)], fill=crystal)
+    d.rectangle((13, 9, 19, 11), fill=PAL["white"])
+    d.ellipse((5, 12, 27, 34), outline=crystal, width=1)
+    return img
+
+
+def statue_prop(kind: str = "stone") -> Image.Image:
+    img = canvas(36, 56)
+    d = ImageDraw.Draw(img)
+    stone = rgba("#8796a9") if kind == "stone" else PAL["snow_shadow"]
+    accent = PAL["cyan"] if kind == "snow" else PAL["gold_light"]
+    d.rectangle((7, 49, 29, 55), fill=PAL["stone_deep"])
+    d.rectangle((10, 43, 26, 50), fill=stone)
+    d.rectangle((14, 18, 22, 43), fill=PAL["outline"])
+    d.rectangle((15, 19, 21, 41), fill=stone)
+    d.rectangle((9, 25, 15, 38), fill=PAL["outline"])
+    d.rectangle((21, 25, 27, 38), fill=PAL["outline"])
+    d.rectangle((12, 7, 24, 19), fill=PAL["outline"])
+    d.rectangle((14, 8, 22, 18), fill=stone)
+    d.rectangle((16, 12, 20, 13), fill=accent)
+    if kind == "snow":
+        d.rectangle((10, 6, 25, 8), fill=PAL["snow"])
+        d.rectangle((8, 43, 28, 45), fill=PAL["snow"])
+    return img
+
+
+def small_shrine_prop(kind: str = "wood") -> Image.Image:
+    img = canvas(36, 42)
+    d = ImageDraw.Draw(img)
+    roof = PAL["bark_dark"] if kind == "wood" else rgba("#8796a9")
+    glow = PAL["gold_light"] if kind == "wood" else PAL["cyan"] if kind == "snow" else PAL["violet"]
+    d.rectangle((8, 17, 28, 38), fill=PAL["outline"])
+    d.rectangle((10, 18, 26, 36), fill=PAL["bark"] if kind == "wood" else rgba("#4c5e78"))
+    d.polygon([(5, 17), (18, 6), (31, 17)], fill=PAL["outline"])
+    d.polygon([(8, 16), (18, 8), (28, 16)], fill=roof)
+    d.rectangle((15, 23, 21, 33), fill=glow)
+    d.rectangle((6, 36, 30, 41), fill=PAL["stone_deep"])
+    if kind == "snow":
+        d.rectangle((7, 14, 29, 16), fill=PAL["snow"])
+    return img
+
+
+def snow_lamp_stand_prop(kind: str = "blue") -> Image.Image:
+    img = canvas(24, 48)
+    d = ImageDraw.Draw(img)
+    glow = PAL["cyan"] if kind == "blue" else PAL["gold_light"] if kind == "gold" else PAL["violet"]
+    d.rectangle((10, 20, 14, 44), fill=PAL["outline"])
+    d.rectangle((11, 20, 13, 43), fill=rgba("#8796a9"))
+    d.rectangle((5, 42, 19, 47), fill=PAL["stone_deep"])
+    d.rectangle((4, 17, 20, 21), fill=PAL["snow"])
+    d.rectangle((6, 6, 18, 19), fill=PAL["outline"])
+    d.rectangle((8, 8, 16, 17), fill=glow)
+    d.rectangle((10, 9, 14, 14), fill=PAL["white"])
+    d.rectangle((8, 3, 16, 6), fill=PAL["stone_light"])
+    return img
+
+
+def flower_post_prop(kind: str = "white") -> Image.Image:
+    img = canvas(24, 36)
+    d = ImageDraw.Draw(img)
+    flower = PAL["white"] if kind == "white" else PAL["pink"] if kind == "pink" else PAL["cyan"]
+    d.rectangle((11, 11, 13, 34), fill=PAL["bark_dark"])
+    d.rectangle((6, 21, 18, 24), fill=PAL["gold_dark"])
+    for x, h in [(4, 10), (8, 14), (16, 13), (20, 9)]:
+        d.rectangle((x, 34 - h, x + 1, 34), fill=PAL["leaf_mid"])
+        d.rectangle((x - 2, 32 - h, x + 2, 36 - h), fill=flower)
+    d.polygon([(12, 3), (17, 10), (12, 17), (7, 10)], fill=PAL["outline"])
+    d.polygon([(12, 5), (15, 10), (12, 15), (9, 10)], fill=flower)
     return img
 
 
@@ -717,7 +2008,22 @@ def mountain_panorama(w: int, h: int) -> Image.Image:
         resized = source.resize((max(1, round(source.width * scale)), max(1, round(source.height * scale))), Image.Resampling.LANCZOS)
         left = max(0, (resized.width - w) // 2)
         top = max(0, (resized.height - h) // 2)
-        return resized.crop((left, top, left + w, top + h))
+        cropped = resized.crop((left, top, left + w, top + h))
+        low = cropped.resize((max(1, w // 2), max(1, h // 2)), Image.Resampling.BOX)
+        cropped = low.resize((w, h), Image.Resampling.NEAREST)
+        px = cropped.load()
+        for yy in range(h):
+            depth = yy / max(1, h - 1)
+            for xx in range(w):
+                r, g, b, a = px[xx, yy]
+                avg = (r + g + b) // 3
+                r = clamp_channel(int((avg + (r - avg) * 0.82) * (0.58 + depth * 0.12)))
+                g = clamp_channel(int((avg + (g - avg) * 0.86) * (0.62 + depth * 0.10)))
+                b = clamp_channel(int((avg + (b - avg) * 1.04) * (0.76 + depth * 0.08)))
+                if (xx * 13 + yy * 17) % 29 == 0:
+                    r, g, b = max(0, r - 18), max(0, g - 18), max(0, b - 18)
+                px[xx, yy] = (r, g, b, a)
+        return cropped
 
     img = canvas(w, h)
     d = ImageDraw.Draw(img)
@@ -850,27 +2156,23 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/clouds/background_cloud_huge.png", cloud(192, 64)),
         ("environment/clouds/midground_cloud.png", cloud(112, 40)),
         ("environment/clouds/fast_cloud_streak.png", cloud(224, 32, flat=True)),
-        ("environment/platforms/floating_island_1.png", floating_island()),
-        ("environment/platforms/moss_platform_1.png", platform(32, 18, "moss")),
-        ("environment/platforms/moss_platform_cracked_1.png", platform(32, 18, "cracked")),
-        ("environment/platforms/moss_platform_overhang_1.png", platform(32, 18, "roots")),
-        ("environment/platforms/moss_platform_flowers_1.png", platform(32, 18, "flowers")),
-        ("environment/platforms/moss_platform_roots_1.png", platform(32, 18, "roots")),
-        ("environment/platforms/moss_platform_runes_1.png", platform(32, 18, "runes")),
-        ("environment/platforms/stone_ledge_1.png", platform(48, 18, "snow")),
-        ("environment/platforms/grass_bridge_1.png", platform(64, 18, "flowers")),
-        ("environment/platformVariants/green_platform.png", platform(32, 18, "moss")),
-        ("environment/platformVariants/cloud_ridge_platform.png", platform(32, 18, "snow")),
-        ("environment/platformVariants/snow_platform.png", platform(32, 18, "ice")),
-        ("environment/platformVariants/frozen_platform.png", platform_variant("floating_snow")),
-        ("environment/platformVariants/summit_platform.png", platform(32, 18, "summit")),
-        ("environment/platformVariants/tall_pillar.png", platform_variant("pillar")),
-        ("environment/platformVariants/broken_cliff.png", platform_variant("cliff")),
-        ("environment/platformVariants/crumbling_platform.png", platform(32, 18, "crumble")),
-        ("environment/terrainTiles/stone_grass_tile.png", platform(16, 16, "moss").crop((0, 0, 16, 16))),
-        ("environment/snowTiles/snow_cap_tile.png", platform(16, 16, "snow").crop((0, 0, 16, 16))),
-        ("environment/mossTiles/mossy_stone_tile.png", platform(16, 16, "roots").crop((0, 0, 16, 16))),
-        ("environment/ruinTiles/rune_stone_tile.png", platform(16, 16, "runes").crop((0, 0, 16, 16))),
+        *platform_component_assets("platforms", "moss"),
+        *platform_component_assets("platforms", "stone"),
+        *platform_component_assets("platformVariants", "snow"),
+        *platform_component_assets("platformVariants", "ice"),
+        *platform_component_assets("platformVariants", "summit"),
+        *platform_component_assets("platformVariants", "crumble"),
+        ("environment/terrainTiles/stone_grass_tile.png", tile_cluster("moss").crop((0, 0, 16, 16))),
+        ("environment/snowTiles/snow_cap_tile.png", tile_cluster("snow").crop((0, 0, 16, 16))),
+        ("environment/mossTiles/mossy_stone_tile.png", tile_cluster("moss").crop((16, 0, 32, 16))),
+        ("environment/ruinTiles/rune_stone_tile.png", tile_cluster("summit").crop((0, 0, 16, 16))),
+        ("environment/sheetElements/moss_tile_cluster.png", tile_cluster("moss")),
+        ("environment/sheetElements/stone_tile_cluster.png", tile_cluster("stone")),
+        ("environment/sheetElements/snow_tile_cluster.png", tile_cluster("snow")),
+        ("environment/sheetElements/summit_tile_cluster.png", tile_cluster("summit")),
+        ("environment/sheetElements/chain_hanging_long.png", hanging_connector("chain")),
+        ("environment/sheetElements/ladder_hanging_long.png", hanging_connector("ladder")),
+        ("environment/sheetElements/ice_hanging_column.png", hanging_connector("ice")),
         ("environment/vegetation/grass_clump_1.png", grass_clump()),
         ("environment/vegetation/flower_patch_1.png", flower_patch()),
         ("environment/vegetation/leaf_cluster_1.png", leaf_cluster()),
@@ -881,6 +2183,15 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/vegetation/tree_dead_1.png", tree("dead")),
         ("environment/pineTrees/alpine_pine.png", tree("pine")),
         ("environment/pineTrees/wind_bent_pine.png", snow_tree("bent")),
+        ("environment/pineTrees/round_canopy_tree.png", pixel_tree_variant("round_canopy")),
+        ("environment/pineTrees/tall_canopy_tree.png", pixel_tree_variant("tall_canopy")),
+        ("environment/pineTrees/forked_oak_tree.png", pixel_tree_variant("forked_oak")),
+        ("environment/pineTrees/small_round_tree.png", pixel_tree_variant("small_round")),
+        ("environment/pineTrees/sapling_pine_tree.png", pixel_tree_variant("sapling_pine")),
+        ("environment/pineTrees/dead_branch_tree.png", pixel_tree_variant("dead_branch")),
+        ("environment/pineTrees/wind_bent_leaf_tree.png", pixel_tree_variant("wind_bent_leaf")),
+        ("environment/pineTrees/wide_bush_tree.png", pixel_tree_variant("wide_bush_tree")),
+        ("environment/pineTrees/autumn_block_tree.png", pixel_tree_variant("autumn_block")),
         ("environment/snowTrees/snow_pine.png", snow_tree("snow")),
         ("environment/snowTrees/frosted_bent_pine.png", snow_tree("bent")),
         ("environment/vegetation/stump_1.png", stump()),
@@ -892,25 +2203,104 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/rocks/rock_cluster_plain_1.png", rock_cluster("plain")),
         ("environment/rocks/rock_cluster_moss_1.png", rock_cluster("moss")),
         ("environment/rocks/rock_spire_1.png", rock_cluster("tall")),
+        ("environment/rocks/rock_single_small_1.png", rock_cluster("small")),
+        ("environment/rocks/rock_single_medium_1.png", rock_cluster("medium")),
+        ("environment/rocks/rock_single_large_1.png", rock_cluster("large")),
+        ("environment/rocks/rock_slab_flat_1.png", rock_cluster("slab")),
+        ("environment/rocks/rock_stack_plain_1.png", rock_cluster("stack")),
+        ("environment/rocks/rock_stack_snow_1.png", rock_cluster("stack_snow")),
+        ("environment/rocks/rock_stack_moss_1.png", rock_cluster("stack_moss")),
+        ("environment/rocks/rock_spire_snow_1.png", rock_cluster("spire_snow")),
+        ("environment/rocks/rock_spire_moss_1.png", rock_cluster("spire_moss")),
+        ("environment/rocks/rock_rubble_small_1.png", rock_cluster("rubble")),
+        ("environment/rocks/rock_rubble_wall_1.png", rock_cluster("rubble_wall")),
+        ("environment/rocks/rock_moss_boulder_large_1.png", rock_cluster("moss_boulder_large")),
+        ("environment/rocks/rock_moss_boulder_small_1.png", rock_cluster("moss_boulder_small")),
         ("environment/flora/reed_grass_wheat_1.png", reed_grass("wheat")),
         ("environment/flora/reed_grass_yellow_1.png", reed_grass("yellow")),
         ("environment/flora/flower_pink_1.png", reed_grass("pink")),
         ("environment/flora/wildflower_mixed_1.png", wildflower_patch("mixed")),
         ("environment/flora/wildflower_pink_1.png", wildflower_patch("pink")),
         ("environment/flora/wildflower_yellow_1.png", wildflower_patch("yellow")),
-        ("environment/hazards/spikes_1.png", spikes()),
-        ("environment/hazards/crystal_spikes_1.png", crystal_spikes()),
+        ("environment/hazards/spikes_1.png", spikes("stone")),
+        ("environment/hazards/stone_spikes_1.png", spikes("stone")),
+        ("environment/hazards/ice_spikes_1.png", spikes("ice")),
+        ("environment/hazards/summit_spikes_1.png", spikes("summit")),
+        ("environment/hazards/crystal_spikes_1.png", crystal_spikes("blue")),
+        ("environment/hazards/crystal_spikes_blue_1.png", crystal_spikes("blue")),
+        ("environment/hazards/crystal_spikes_green_1.png", crystal_spikes("green")),
+        ("environment/hazards/crystal_spikes_purple_1.png", crystal_spikes("purple")),
         ("environment/hazards/thorn_vine_1.png", thorn_vine()),
-        ("environment/hazards/falling_icicle_1.png", icicle()),
-        ("environment/hazards/wind_zone_1.png", wind_ribbon()),
-        ("environment/hazards/lightning_1.png", lightning_bolt()),
-        ("environment/hazards/rolling_boulder_1.png", rolling_boulder()),
+        ("environment/hazards/falling_icicle_1.png", icicle("single")),
+        ("environment/hazards/falling_icicles_cluster_1.png", icicle("cluster")),
+        ("environment/hazards/wind_zone_1.png", wind_ribbon("ice")),
+        ("environment/hazards/magic_wind_purple_1.png", wind_ribbon("purple")),
+        ("environment/hazards/magic_wind_green_1.png", wind_ribbon("green")),
+        ("environment/hazards/lightning_1.png", lightning_bolt("gold")),
+        ("environment/hazards/lightning_blue_1.png", lightning_bolt("blue")),
+        ("environment/hazards/lightning_purple_1.png", lightning_bolt("purple")),
+        ("environment/hazards/rolling_boulder_1.png", rolling_boulder("plain")),
+        ("environment/hazards/rolling_boulder_rune_1.png", rolling_boulder("rune")),
+        ("environment/hazards/spike_boulder_1.png", spike_boulder()),
+        ("environment/hazards/spike_machine_1.png", spike_machine()),
+        ("environment/hazards/spike_ball_1.png", spike_ball()),
+        ("environment/hazards/magic_arc_purple_1.png", magic_arc("purple")),
+        ("environment/hazards/magic_arc_blue_1.png", magic_arc("blue")),
+        ("environment/hazards/rune_trap_green_1.png", rune_trap("green")),
+        ("environment/hazards/rune_trap_gold_1.png", rune_trap("gold")),
         ("environment/lights/lantern_cyan_1.png", lantern(PAL["cyan"])),
         ("environment/lights/lantern_gold_1.png", lantern(PAL["gold_light"])),
         ("environment/lights/torch_1.png", torch()),
         ("environment/lights/lamp_post_1.png", lantern(PAL["gold_light"], post=True)),
         ("environment/lanterns/wood_lantern.png", lantern(PAL["gold_light"])),
         ("environment/lanterns/crystal_lantern.png", lantern(PAL["cyan"])),
+        ("environment/decorations/banner_blue_large.png", banner_stand(PAL["blue"], "rune")),
+        ("environment/decorations/banner_gold_large.png", banner_stand(PAL["gold_light"], "crown")),
+        ("environment/decorations/banner_green_large.png", banner_stand(PAL["green"], "rune")),
+        ("environment/decorations/hanging_lantern_blue.png", hanging_lantern("blue")),
+        ("environment/decorations/hanging_lantern_gold.png", hanging_lantern("gold")),
+        ("environment/decorations/hanging_lantern_green.png", hanging_lantern("green")),
+        ("environment/decorations/pedestal_lamp_blue.png", pedestal_lamp("blue")),
+        ("environment/decorations/pedestal_lamp_green.png", pedestal_lamp("green")),
+        ("environment/decorations/pedestal_lamp_gold.png", pedestal_lamp("gold")),
+        ("environment/decorations/sign_board_wood.png", sign_board("wood")),
+        ("environment/decorations/sign_board_rune.png", sign_board("rune")),
+        ("environment/decorations/rope_posts_plain.png", rope_posts("plain")),
+        ("environment/decorations/rope_posts_lanterns.png", rope_posts("lanterns")),
+        ("environment/decorations/flower_crystal_blue.png", flower_crystal_cluster("blue")),
+        ("environment/decorations/flower_crystal_green.png", flower_crystal_cluster("green")),
+        ("environment/decorations/flower_crystal_purple.png", flower_crystal_cluster("purple")),
+        ("environment/decorations/skeleton_marker.png", skeleton_marker()),
+        ("environment/decorations/snow_brazier_gold.png", snow_brazier("gold")),
+        ("environment/decorations/snow_brazier_blue.png", snow_brazier("blue")),
+        ("environment/decorations/snow_brazier_green.png", snow_brazier("green")),
+        ("environment/decorations/campfire_warm.png", campfire_prop("warm")),
+        ("environment/decorations/campfire_blue.png", campfire_prop("blue")),
+        ("environment/decorations/campfire_green.png", campfire_prop("green")),
+        ("environment/decorations/tripod_red.png", tripod_prop("red")),
+        ("environment/decorations/tripod_blue.png", tripod_prop("blue")),
+        ("environment/decorations/tripod_purple.png", tripod_prop("purple")),
+        ("environment/decorations/rope_gate_wood.png", rope_gate_prop("wood")),
+        ("environment/decorations/rope_gate_lit.png", rope_gate_prop("lit")),
+        ("environment/decorations/rope_gate_ice.png", rope_gate_prop("ice")),
+        ("environment/decorations/crate_stack_wood.png", crate_stack_prop("wood")),
+        ("environment/decorations/crate_stack_rune.png", crate_stack_prop("rune")),
+        ("environment/decorations/barrel_stack_wood.png", barrel_stack_prop("wood")),
+        ("environment/decorations/barrel_stack_rune.png", barrel_stack_prop("rune")),
+        ("environment/decorations/crystal_totem_blue.png", crystal_totem_prop("blue")),
+        ("environment/decorations/crystal_totem_green.png", crystal_totem_prop("green")),
+        ("environment/decorations/crystal_totem_purple.png", crystal_totem_prop("purple")),
+        ("environment/decorations/statue_stone.png", statue_prop("stone")),
+        ("environment/decorations/statue_snow.png", statue_prop("snow")),
+        ("environment/decorations/small_shrine_wood.png", small_shrine_prop("wood")),
+        ("environment/decorations/small_shrine_snow.png", small_shrine_prop("snow")),
+        ("environment/decorations/small_shrine_purple.png", small_shrine_prop("purple")),
+        ("environment/decorations/snow_lamp_blue.png", snow_lamp_stand_prop("blue")),
+        ("environment/decorations/snow_lamp_gold.png", snow_lamp_stand_prop("gold")),
+        ("environment/decorations/snow_lamp_purple.png", snow_lamp_stand_prop("purple")),
+        ("environment/decorations/flower_post_white.png", flower_post_prop("white")),
+        ("environment/decorations/flower_post_pink.png", flower_post_prop("pink")),
+        ("environment/decorations/flower_post_blue.png", flower_post_prop("blue")),
         ("environment/structures/signpost_1.png", signpost()),
         ("environment/structures/fence_1.png", fence()),
         ("environment/structures/rope_bridge_1.png", rope_bridge()),
@@ -921,8 +2311,8 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/structures/ruin_column_1.png", ruin_column()),
         ("environment/structures/gate_1.png", gate()),
         ("environment/structures/ladder_1.png", ladder()),
-        ("environment/ladders/frosted_wood_ladder.png", ladder()),
-        ("environment/ladders/climbing_chain.png", climbing_chain()),
+        ("environment/ladders/frosted_wood_ladder.png", hanging_connector("ladder")),
+        ("environment/ladders/climbing_chain.png", hanging_connector("chain")),
         ("environment/structures/banner_red_1.png", banner(PAL["red"])),
         ("environment/structures/banner_blue_1.png", banner(PAL["blue"])),
         ("environment/banners/pine_valley_banner.png", banner(PAL["green"])),
@@ -944,32 +2334,81 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/relicShrines/ancient_beacon_1.png", ancient_beacon()),
         ("environment/relicShrines/jump_pad_1.png", jump_pad()),
         ("environment/enemies/goblin_1.png", enemy("goblin")),
+        ("environment/enemies/goblin_scout_1.png", enemy("goblin_scout")),
+        ("environment/enemies/goblin_chief_1.png", enemy("goblin_chief")),
+        ("environment/enemies/goblin_dark_1.png", enemy("goblin_dark")),
         ("environment/enemies/archer_1.png", enemy("archer")),
+        ("environment/enemies/archer_dark_1.png", enemy("archer_dark")),
+        ("environment/enemies/archer_bone_1.png", enemy("archer_bone")),
         ("environment/enemies/ice_bat_1.png", enemy("ice_bat")),
+        ("environment/enemies/ice_bat_frost_1.png", enemy("ice_bat_frost")),
+        ("environment/enemies/skull_bat_1.png", enemy("skull_bat")),
         ("environment/enemies/skeleton_1.png", enemy("skeleton")),
+        ("environment/enemies/skeleton_dark_1.png", enemy("skeleton_dark")),
+        ("environment/enemies/skeleton_armored_1.png", enemy("skeleton_armored")),
+        ("environment/enemies/skeleton_mage_1.png", enemy("skeleton_mage")),
         ("environment/enemies/yeti_1.png", enemy("yeti")),
+        ("environment/enemies/ice_golem_1.png", enemy("ice_golem")),
+        ("environment/enemies/armored_brute_1.png", enemy("armored_brute")),
         ("environment/enemies/wind_spirit_1.png", enemy("wind_spirit")),
+        ("environment/enemies/portal_blue_1.png", enemy("portal_blue")),
         ("environment/ui/crown_1.png", crown()),
         ("environment/ui/height_arrow_1.png", height_arrow()),
         ("environment/ui/hud_panel_1.png", hud_panel()),
     ]
 
+    for biome in ("pine", "cloud", "snow", "frozen", "summit"):
+        for role in ("cap", "body", "left", "right", "bottom"):
+            assets.append((f"environment/midMountains/{biome}_{role}.png", mid_mountain_tile(biome, role)))
+
     for i, width in enumerate((10, 6, 2, 6), 1):
         assets.append((f"environment/collectibles/coin_spin_frame{i}.png", coin(width)))
     assets.append(("environment/collectibles/coin_1.png", coin(10)))
+    for name, color, glow in [
+        ("coin_gold_1", PAL["gold"], PAL["gold_light"]),
+        ("coin_silver_1", rgba("#cfd8e3"), PAL["white"]),
+        ("coin_copper_1", rgba("#c47a3a"), rgba("#ffd0a0")),
+        ("coin_rune_blue_1", PAL["cyan"], PAL["cyan_light"]),
+        ("coin_rune_purple_1", PAL["violet"], rgba("#e6d8ff")),
+    ]:
+        assets.append((f"environment/collectibles/{name}.png", coin_variant(color, glow)))
     for i, c in enumerate(((PAL["cyan"], PAL["cyan_light"], PAL["cyan_dark"]), (PAL["red"], PAL["orange"], PAL["stone_deep"]), (PAL["green"], PAL["white"], PAL["leaf_dark"]), (PAL["violet"], PAL["white"], PAL["ink"])), 1):
         assets.append((f"environment/collectibles/gem_variant{i}.png", gem(*c)))
+    for name, c in [
+        ("gem_red_1", (PAL["red"], PAL["orange"], PAL["stone_deep"])),
+        ("gem_blue_1", (PAL["cyan"], PAL["cyan_light"], PAL["cyan_dark"])),
+        ("gem_green_1", (PAL["green"], PAL["white"], PAL["leaf_dark"])),
+        ("gem_purple_1", (PAL["violet"], PAL["white"], PAL["ink"])),
+        ("gem_gold_1", (PAL["gold"], PAL["gold_light"], PAL["gold_dark"])),
+    ]:
+        assets.append((f"environment/collectibles/{name}.png", gem(*c)))
     for i in range(4):
         assets.append((f"environment/collectibles/seed_green_frame{i + 1}.png", seed(i)))
         assets.append((f"environment/collectibles/star_shard_frame{i + 1}.png", star_shard(i)))
         assets.append((f"environment/collectibles/relic_pink_frame{i + 1}.png", relic(i)))
+        assets.append((f"environment/collectibles/magic_orb_blue_frame{i + 1}.png", magic_orb(PAL["cyan"], i)))
+        assets.append((f"environment/collectibles/magic_orb_gold_frame{i + 1}.png", magic_orb(PAL["gold_light"], i)))
+        assets.append((f"environment/collectibles/magic_orb_purple_frame{i + 1}.png", magic_orb(PAL["violet"], i)))
+        assets.append((f"environment/collectibles/elemental_burst_fire_frame{i + 1}.png", elemental_burst(PAL["orange"], i)))
+        assets.append((f"environment/collectibles/elemental_burst_ice_frame{i + 1}.png", elemental_burst(PAL["cyan_light"], i)))
+        assets.append((f"environment/collectibles/medallion_green_frame{i + 1}.png", medallion(PAL["green"], i)))
+        assets.append((f"environment/collectibles/medallion_gold_frame{i + 1}.png", medallion(PAL["gold"], i)))
+        assets.append((f"environment/collectibles/relic_pedestal_blue_frame{i + 1}.png", relic_pedestal(PAL["cyan"], i)))
+        assets.append((f"environment/collectibles/relic_pedestal_fire_frame{i + 1}.png", relic_pedestal(PAL["orange"], i)))
     assets.extend([
         ("environment/collectibles/heart_1.png", heart()),
+        ("environment/collectibles/crown_gold_1.png", crown_collectible(PAL["gold"])),
+        ("environment/collectibles/crown_blue_1.png", crown_collectible(PAL["cyan"])),
         ("environment/collectibles/magic_orb_blue_1.png", magic_orb(PAL["cyan"])),
         ("environment/collectibles/magic_orb_gold_1.png", magic_orb(PAL["gold_light"])),
-        ("environment/collectibles/potion_blue_1.png", potion()),
+        ("environment/collectibles/magic_orb_purple_1.png", magic_orb(PAL["violet"])),
+        ("environment/collectibles/potion_blue_1.png", potion(PAL["cyan"])),
+        ("environment/collectibles/potion_red_1.png", potion(PAL["red"])),
+        ("environment/collectibles/potion_gold_1.png", potion(PAL["gold_light"])),
         ("environment/collectibles/exp_badge_1.png", exp_badge()),
         ("environment/collectibles/treasure_chest_1.png", treasure_chest()),
+        ("environment/collectibles/treasure_chest_blue_1.png", treasure_chest("blue")),
+        ("environment/collectibles/treasure_chest_red_1.png", treasure_chest("red")),
     ])
     for name, img in assets:
         save(img, name, manifest)
@@ -996,52 +2435,141 @@ def pebbles() -> Image.Image:
     return img
 
 
+def _rock_colors(variant: str = "plain") -> dict[str, tuple[int, int, int, int]]:
+    if "snow" in variant:
+        return {
+            "outline": rgba("#1a1b2b"),
+            "dark": rgba("#6c6f7f"),
+            "mid": rgba("#b9bbc1"),
+            "light": rgba("#eef1f4"),
+            "hot": rgba("#ffffff"),
+            "crack": rgba("#858897"),
+        }
+    return {
+        "outline": rgba("#1c1d2b"),
+        "dark": rgba("#565966"),
+        "mid": rgba("#8f9098"),
+        "light": rgba("#c7c7cb"),
+        "hot": rgba("#f0efec"),
+        "crack": rgba("#3b3d49"),
+    }
+
+
+def _draw_faceted_rock(
+    d: ImageDraw.ImageDraw,
+    pts: list[tuple[int, int]],
+    colors: dict[str, tuple[int, int, int, int]],
+    *,
+    moss: bool = False,
+    snow: bool = False,
+) -> None:
+    xs = [x for x, _ in pts]
+    ys = [y for _, y in pts]
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+    w = max(1, x1 - x0)
+
+    d.polygon([(x + 1, y + 2) for x, y in pts], fill=colors["outline"])
+    d.polygon(pts, fill=colors["mid"])
+    d.polygon(
+        [(x0 + max(2, w // 9), y0 + 2), (x0 + w // 2, y0 + 1), (x1 - 3, y0 + max(4, (y1 - y0) // 3)), (x0 + w // 3, y0 + max(6, (y1 - y0) // 2))],
+        fill=colors["light"],
+    )
+    d.polygon([(x1 - w // 3, y0 + 6), (x1 - 2, y0 + 10), (x1 - 4, y1 - 3), (x0 + w // 2, y1 - 2)], fill=colors["dark"])
+    d.line((x0 + 4, y0 + 7, x0 + w // 2, y0 + 12, x1 - 5, y1 - 6), fill=colors["crack"], width=2)
+    if snow:
+        d.polygon([(x0 + 2, y0 + 1), (x0 + w // 2, y0), (x1 - 4, y0 + 3), (x1 - 7, y0 + 6), (x0 + 5, y0 + 5)], fill=colors["hot"])
+        d.rectangle((x0 + 5, y0 + 5, x0 + 8, y0 + 8), fill=colors["hot"])
+        d.rectangle((x1 - 10, y0 + 4, x1 - 7, y0 + 7), fill=colors["hot"])
+    if moss:
+        moss_dark = rgba("#315123")
+        moss_light = rgba("#8ead4a")
+        d.rectangle((x0 + 1, y1 - 7, x1 - 2, y1 - 3), fill=moss_dark)
+        d.rectangle((x0 + 3, y1 - 8, x0 + w // 2, y1 - 6), fill=moss_light)
+        for x in (x0 + 4, x0 + w // 2, x1 - 7):
+            d.rectangle((x, y1 - 4, x + 2, y1 + 1), fill=moss_dark)
+
+
 def rock_cluster(variant: str = "plain") -> Image.Image:
-    img = canvas(48, 32)
+    wall_like = variant in {"wall", "rubble_wall"}
+    img = canvas(48, 48 if wall_like else 32)
     d = ImageDraw.Draw(img)
-    dark = rgba("#25263a")
-    mid = rgba("#a9a8ad")
-    light = rgba("#e9e9e6")
-    shade = rgba("#777684")
-    moss = PAL["moss_light"]
-    moss_dark = PAL["moss"]
-    d.rectangle((8, 27, 43, 30), fill=PAL["shadow"])
-    shapes = [
-        [(5, 23), (11, 14), (19, 17), (20, 27), (9, 28)],
-        [(14, 15), (21, 7), (31, 10), (33, 24), (22, 28), (14, 25)],
-        [(28, 18), (38, 12), (45, 19), (42, 28), (30, 28)],
-        [(2, 22), (7, 18), (13, 22), (11, 29), (4, 29)],
-    ]
-    if variant == "tall":
-        shapes = [
-            [(6, 27), (14, 8), (21, 4), (24, 28)],
-            [(20, 28), (31, 2), (39, 14), (42, 29)],
-            [(5, 28), (17, 19), (27, 28)],
+    colors = _rock_colors(variant)
+    moss = "moss" in variant
+    snow = "snow" in variant
+
+    if wall_like:
+        d.rectangle((3, 5, 44, 43), fill=colors["outline"])
+        tile_boxes = [
+            (5, 7, 16, 17), (18, 6, 30, 17), (32, 8, 42, 18),
+            (6, 19, 20, 29), (22, 18, 34, 29), (35, 20, 43, 30),
+            (4, 31, 17, 41), (19, 30, 31, 42), (33, 32, 43, 41),
         ]
+        for i, box in enumerate(tile_boxes):
+            fill = colors["mid"] if i % 3 else colors["dark"]
+            d.rectangle(box, fill=fill)
+            d.rectangle((box[0] + 1, box[1] + 1, box[2] - 3, box[1] + 3), fill=colors["light"])
+        return img
+
+    shadow_width = 18 if variant == "small" else 34 if variant in {"medium", "slab"} else 41
+    d.rectangle(((48 - shadow_width) // 2, 27, (48 + shadow_width) // 2, 30), fill=PAL["shadow"])
+
+    if variant == "small":
+        shapes = [[(15, 24), (20, 14), (30, 13), (35, 20), (32, 28), (19, 28)]]
+    elif variant == "medium":
+        shapes = [[(9, 25), (16, 12), (31, 8), (42, 17), (39, 28), (18, 29)]]
+    elif variant == "large":
+        shapes = [[(5, 26), (12, 12), (25, 5), (39, 10), (46, 20), (40, 29), (13, 29)]]
+    elif variant == "slab":
+        shapes = [[(6, 25), (11, 16), (27, 13), (43, 17), (44, 25), (33, 29), (11, 29)]]
+    elif variant in {"stack", "stack_snow", "stack_moss"}:
+        shapes = [
+            [(5, 24), (12, 16), (22, 18), (21, 29), (8, 29)],
+            [(14, 17), (21, 8), (32, 7), (38, 17), (32, 25), (18, 25)],
+            [(29, 21), (38, 14), (45, 20), (42, 29), (30, 29)],
+            [(3, 22), (8, 18), (14, 23), (11, 29), (4, 29)],
+        ]
+    elif variant in {"tall", "spire", "spire_snow", "spire_moss"}:
+        shapes = [
+            [(6, 28), (15, 10), (22, 3), (25, 28)],
+            [(20, 28), (31, 2), (39, 14), (42, 29)],
+            [(5, 28), (17, 20), (27, 28)],
+        ]
+    elif variant == "rubble":
+        shapes = [
+            [(5, 27), (10, 22), (16, 24), (15, 29), (7, 29)],
+            [(17, 26), (23, 19), (31, 22), (30, 29), (19, 29)],
+            [(32, 27), (37, 22), (44, 24), (42, 29), (33, 29)],
+            [(12, 20), (16, 16), (21, 18), (20, 23), (14, 23)],
+        ]
+    elif variant == "moss_boulder_large":
+        shapes = [[(4, 26), (10, 13), (25, 4), (41, 10), (46, 22), (39, 29), (12, 29)]]
+        moss = True
+    elif variant == "moss_boulder_small":
+        shapes = [[(12, 25), (18, 14), (31, 12), (39, 21), (35, 29), (18, 29)]]
+        moss = True
+    else:
+        shapes = [
+            [(5, 23), (11, 14), (19, 17), (20, 27), (9, 28)],
+            [(14, 15), (21, 7), (31, 10), (33, 24), (22, 28), (14, 25)],
+            [(28, 18), (38, 12), (45, 19), (42, 28), (30, 28)],
+            [(2, 22), (7, 18), (13, 22), (11, 29), (4, 29)],
+        ]
+
     for pts in shapes:
-        d.polygon([(x + 1, y + 2) for x, y in pts], fill=dark)
-        d.polygon(pts, fill=mid)
-        xs = [x for x, _ in pts]
-        ys = [y for _, y in pts]
-        x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
-        d.polygon([(x0 + 2, y0 + 2), (x1 - 5, y0 + 4), (x0 + 5, y0 + 8)], fill=light)
-        d.line((x0 + 5, y0 + 9, x1 - 4, y1 - 5), fill=shade, width=2)
-    if variant == "moss":
-        for box in [(3, 22, 15, 28), (22, 8, 35, 13), (32, 21, 46, 29)]:
-            d.rectangle(box, fill=moss_dark)
-            d.rectangle((box[0] + 1, box[1], box[2] - 2, box[1] + 2), fill=moss)
-        for x, y in [(6, 18), (29, 5), (42, 18)]:
-            d.rectangle((x, y, x + 1, y + 4), fill=moss)
+        _draw_faceted_rock(d, pts, colors, moss=moss, snow=snow)
     return img
 
 
 def stone_cap() -> Image.Image:
     img = canvas(24, 16)
     d = ImageDraw.Draw(img)
-    d.rectangle((4, 11, 21, 14), fill=PAL["shadow"])
-    d.ellipse((3, 5, 21, 13), fill=rgba("#777684"))
-    d.ellipse((5, 3, 20, 10), fill=rgba("#e9e9e6"))
-    d.rectangle((7, 5, 18, 7), fill=rgba("#ffffff"))
+    colors = _rock_colors("snow")
+    d.rectangle((4, 12, 21, 14), fill=PAL["shadow"])
+    d.polygon([(2, 11), (6, 5), (17, 3), (22, 7), (20, 13), (6, 14)], fill=colors["outline"])
+    d.polygon([(3, 10), (7, 5), (17, 4), (21, 7), (19, 12), (6, 13)], fill=colors["mid"])
+    d.polygon([(6, 5), (17, 4), (20, 7), (15, 9), (6, 9)], fill=colors["hot"])
+    d.rectangle((7, 9, 10, 11), fill=colors["light"])
+    d.rectangle((16, 8, 19, 10), fill=colors["light"])
     return img
 
 
@@ -1079,52 +2607,134 @@ def wildflower_patch(kind: str = "mixed") -> Image.Image:
     return img
 
 
-def crystal_spikes() -> Image.Image:
-    img = canvas(24, 24)
+def crystal_spikes(color: str = "blue") -> Image.Image:
+    img = canvas(32, 28)
     d = ImageDraw.Draw(img)
-    for x, h in [(3, 13), (9, 20), (16, 15)]:
-        d.polygon([(x, 22), (x + 3, 22 - h), (x + 7, 22)], fill=PAL["cyan_dark"])
-        d.polygon([(x + 2, 21), (x + 4, 23 - h), (x + 6, 21)], fill=PAL["cyan"])
-        d.line((x + 4, 22 - h, x + 4, 20), fill=PAL["cyan_light"])
+    colors = {
+        "blue": (PAL["cyan_dark"], PAL["cyan"], PAL["cyan_light"]),
+        "green": (rgba("#174a35"), rgba("#48d86f"), rgba("#d8ffe8")),
+        "purple": (rgba("#34205a"), rgba("#9a5aff"), rgba("#e6d8ff")),
+    }[color]
+    d.rectangle((2, 24, 29, 27), fill=rgba("#26354a"))
+    for x, h in [(2, 13), (8, 22), (16, 16), (22, 24)]:
+        d.polygon([(x, 25), (x + 4, 25 - h), (x + 9, 25)], fill=colors[0])
+        d.polygon([(x + 2, 24), (x + 5, 27 - h), (x + 7, 24)], fill=colors[1])
+        d.line((x + 5, 25 - h, x + 5, 21), fill=colors[2])
     return img
 
 
-def icicle() -> Image.Image:
-    img = canvas(16, 32)
+def icicle(kind: str = "single") -> Image.Image:
+    img = canvas(48 if kind == "cluster" else 24, 36)
     d = ImageDraw.Draw(img)
-    d.rectangle((2, 0, 14, 4), fill=PAL["snow"])
-    d.polygon([(4, 3), (8, 31), (12, 3)], fill=PAL["cyan_dark"])
-    d.polygon([(5, 3), (8, 28), (10, 3)], fill=PAL["snow"])
-    d.line((9, 5, 8, 24), fill=PAL["cyan_light"], width=1)
+    width = img.width
+    d.rectangle((0, 0, width - 1, 6), fill=rgba("#26354a"))
+    d.rectangle((1, 0, width - 2, 4), fill=PAL["snow_shadow"])
+    d.rectangle((4, 0, width - 6, 2), fill=PAL["snow"])
+    xs = [(7, 29), (16, 20)] if kind == "single" else [(4, 21), (12, 34), (23, 26), (33, 31), (41, 18)]
+    for x, h in xs:
+        d.polygon([(x, 5), (x + 4, h), (x + 8, 5)], fill=PAL["cyan_dark"])
+        d.polygon([(x + 1, 5), (x + 4, h - 3), (x + 6, 5)], fill=PAL["snow"])
+        d.line((x + 5, 7, x + 4, h - 6), fill=PAL["cyan_light"], width=1)
     return img
 
 
-def rolling_boulder() -> Image.Image:
-    img = canvas(32, 32)
+def rolling_boulder(kind: str = "plain") -> Image.Image:
+    img = canvas(34, 34)
     d = ImageDraw.Draw(img)
-    d.ellipse((2, 4, 29, 30), fill=PAL["stone_deep"])
-    d.ellipse((4, 3, 28, 27), fill=rgba("#9a9aa4"))
-    for box in [(7, 8, 15, 13), (16, 6, 24, 12), (9, 18, 19, 24), (20, 18, 26, 23)]:
-        d.rectangle(box, fill=rgba("#d8d8dc"))
-    d.line((8, 14, 24, 23), fill=rgba("#6f7080"), width=2)
+    body = rgba("#7a808b") if kind == "plain" else rgba("#4f5868")
+    hi = rgba("#cfd4dc") if kind == "plain" else rgba("#9bb8cf")
+    d.ellipse((2, 5, 31, 32), fill=PAL["stone_deep"])
+    d.ellipse((4, 3, 30, 29), fill=body)
+    for box in [(8, 8, 15, 13), (17, 6, 25, 12), (8, 19, 18, 25), (21, 18, 27, 24)]:
+        d.rectangle(box, fill=hi)
+    d.line((8, 15, 25, 24), fill=rgba("#323848"), width=2)
+    d.line((15, 7, 12, 25), fill=rgba("#323848"), width=1)
+    if kind == "rune":
+        d.rectangle((15, 14, 20, 15), fill=PAL["cyan"])
+        d.rectangle((17, 11, 18, 19), fill=PAL["cyan_light"])
     return img
 
 
-def lightning_bolt() -> Image.Image:
-    img = canvas(24, 40)
+def lightning_bolt(color: str = "gold") -> Image.Image:
+    img = canvas(28, 42)
     d = ImageDraw.Draw(img)
-    d.polygon([(13, 0), (4, 20), (12, 18), (8, 39), (21, 13), (13, 15)], fill=PAL["white"])
-    d.polygon([(13, 3), (7, 18), (15, 16), (11, 33), (19, 14), (12, 16)], fill=PAL["gold_light"])
+    bolt = PAL["gold_light"] if color == "gold" else PAL["cyan_light"] if color == "blue" else rgba("#b978ff")
+    core = PAL["white"]
+    d.polygon([(15, 0), (4, 21), (13, 19), (8, 41), (24, 13), (15, 15)], fill=core)
+    d.polygon([(15, 3), (8, 18), (17, 16), (12, 34), (21, 14), (14, 16)], fill=bolt)
     return img
 
 
-def wind_ribbon() -> Image.Image:
+def wind_ribbon(color: str = "ice") -> Image.Image:
     img = canvas(64, 24)
     d = ImageDraw.Draw(img)
+    line = rgba("#d8f6ff", 150) if color == "ice" else rgba("#e8d8ff", 150) if color == "purple" else rgba("#d8ffe0", 150)
     for y, a in [(5, 110), (11, 150), (17, 95)]:
-        d.line((0, y, 18, y - 4, 38, y + 2, 63, y - 2), fill=rgba("#d8f6ff", a), width=2)
+        d.line((0, y, 18, y - 4, 38, y + 2, 63, y - 2), fill=line[:3] + (a,), width=2)
     for x, y in [(12, 4), (44, 12), (55, 18)]:
         d.rectangle((x, y, x + 2, y + 2), fill=PAL["snow"])
+    return img
+
+
+def spike_machine() -> Image.Image:
+    img = canvas(40, 32)
+    d = ImageDraw.Draw(img)
+    d.rectangle((8, 4, 31, 24), fill=PAL["outline"])
+    d.rectangle((11, 6, 28, 22), fill=rgba("#4c5e78"))
+    d.rectangle((18, 0, 21, 31), fill=rgba("#b48a52"))
+    d.rectangle((1, 14, 38, 18), fill=PAL["outline"])
+    d.rectangle((3, 15, 36, 17), fill=rgba("#b48a52"))
+    d.rectangle((16, 12, 23, 18), fill=PAL["gold_light"])
+    for x, y in [(5, 5), (30, 5), (5, 23), (30, 23)]:
+        d.rectangle((x, y, x + 5, y + 5), fill=PAL["outline"])
+        d.rectangle((x + 1, y + 1, x + 4, y + 4), fill=rgba("#cfd4dc"))
+    return img
+
+
+def spike_ball() -> Image.Image:
+    img = canvas(32, 32)
+    d = ImageDraw.Draw(img)
+    cx, cy = 16, 16
+    for x, y in [(16, 1), (16, 31), (1, 16), (31, 16), (5, 5), (27, 5), (5, 27), (27, 27)]:
+        d.line((cx, cy, x, y), fill=rgba("#9ba6b3"), width=2)
+    d.ellipse((6, 6, 26, 26), fill=PAL["outline"])
+    d.ellipse((8, 8, 24, 24), fill=rgba("#59646f"))
+    d.rectangle((12, 10, 18, 12), fill=rgba("#cfd4dc"))
+    return img
+
+
+def spike_boulder() -> Image.Image:
+    img = rolling_boulder("plain")
+    d = ImageDraw.Draw(img)
+    for x, y in [(16, 0), (29, 9), (31, 22), (16, 33), (4, 24), (2, 10)]:
+        d.polygon([(16, 17), (x, y), (max(0, x - 3), min(33, y + 3))], fill=rgba("#cfd4dc"))
+    return img
+
+
+def magic_arc(color: str = "purple") -> Image.Image:
+    img = canvas(64, 24)
+    d = ImageDraw.Draw(img)
+    col = {"purple": rgba("#a45cff"), "blue": PAL["cyan"], "green": rgba("#74ff8d"), "gold": PAL["gold_light"]}[color]
+    hi = {"purple": rgba("#f0d8ff"), "blue": PAL["cyan_light"], "green": rgba("#e2ffe6"), "gold": PAL["white"]}[color]
+    for i in range(0, 64, 8):
+        y = 12 + (4 if (i // 8) % 2 else -4)
+        d.line((i, 12, i + 8, y), fill=col, width=2)
+        d.rectangle((i + 3, y - 1, i + 5, y + 1), fill=hi)
+    return img
+
+
+def rune_trap(color: str = "green") -> Image.Image:
+    img = canvas(40, 32)
+    d = ImageDraw.Draw(img)
+    col = {"green": rgba("#7cff70"), "gold": PAL["gold_light"], "blue": PAL["cyan"], "purple": rgba("#a45cff")}[color]
+    hi = {"green": rgba("#e2ffe6"), "gold": PAL["white"], "blue": PAL["cyan_light"], "purple": rgba("#f0d8ff")}[color]
+    d.ellipse((7, 3, 33, 29), outline=col, width=2)
+    d.ellipse((13, 9, 27, 23), outline=col, width=1)
+    d.line((20, 1, 20, 31), fill=col, width=1)
+    d.line((4, 16, 36, 16), fill=col, width=1)
+    d.rectangle((18, 14, 22, 18), fill=hi)
+    for x, y in [(20, 2), (34, 16), (20, 30), (6, 16)]:
+        d.rectangle((x - 1, y - 1, x + 1, y + 1), fill=hi)
     return img
 
 
@@ -1151,12 +2761,59 @@ def climbing_chain() -> Image.Image:
     return img
 
 
-def magic_orb(color: tuple[int, int, int, int]) -> Image.Image:
+def magic_orb(color: tuple[int, int, int, int], frame: int = 0) -> Image.Image:
     img = canvas(20, 20)
     d = ImageDraw.Draw(img)
-    d.ellipse((2, 2, 17, 17), fill=color[:3] + (82,))
+    d.ellipse((1, 1, 18, 18), fill=color[:3] + (70,))
+    d.ellipse((4, 4, 15, 15), fill=PAL["outline"])
     d.ellipse((5, 5, 14, 14), fill=color)
-    d.rectangle((8, 3, 11, 5), fill=PAL["white"])
+    d.rectangle((8, 3 + frame % 2, 11, 5 + frame % 2), fill=PAL["white"])
+    d.arc((2, 2, 17, 17), 25 + frame * 18, 155 + frame * 18, fill=PAL["white"], width=1)
+    return img
+
+
+def elemental_burst(color: tuple[int, int, int, int], frame: int = 0) -> Image.Image:
+    img = canvas(24, 24)
+    d = ImageDraw.Draw(img)
+    cx = cy = 12
+    for a in range(0, 360, 45):
+        rad = math.radians(a + frame * 12)
+        x = cx + int(math.cos(rad) * 10)
+        y = cy + int(math.sin(rad) * 10)
+        d.line((cx, cy, x, y), fill=color, width=2)
+        d.rectangle((x - 1, y - 1, x + 1, y + 1), fill=PAL["white"])
+    d.ellipse((7, 7, 17, 17), fill=PAL["outline"])
+    d.ellipse((9, 9, 15, 15), fill=color)
+    return img
+
+
+def medallion(color: tuple[int, int, int, int], frame: int = 0) -> Image.Image:
+    img = canvas(24, 24)
+    d = ImageDraw.Draw(img)
+    dark = tuple(max(0, c - 75) for c in color[:3]) + (255,)
+    d.ellipse((3, 4, 21, 22), fill=PAL["outline"])
+    d.ellipse((5, 5, 19, 20), fill=dark)
+    d.ellipse((7, 7, 17, 18), fill=color)
+    d.rectangle((10, 1, 14, 5), fill=PAL["gold_dark"])
+    d.rectangle((8, 11, 16, 12), fill=PAL["white"])
+    d.rectangle((11, 8, 12, 16), fill=PAL["white"])
+    if frame % 2:
+        d.rectangle((5, 4, 8, 6), fill=PAL["white"])
+    return img
+
+
+def relic_pedestal(color: tuple[int, int, int, int], frame: int = 0) -> Image.Image:
+    img = canvas(32, 40)
+    d = ImageDraw.Draw(img)
+    d.rectangle((9, 25, 23, 37), fill=PAL["outline"])
+    d.rectangle((11, 23, 21, 35), fill=rgba("#4c5e78"))
+    d.rectangle((6, 35, 26, 39), fill=PAL["outline"])
+    d.rectangle((8, 33, 24, 36), fill=rgba("#8a95a8"))
+    d.ellipse((6, 15 + frame % 2, 26, 25 + frame % 2), outline=color, width=2)
+    d.ellipse((10, 17 + frame % 2, 22, 23 + frame % 2), outline=PAL["white"], width=1)
+    d.polygon([(16, 3), (24, 12), (16, 22), (8, 12)], fill=PAL["outline"])
+    d.polygon([(16, 5), (22, 12), (16, 20), (10, 12)], fill=color)
+    d.rectangle((14, 8, 18, 10), fill=PAL["white"])
     return img
 
 
@@ -1198,45 +2855,106 @@ def ancient_beacon() -> Image.Image:
 
 
 def enemy(kind: str) -> Image.Image:
-    img = canvas(32, 32)
+    img = canvas(40, 36)
     d = ImageDraw.Draw(img)
-    draw_shadow(d, 7, 28, 18)
-    if kind == "ice_bat":
-        d.polygon([(2, 14), (12, 7), (16, 15), (20, 7), (30, 14), (22, 21), (16, 18), (10, 21)], fill=PAL["outline"])
-        d.polygon([(4, 14), (12, 9), (16, 16), (20, 9), (28, 14), (21, 19), (16, 17), (11, 19)], fill=rgba("#8fb1d4"))
-        d.rectangle((14, 13, 18, 18), fill=PAL["cyan_light"])
-    elif kind == "skeleton":
-        d.rectangle((11, 5, 21, 15), fill=PAL["white"])
-        d.rectangle((13, 16, 19, 25), fill=PAL["white"])
-        d.rectangle((9, 25, 14, 29), fill=PAL["white"])
-        d.rectangle((18, 25, 23, 29), fill=PAL["white"])
-        d.rectangle((13, 9, 15, 11), fill=PAL["ink"])
-        d.rectangle((18, 9, 20, 11), fill=PAL["ink"])
-    elif kind == "yeti":
-        d.rectangle((7, 10, 25, 27), fill=PAL["outline"])
-        d.rectangle((8, 8, 24, 26), fill=PAL["snow"])
-        d.rectangle((11, 5, 21, 13), fill=PAL["snow_shadow"])
-        d.rectangle((12, 11, 14, 13), fill=PAL["ink"])
-        d.rectangle((19, 11, 21, 13), fill=PAL["ink"])
+    draw_shadow(d, 9, 31, 22)
+
+    def small_humanoid(x: int, y: int, skin: tuple[int, int, int, int], armor: tuple[int, int, int, int], hood: tuple[int, int, int, int] | None = None) -> None:
+        d.rectangle((x + 8, y + 14, x + 22, y + 28), fill=PAL["outline"])
+        d.rectangle((x + 10, y + 15, x + 20, y + 27), fill=armor)
+        d.rectangle((x + 10, y + 4, x + 20, y + 14), fill=PAL["outline"])
+        d.rectangle((x + 11, y + 5, x + 19, y + 13), fill=skin)
+        if hood:
+            d.polygon([(x + 8, y + 8), (x + 15, y + 2), (x + 22, y + 8), (x + 20, y + 15), (x + 10, y + 15)], fill=PAL["outline"])
+            d.polygon([(x + 10, y + 8), (x + 15, y + 4), (x + 20, y + 8), (x + 18, y + 13), (x + 12, y + 13)], fill=hood)
+        d.rectangle((x + 12, y + 9, x + 14, y + 11), fill=PAL["ink"])
+        d.rectangle((x + 17, y + 9, x + 19, y + 11), fill=PAL["ink"])
+        d.rectangle((x + 9, y + 27, x + 13, y + 32), fill=PAL["outline"])
+        d.rectangle((x + 17, y + 27, x + 21, y + 32), fill=PAL["outline"])
+        d.rectangle((x + 10, y + 28, x + 12, y + 32), fill=rgba("#2b241e"))
+        d.rectangle((x + 18, y + 28, x + 20, y + 32), fill=rgba("#2b241e"))
+
+    if kind.startswith("goblin"):
+        skin = rgba("#7fb75a") if kind != "goblin_dark" else rgba("#4f7f3d")
+        armor = rgba("#31452f") if kind != "goblin_chief" else rgba("#6b4a2d")
+        small_humanoid(4, 0, skin, armor)
+        d.polygon([(14, 8), (6, 3), (12, 12)], fill=PAL["outline"])
+        d.polygon([(26, 8), (34, 3), (28, 12)], fill=PAL["outline"])
+        d.polygon([(14, 8), (8, 5), (13, 10)], fill=skin)
+        d.polygon([(26, 8), (32, 5), (27, 10)], fill=skin)
+        d.rectangle((8, 19, 15, 21), fill=PAL["outline"])
+        d.rectangle((9, 20, 14, 20), fill=rgba("#c8d6df"))
+        if kind == "goblin_chief":
+            d.rectangle((17, 2, 22, 4), fill=PAL["red"])
+            d.rectangle((19, 0, 20, 5), fill=PAL["gold_light"])
+    elif kind.startswith("archer"):
+        hood = rgba("#313a42") if kind != "archer_bone" else rgba("#d2c8b3")
+        skin = PAL["skin"] if kind != "archer_bone" else rgba("#e4d8bf")
+        armor = rgba("#3d4a3d") if kind != "archer_dark" else rgba("#382d2d")
+        small_humanoid(4, 0, skin, armor, hood)
+        d.arc((25, 7, 38, 28), 255, 100, fill=PAL["outline"], width=3)
+        d.arc((26, 8, 37, 27), 255, 100, fill=PAL["bark"], width=1)
+        d.line((32, 9, 32, 27), fill=PAL["gold_light"], width=1)
+        d.rectangle((24, 18, 37, 19), fill=PAL["gold_light"])
+        if kind == "archer_bone":
+            d.rectangle((12, 10, 14, 12), fill=PAL["ink"])
+            d.rectangle((18, 10, 20, 12), fill=PAL["ink"])
+    elif kind.startswith("skeleton"):
+        bone = rgba("#e7ddc8") if kind != "skeleton_dark" else rgba("#7f858c")
+        d.rectangle((14, 4, 26, 15), fill=PAL["outline"])
+        d.rectangle((15, 5, 25, 14), fill=bone)
+        d.rectangle((17, 9, 19, 11), fill=PAL["ink"])
+        d.rectangle((22, 9, 24, 11), fill=PAL["ink"])
+        d.rectangle((16, 16, 24, 26), fill=bone)
+        d.rectangle((14, 18, 15, 27), fill=bone)
+        d.rectangle((25, 18, 26, 27), fill=bone)
+        d.rectangle((12, 27, 17, 31), fill=bone)
+        d.rectangle((23, 27, 28, 31), fill=bone)
+        if kind == "skeleton_armored":
+            d.rectangle((12, 14, 28, 23), fill=PAL["outline"])
+            d.rectangle((14, 15, 26, 22), fill=rgba("#4c5e78"))
+        if kind == "skeleton_mage":
+            d.rectangle((29, 8, 31, 30), fill=PAL["bark"])
+            d.rectangle((27, 5, 33, 10), fill=PAL["cyan"])
+    elif kind.startswith("ice_bat") or kind == "skull_bat":
+        wing = rgba("#55708d") if kind != "ice_bat_frost" else rgba("#8fb1d4")
+        if kind == "skull_bat":
+            wing = rgba("#4b355d")
+        d.polygon([(1, 14), (11, 6), (17, 15), (20, 10), (23, 15), (29, 6), (39, 14), (30, 24), (22, 20), (18, 20), (10, 24)], fill=PAL["outline"])
+        d.polygon([(4, 14), (11, 9), (17, 17), (20, 12), (23, 17), (29, 9), (36, 14), (29, 21), (22, 18), (18, 18), (11, 21)], fill=wing)
+        if kind == "skull_bat":
+            d.rectangle((15, 11, 25, 20), fill=rgba("#e4d8bf"))
+            d.rectangle((17, 15, 19, 17), fill=PAL["ink"])
+            d.rectangle((22, 15, 24, 17), fill=PAL["ink"])
+        else:
+            d.rectangle((16, 13, 24, 20), fill=PAL["cyan_dark"])
+            d.rectangle((18, 14, 22, 18), fill=PAL["cyan_light"])
+    elif kind in {"yeti", "ice_golem", "armored_brute"}:
+        body = PAL["snow"] if kind == "yeti" else rgba("#8ea2b8") if kind == "ice_golem" else rgba("#4e5868")
+        hi = PAL["snow_shadow"] if kind == "yeti" else PAL["cyan_light"] if kind == "ice_golem" else rgba("#aeb6c2")
+        d.rectangle((7, 13, 33, 30), fill=PAL["outline"])
+        d.rectangle((9, 11, 31, 29), fill=body)
+        d.rectangle((13, 5, 27, 16), fill=PAL["outline"])
+        d.rectangle((14, 6, 26, 15), fill=hi)
+        d.rectangle((15, 12, 17, 14), fill=PAL["ink"])
+        d.rectangle((23, 12, 25, 14), fill=PAL["ink"])
+        d.rectangle((4, 17, 10, 27), fill=PAL["outline"])
+        d.rectangle((30, 17, 36, 27), fill=PAL["outline"])
+        if kind == "ice_golem":
+            d.rectangle((18, 17, 23, 18), fill=PAL["cyan"])
     elif kind == "wind_spirit":
-        d.ellipse((8, 5, 24, 22), fill=rgba("#d8f6ff", 185))
-        d.rectangle((13, 11, 15, 13), fill=PAL["cyan_dark"])
-        d.rectangle((19, 11, 21, 13), fill=PAL["cyan_dark"])
-        d.line((5, 22, 24, 18, 30, 21), fill=PAL["cyan_light"], width=2)
-    elif kind == "archer":
-        d.rectangle((10, 10, 22, 25), fill=PAL["outline"])
-        d.rectangle((12, 12, 20, 24), fill=rgba("#365a3f"))
-        d.rectangle((11, 6, 21, 13), fill=PAL["skin"])
-        d.arc((20, 8, 30, 26), 260, 95, fill=PAL["bark"], width=2)
-        d.line((25, 9, 25, 25), fill=PAL["gold_light"], width=1)
-    else:
-        d.rectangle((9, 10, 23, 26), fill=PAL["outline"])
-        d.rectangle((11, 12, 21, 25), fill=rgba("#6d8c47"))
-        d.rectangle((10, 6, 22, 14), fill=rgba("#87a65a"))
-        d.rectangle((12, 9, 14, 11), fill=PAL["ink"])
-        d.rectangle((19, 9, 21, 11), fill=PAL["ink"])
-        d.polygon([(10, 7), (6, 3), (12, 9)], fill=rgba("#87a65a"))
-        d.polygon([(22, 7), (26, 3), (20, 9)], fill=rgba("#87a65a"))
+        d.ellipse((9, 4, 31, 25), fill=rgba("#d8f6ff", 155))
+        d.ellipse((12, 7, 28, 23), outline=PAL["cyan_light"], width=2)
+        d.rectangle((15, 13, 17, 15), fill=PAL["cyan_dark"])
+        d.rectangle((23, 13, 25, 15), fill=PAL["cyan_dark"])
+        d.line((3, 27, 20, 22, 37, 26), fill=PAL["cyan_light"], width=2)
+    elif kind == "portal_blue":
+        d.ellipse((7, 2, 33, 30), outline=PAL["cyan"], width=3)
+        d.ellipse((12, 7, 28, 25), outline=PAL["cyan_light"], width=2)
+        d.rectangle((18, 0, 21, 33), fill=rgba("#d8f6ff", 130))
+        d.rectangle((4, 14, 36, 17), fill=rgba("#55b6ff", 130))
+        for x, y in [(10, 5), (30, 10), (8, 25), (32, 24)]:
+            d.rectangle((x, y, x + 2, y + 2), fill=PAL["cyan_light"])
     return img
 
 
@@ -1337,13 +3055,13 @@ def heart() -> Image.Image:
     return img
 
 
-def potion() -> Image.Image:
+def potion(color: tuple[int, int, int, int] = PAL["cyan"]) -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
     d.rectangle((6, 1, 10, 4), fill=PAL["stone_light"])
     d.rectangle((5, 4, 11, 13), fill=PAL["outline"])
-    d.rectangle((6, 5, 10, 12), fill=PAL["cyan"])
-    d.rectangle((7, 5, 9, 7), fill=PAL["cyan_light"])
+    d.rectangle((6, 5, 10, 12), fill=color)
+    d.rectangle((7, 5, 9, 7), fill=PAL["white"])
     return img
 
 
@@ -1356,13 +3074,15 @@ def exp_badge() -> Image.Image:
     return img
 
 
-def treasure_chest() -> Image.Image:
+def treasure_chest(kind: str = "gold") -> Image.Image:
     img = canvas(32, 24)
     d = ImageDraw.Draw(img)
+    trim = PAL["gold"] if kind == "gold" else PAL["cyan"] if kind == "blue" else PAL["red"]
+    trim_dark = PAL["gold_dark"] if kind == "gold" else PAL["cyan_dark"] if kind == "blue" else rgba("#7a2530")
     d.rectangle((3, 8, 29, 22), fill=PAL["outline"])
     d.rectangle((5, 10, 27, 20), fill=PAL["bark"])
-    d.rectangle((6, 6, 26, 12), fill=PAL["gold_dark"])
-    d.rectangle((7, 7, 25, 10), fill=PAL["gold"])
+    d.rectangle((6, 6, 26, 12), fill=trim_dark)
+    d.rectangle((7, 7, 25, 10), fill=trim)
     d.rectangle((14, 10, 18, 17), fill=PAL["gold_light"])
     return img
 
@@ -1384,27 +3104,37 @@ def solid_tile() -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
     d.rectangle((0, 0, 15, 15), fill=PAL["stone_deep"])
-    d.rectangle((1, 1, 14, 14), fill=PAL["stone_dark"])
-    d.rectangle((2, 2, 13, 3), fill=PAL["stone_mid"])
-    d.rectangle((3, 8, 12, 9), fill=PAL["outline"])
+    d.rectangle((1, 1, 14, 14), fill=rgba("#252f37"))
+    for x, y, w in [(2, 2, 7), (9, 5, 5), (3, 10, 8), (11, 12, 3)]:
+        d.rectangle((x, y, x + w, y + 1), fill=PAL["stone_mid"])
+    d.line((3, 7, 9, 9, 13, 6), fill=PAL["outline"], width=1)
+    d.point((12, 3), fill=PAL["cyan_dark"])
     return img
 
 
 def wood_tile() -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 3, 15, 12), fill=PAL["bark_dark"])
-    d.rectangle((1, 4, 14, 11), fill=PAL["bark"])
-    d.rectangle((2, 5, 12, 6), fill=PAL["stone_light"])
-    d.rectangle((7, 4, 8, 11), fill=PAL["bark_dark"])
+    d.rectangle((0, 3, 15, 12), fill=PAL["outline"])
+    d.rectangle((1, 4, 14, 11), fill=PAL["bark_dark"])
+    d.rectangle((2, 5, 12, 5), fill=PAL["bark"])
+    d.rectangle((2, 9, 13, 9), fill=rgba("#5d3b23"))
+    d.rectangle((7, 4, 8, 11), fill=PAL["outline"])
+    d.point((4, 7), fill=PAL["orange"])
     return img
 
 
 def write_manifest(manifest: dict[str, dict]) -> None:
+    folders: dict[str, list[str]] = {}
+    for rel in sorted(manifest):
+        folder = str(Path(rel).parent)
+        folders.setdefault(folder, []).append(rel)
     payload = {
         "generatedBy": "tools/generate-separated-assets.py",
         "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
         "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
+        "assetCount": len(manifest),
+        "folders": folders,
         "assets": dict(sorted(manifest.items())),
     }
     (OUT / "manifest.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

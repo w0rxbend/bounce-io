@@ -15,19 +15,41 @@ The project now treats gameplay art as individual transparent PNG files. Do not 
   - `kick_frame1.png` through `kick_frame3.png`
   - `shooting_frame1.png` through `shooting_frame4.png`
   - `lying_dead_frame1.png` through `lying_dead_frame2.png`
+
+The generated multiplayer roster currently uses `character1` through `character8`: warrior, rogue, mage, hunter, then alternate palettes for the same four class silhouettes.
 - `apps/client/public/assets/environment/`
   - `backgrounds/`
+  - `mountainBackgrounds/`
+  - `midMountains/` - 16x16 second-layer mountain connector tiles, not panorama images
+  - `clouds/`
   - `collectibles/`
+  - `crystals/`
+  - `decorations/`
   - `effects/`
+  - `particleEffects/`
+  - `enemies/`
   - `hazards/`
+  - `ladders/`
   - `lights/`
+  - `lanterns/`
   - `platforms/`
+  - `platformVariants/`
   - `rocks/`
   - `flora/`
+  - `banners/`
+  - `relicShrines/`
+  - `ropeBridges/`
   - `structures/`
   - `tiles/`
+  - `terrainTiles/`
+  - `snowTiles/`
+  - `mossTiles/`
+  - `ruinTiles/`
+  - `sheetElements/`
   - `ui/`
   - `vegetation/`
+  - `pineTrees/`
+  - `snowTrees/`
 
 ## Generation
 
@@ -48,3 +70,6 @@ The primary alpine background is sourced from `tools/assets/alpine_mountain_back
 - Nearest-neighbor rendering in PixiJS.
 - No atlas JSON, no tilemap JSON, and no sheet metadata for runtime use.
 - Keep character frames bottom-centered so their feet line up when animated.
+- Keep platform and hazard collision rectangular in code. Decorative PNGs are visual only unless the game explicitly marks their tile as collidable.
+- Build mid-mountain depth from repeatable connector tiles behind platforms. Do not put full mountain panel images in `midMountains/`.
+- Use altitude-specific variants: Pine Valley should lean grass/wood, Cloud Ridge stone/cloud, Snowfall Cliffs snow caps, Frozen Spires ice/sharp rock, and Celestial Summit white-gold ruins with blue crystal accents.

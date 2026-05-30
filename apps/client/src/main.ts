@@ -3,6 +3,7 @@ import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   GAME_VERSION,
+  JUMP_SPEED,
   KICK_ACTIVE_SECONDS,
   KICK_COOLDOWN_SECONDS,
   KICK_RECOVERY_SECONDS,
@@ -15,22 +16,25 @@ import {
   TILE_SIZE,
 } from "@skybound/shared";
 import {
+  collectibleKindForRelicId,
   createMultiChunkTileMap,
   createPlayerState,
   generateVerticalChunk,
+  isPlayerDead,
+  respawnPlayerState,
   stepPlayer,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { GeneratedChunk, PlayerInput, PlayerState, TileKind } from "@skybound/shared";
+import type { CollectibleKind, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, PlayerInput, PlayerState, RelicSpawn, TileKind } from "@skybound/shared";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
 const PAL = {
-  // Sky — warm atmospheric gradient
-  skyGround:    0x4a7040,  // warm forest green-blue near ground
-  skyMid:       0x2a4e88,  // deep warm mid-sky blue
-  skyDeep:      0x18305a,  // darker upper atmosphere
+  // Sky — cold alpine gradient
+  skyGround:    0x4f7fa6,
+  skyMid:       0x2f6fad,
+  skyDeep:      0x1f4d8a,
   skySpace:     0x080e1e,  // near-space deep indigo
   starBright:   0xe8eeff,
   // Distant world
@@ -47,31 +51,31 @@ const PAL = {
   // Atmospheric haze
   mistPale:     0xc8e0e0,
   skyHaze:      0x90c0d8,  // horizon haze
-  // Terrain — warm sandstone & earth tones
-  stoneShadow:  0x28221a,  // warm dark outline shadow
-  stoneDark:    0x504030,  // dark warm stone face
-  stoneMid:     0x907858,  // warm sandstone (replaces cool gray)
-  stoneLight:   0xc8a878,  // light sandstone highlight
-  stoneWorn:    0x6a5840,  // worn stone variant
-  stoneRuin:    0x606858,  // cool worn ruin stone
+  // Terrain — blue-gray mountain stone with snow/moss accents
+  stoneShadow:  0x26354a,
+  stoneDark:    0x36475f,
+  stoneMid:     0x4c5e78,
+  stoneLight:   0x9fb4ca,
+  stoneWorn:    0x6f82a3,
+  stoneRuin:    0x8796a9,
   // Soil & earth
-  soilWarm:     0x7a5030,  // warm topsoil
-  soilDark:     0x402818,  // deep soil underside
-  soilRoot:     0x583a20,  // root / bark
-  // Vegetation — rich & vibrant
-  grassTop:     0x90d838,  // bright fresh grass
-  grassDark:    0x3a7818,  // grass shadow / base
+  soilWarm:     0x6b4a31,
+  soilDark:     0x332618,
+  soilRoot:     0x4d3524,
+  // Vegetation — muted alpine greens
+  grassTop:     0x87a65a,
+  grassDark:    0x4f6f3f,
   canopyDark:   0x1a3818,
   canopyMid:    0x2e6840,
   canopyLight:  0x6ac840,  // bright canopy
-  mossGreen:    0x489030,  // moss mid
-  mossBright:   0x68c040,  // bright moss highlight
+  mossGreen:    0x6d8c47,
+  mossBright:   0x9fb76b,
   barkMid:      0x6a4820,
   leafGreen:    0x78d050,  // vegetation leaf
   // Hazard
-  hazardRed:    0xe84030,
-  hazardGlow:   0xffa060,
-  hazardBase:   0x3a1a10,
+  hazardRed:    0xc84a4a,
+  hazardGlow:   0xe9f2ff,
+  hazardBase:   0x2c3748,
   hazardMag:    0xb82060,
   // Coin / relic
   coinGold:     0xf8c830,
@@ -133,13 +137,65 @@ const ASSET_URLS = {
   coinSpin1: "/assets/environment/collectibles/coin_spin_frame2.png",
   coinSpin2: "/assets/environment/collectibles/coin_spin_frame3.png",
   coinSpin3: "/assets/environment/collectibles/coin_spin_frame4.png",
+  coinGold: "/assets/environment/collectibles/coin_gold_1.png",
+  coinSilver: "/assets/environment/collectibles/coin_silver_1.png",
+  coinCopper: "/assets/environment/collectibles/coin_copper_1.png",
+  coinRuneBlue: "/assets/environment/collectibles/coin_rune_blue_1.png",
+  coinRunePurple: "/assets/environment/collectibles/coin_rune_purple_1.png",
   collectibleRing: "/assets/environment/effects/collectible_ring_1.png",
   collectibleSparkle: "/assets/environment/effects/collectible_sparkle_1.png",
+  decorBannerBlue: "/assets/environment/decorations/banner_blue_large.png",
+  decorBannerGold: "/assets/environment/decorations/banner_gold_large.png",
+  decorBannerGreen: "/assets/environment/decorations/banner_green_large.png",
+  decorLanternBlue: "/assets/environment/decorations/hanging_lantern_blue.png",
+  decorLanternGold: "/assets/environment/decorations/hanging_lantern_gold.png",
+  decorLanternGreen: "/assets/environment/decorations/hanging_lantern_green.png",
+  decorPedestalBlue: "/assets/environment/decorations/pedestal_lamp_blue.png",
+  decorPedestalGreen: "/assets/environment/decorations/pedestal_lamp_green.png",
+  decorPedestalGold: "/assets/environment/decorations/pedestal_lamp_gold.png",
+  decorSignWood: "/assets/environment/decorations/sign_board_wood.png",
+  decorSignRune: "/assets/environment/decorations/sign_board_rune.png",
+  decorRopePosts: "/assets/environment/decorations/rope_posts_plain.png",
+  decorRopeLanterns: "/assets/environment/decorations/rope_posts_lanterns.png",
+  decorFlowerCrystalBlue: "/assets/environment/decorations/flower_crystal_blue.png",
+  decorFlowerCrystalGreen: "/assets/environment/decorations/flower_crystal_green.png",
+  decorFlowerCrystalPurple: "/assets/environment/decorations/flower_crystal_purple.png",
+  decorSkeletonMarker: "/assets/environment/decorations/skeleton_marker.png",
+  decorBrazierGold: "/assets/environment/decorations/snow_brazier_gold.png",
+  decorBrazierBlue: "/assets/environment/decorations/snow_brazier_blue.png",
+  decorBrazierGreen: "/assets/environment/decorations/snow_brazier_green.png",
+  decorCampfireWarm: "/assets/environment/decorations/campfire_warm.png",
+  decorCampfireBlue: "/assets/environment/decorations/campfire_blue.png",
+  decorCampfireGreen: "/assets/environment/decorations/campfire_green.png",
+  decorTripodRed: "/assets/environment/decorations/tripod_red.png",
+  decorTripodBlue: "/assets/environment/decorations/tripod_blue.png",
+  decorTripodPurple: "/assets/environment/decorations/tripod_purple.png",
+  decorRopeGateWood: "/assets/environment/decorations/rope_gate_wood.png",
+  decorRopeGateLit: "/assets/environment/decorations/rope_gate_lit.png",
+  decorRopeGateIce: "/assets/environment/decorations/rope_gate_ice.png",
+  decorCrateStackWood: "/assets/environment/decorations/crate_stack_wood.png",
+  decorCrateStackRune: "/assets/environment/decorations/crate_stack_rune.png",
+  decorBarrelStackWood: "/assets/environment/decorations/barrel_stack_wood.png",
+  decorBarrelStackRune: "/assets/environment/decorations/barrel_stack_rune.png",
+  decorCrystalTotemBlue: "/assets/environment/decorations/crystal_totem_blue.png",
+  decorCrystalTotemGreen: "/assets/environment/decorations/crystal_totem_green.png",
+  decorCrystalTotemPurple: "/assets/environment/decorations/crystal_totem_purple.png",
+  decorStatueStone: "/assets/environment/decorations/statue_stone.png",
+  decorStatueSnow: "/assets/environment/decorations/statue_snow.png",
+  decorSmallShrineWood: "/assets/environment/decorations/small_shrine_wood.png",
+  decorSmallShrineSnow: "/assets/environment/decorations/small_shrine_snow.png",
+  decorSmallShrinePurple: "/assets/environment/decorations/small_shrine_purple.png",
+  decorSnowLampBlue: "/assets/environment/decorations/snow_lamp_blue.png",
+  decorSnowLampGold: "/assets/environment/decorations/snow_lamp_gold.png",
+  decorSnowLampPurple: "/assets/environment/decorations/snow_lamp_purple.png",
+  decorFlowerPostWhite: "/assets/environment/decorations/flower_post_white.png",
+  decorFlowerPostPink: "/assets/environment/decorations/flower_post_pink.png",
+  decorFlowerPostBlue: "/assets/environment/decorations/flower_post_blue.png",
   crown: "/assets/environment/ui/crown_1.png",
   crystalMarker: "/assets/environment/structures/crystal_marker_1.png",
   fence: "/assets/environment/structures/fence_1.png",
   flowerPatch: "/assets/environment/vegetation/flower_patch_1.png",
-  floatingIsland: "/assets/environment/platforms/floating_island_1.png",
+  floatingIsland: "/assets/environment/platforms/platform_moss_top_inner.png",
   grassClump: "/assets/environment/vegetation/grass_clump_1.png",
   hazardSpikes: "/assets/environment/hazards/spikes_1.png",
   heightArrow: "/assets/environment/ui/height_arrow_1.png",
@@ -150,24 +206,65 @@ const ASSET_URLS = {
   gemCyan1: "/assets/environment/collectibles/gem_variant2.png",
   gemCyan2: "/assets/environment/collectibles/gem_variant3.png",
   gemCyan3: "/assets/environment/collectibles/gem_variant4.png",
-  mossPlatformRoots: "/assets/environment/platforms/moss_platform_roots_1.png",
-  mossPlatformRunes: "/assets/environment/platforms/moss_platform_runes_1.png",
-  mossPlatform: "/assets/environment/platforms/moss_platform_1.png",
-  mossPlatformCracked: "/assets/environment/platforms/moss_platform_cracked_1.png",
-  mossPlatformOverhang: "/assets/environment/platforms/moss_platform_overhang_1.png",
-  mossPlatformFlowers: "/assets/environment/platforms/moss_platform_flowers_1.png",
+  gemRed: "/assets/environment/collectibles/gem_red_1.png",
+  gemBlue: "/assets/environment/collectibles/gem_blue_1.png",
+  gemGreen: "/assets/environment/collectibles/gem_green_1.png",
+  gemPurple: "/assets/environment/collectibles/gem_purple_1.png",
+  gemGold: "/assets/environment/collectibles/gem_gold_1.png",
+  heart: "/assets/environment/collectibles/heart_1.png",
+  mossPlatformRoots: "/assets/environment/platforms/platform_moss_bottom_inner.png",
+  mossPlatformRunes: "/assets/environment/platforms/platform_stone_body_inner.png",
+  mossPlatform: "/assets/environment/platforms/platform_moss_top_inner.png",
+  mossPlatformCracked: "/assets/environment/platformVariants/platform_crumble_top_inner.png",
+  mossPlatformOverhang: "/assets/environment/platforms/platform_moss_outer_left.png",
+  mossPlatformFlowers: "/assets/environment/platforms/platform_moss_top_inner.png",
   mushroomCluster: "/assets/environment/vegetation/mushroom_cluster_1.png",
   pebbleCluster: "/assets/environment/vegetation/pebble_cluster_1.png",
   rockCap: "/assets/environment/rocks/stone_cap_1.png",
   rockCluster: "/assets/environment/rocks/rock_cluster_plain_1.png",
   rockClusterMoss: "/assets/environment/rocks/rock_cluster_moss_1.png",
   rockSpire: "/assets/environment/rocks/rock_spire_1.png",
-  snowPlatform: "/assets/environment/platformVariants/snow_platform.png",
-  frozenPlatform: "/assets/environment/platformVariants/frozen_platform.png",
-  summitPlatform: "/assets/environment/platformVariants/summit_platform.png",
-  crumblingPlatform: "/assets/environment/platformVariants/crumbling_platform.png",
-  tallPillar: "/assets/environment/platformVariants/tall_pillar.png",
-  brokenCliff: "/assets/environment/platformVariants/broken_cliff.png",
+  midMountainPineCap: "/assets/environment/midMountains/pine_cap.png",
+  midMountainPineBody: "/assets/environment/midMountains/pine_body.png",
+  midMountainPineLeft: "/assets/environment/midMountains/pine_left.png",
+  midMountainPineRight: "/assets/environment/midMountains/pine_right.png",
+  midMountainPineBottom: "/assets/environment/midMountains/pine_bottom.png",
+  midMountainCloudCap: "/assets/environment/midMountains/cloud_cap.png",
+  midMountainCloudBody: "/assets/environment/midMountains/cloud_body.png",
+  midMountainCloudLeft: "/assets/environment/midMountains/cloud_left.png",
+  midMountainCloudRight: "/assets/environment/midMountains/cloud_right.png",
+  midMountainCloudBottom: "/assets/environment/midMountains/cloud_bottom.png",
+  midMountainSnowCap: "/assets/environment/midMountains/snow_cap.png",
+  midMountainSnowBody: "/assets/environment/midMountains/snow_body.png",
+  midMountainSnowLeft: "/assets/environment/midMountains/snow_left.png",
+  midMountainSnowRight: "/assets/environment/midMountains/snow_right.png",
+  midMountainSnowBottom: "/assets/environment/midMountains/snow_bottom.png",
+  midMountainFrozenCap: "/assets/environment/midMountains/frozen_cap.png",
+  midMountainFrozenBody: "/assets/environment/midMountains/frozen_body.png",
+  midMountainFrozenLeft: "/assets/environment/midMountains/frozen_left.png",
+  midMountainFrozenRight: "/assets/environment/midMountains/frozen_right.png",
+  midMountainFrozenBottom: "/assets/environment/midMountains/frozen_bottom.png",
+  midMountainSummitCap: "/assets/environment/midMountains/summit_cap.png",
+  midMountainSummitBody: "/assets/environment/midMountains/summit_body.png",
+  midMountainSummitLeft: "/assets/environment/midMountains/summit_left.png",
+  midMountainSummitRight: "/assets/environment/midMountains/summit_right.png",
+  midMountainSummitBottom: "/assets/environment/midMountains/summit_bottom.png",
+  snowPlatform: "/assets/environment/platformVariants/platform_snow_top_inner.png",
+  snowIciclePlatform: "/assets/environment/platformVariants/platform_snow_bottom_inner.png",
+  frozenPlatform: "/assets/environment/platformVariants/platform_ice_top_inner.png",
+  iceDarkPlatform: "/assets/environment/platformVariants/platform_ice_body_inner.png",
+  summitPlatform: "/assets/environment/platformVariants/platform_summit_top_inner.png",
+  summitGoldPlatform: "/assets/environment/platformVariants/platform_summit_body_inner.png",
+  crumblingPlatform: "/assets/environment/platformVariants/platform_crumble_top_inner.png",
+  greenTrianglePlatform: "/assets/environment/platforms/platform_moss_bottom_inner.png",
+  mossThinPlatform: "/assets/environment/platforms/platform_moss_top_inner.png",
+  stoneBrokenPlatform: "/assets/environment/platforms/platform_stone_top_inner.png",
+  tallPillar: "/assets/environment/platforms/platform_stone_body_inner.png",
+  brokenCliff: "/assets/environment/platforms/platform_stone_bottom_inner.png",
+  tileClusterMoss: "/assets/environment/sheetElements/moss_tile_cluster.png",
+  tileClusterStone: "/assets/environment/sheetElements/stone_tile_cluster.png",
+  tileClusterSnow: "/assets/environment/sheetElements/snow_tile_cluster.png",
+  tileClusterSummit: "/assets/environment/sheetElements/summit_tile_cluster.png",
   reedGrassWheat: "/assets/environment/flora/reed_grass_wheat_1.png",
   reedGrassYellow: "/assets/environment/flora/reed_grass_yellow_1.png",
   flowerPink: "/assets/environment/flora/flower_pink_1.png",
@@ -177,21 +274,62 @@ const ASSET_URLS = {
   snowTree: "/assets/environment/snowTrees/snow_pine.png",
   bentPine: "/assets/environment/snowTrees/frosted_bent_pine.png",
   fallingIcicle: "/assets/environment/hazards/falling_icicle_1.png",
+  fallingIciclesCluster: "/assets/environment/hazards/falling_icicles_cluster_1.png",
+  stoneSpikes: "/assets/environment/hazards/stone_spikes_1.png",
+  iceSpikes: "/assets/environment/hazards/ice_spikes_1.png",
+  summitSpikes: "/assets/environment/hazards/summit_spikes_1.png",
+  spikeMachine: "/assets/environment/hazards/spike_machine_1.png",
+  spikeBall: "/assets/environment/hazards/spike_ball_1.png",
+  spikeBoulder: "/assets/environment/hazards/spike_boulder_1.png",
+  crystalSpikesBlue: "/assets/environment/hazards/crystal_spikes_blue_1.png",
+  crystalSpikesGreen: "/assets/environment/hazards/crystal_spikes_green_1.png",
+  crystalSpikesPurple: "/assets/environment/hazards/crystal_spikes_purple_1.png",
+  magicArcPurple: "/assets/environment/hazards/magic_arc_purple_1.png",
+  magicArcBlue: "/assets/environment/hazards/magic_arc_blue_1.png",
+  runeTrapGreen: "/assets/environment/hazards/rune_trap_green_1.png",
+  runeTrapGold: "/assets/environment/hazards/rune_trap_gold_1.png",
   windZone: "/assets/environment/hazards/wind_zone_1.png",
+  magicWindPurple: "/assets/environment/hazards/magic_wind_purple_1.png",
+  magicWindGreen: "/assets/environment/hazards/magic_wind_green_1.png",
   lightningHazard: "/assets/environment/hazards/lightning_1.png",
+  lightningBlue: "/assets/environment/hazards/lightning_blue_1.png",
+  lightningPurple: "/assets/environment/hazards/lightning_purple_1.png",
   rollingBoulder: "/assets/environment/hazards/rolling_boulder_1.png",
+  rollingBoulderRune: "/assets/environment/hazards/rolling_boulder_rune_1.png",
   jumpPad: "/assets/environment/relicShrines/jump_pad_1.png",
   climbingChain: "/assets/environment/ladders/climbing_chain.png",
   relicShrine: "/assets/environment/relicShrines/relic_shrine_1.png",
   ancientBeacon: "/assets/environment/relicShrines/ancient_beacon_1.png",
   magicOrbBlue: "/assets/environment/collectibles/magic_orb_blue_1.png",
   magicOrbGold: "/assets/environment/collectibles/magic_orb_gold_1.png",
+  magicOrbPurple: "/assets/environment/collectibles/magic_orb_purple_1.png",
+  crownGold: "/assets/environment/collectibles/crown_gold_1.png",
+  crownBlue: "/assets/environment/collectibles/crown_blue_1.png",
+  potionBlue: "/assets/environment/collectibles/potion_blue_1.png",
+  potionRed: "/assets/environment/collectibles/potion_red_1.png",
+  potionGold: "/assets/environment/collectibles/potion_gold_1.png",
+  treasureChest: "/assets/environment/collectibles/treasure_chest_1.png",
+  treasureChestBlue: "/assets/environment/collectibles/treasure_chest_blue_1.png",
+  treasureChestRed: "/assets/environment/collectibles/treasure_chest_red_1.png",
   enemyGoblin: "/assets/environment/enemies/goblin_1.png",
+  enemyGoblinScout: "/assets/environment/enemies/goblin_scout_1.png",
+  enemyGoblinChief: "/assets/environment/enemies/goblin_chief_1.png",
+  enemyGoblinDark: "/assets/environment/enemies/goblin_dark_1.png",
   enemyArcher: "/assets/environment/enemies/archer_1.png",
+  enemyArcherDark: "/assets/environment/enemies/archer_dark_1.png",
+  enemyArcherBone: "/assets/environment/enemies/archer_bone_1.png",
   enemyIceBat: "/assets/environment/enemies/ice_bat_1.png",
+  enemyIceBatFrost: "/assets/environment/enemies/ice_bat_frost_1.png",
+  enemySkullBat: "/assets/environment/enemies/skull_bat_1.png",
   enemySkeleton: "/assets/environment/enemies/skeleton_1.png",
+  enemySkeletonDark: "/assets/environment/enemies/skeleton_dark_1.png",
+  enemySkeletonArmored: "/assets/environment/enemies/skeleton_armored_1.png",
+  enemySkeletonMage: "/assets/environment/enemies/skeleton_mage_1.png",
   enemyYeti: "/assets/environment/enemies/yeti_1.png",
+  enemyIceGolem: "/assets/environment/enemies/ice_golem_1.png",
+  enemyArmoredBrute: "/assets/environment/enemies/armored_brute_1.png",
   enemyWindSpirit: "/assets/environment/enemies/wind_spirit_1.png",
+  enemyPortalBlue: "/assets/environment/enemies/portal_blue_1.png",
   playerExplorer: "/assets/playable_characters/character1/main_body.png",
   playerIdle: "/assets/playable_characters/character1/idle_frame1.png",
   playerRun1: "/assets/playable_characters/character1/running_frame2.png",
@@ -216,14 +354,64 @@ const ASSET_URLS = {
   starShard1: "/assets/environment/collectibles/star_shard_frame2.png",
   starShard2: "/assets/environment/collectibles/star_shard_frame3.png",
   starShard3: "/assets/environment/collectibles/star_shard_frame4.png",
-  stoneLedge: "/assets/environment/platforms/stone_ledge_1.png",
+  orbBlue0: "/assets/environment/collectibles/magic_orb_blue_frame1.png",
+  orbBlue1: "/assets/environment/collectibles/magic_orb_blue_frame2.png",
+  orbBlue2: "/assets/environment/collectibles/magic_orb_blue_frame3.png",
+  orbBlue3: "/assets/environment/collectibles/magic_orb_blue_frame4.png",
+  orbGold0: "/assets/environment/collectibles/magic_orb_gold_frame1.png",
+  orbGold1: "/assets/environment/collectibles/magic_orb_gold_frame2.png",
+  orbGold2: "/assets/environment/collectibles/magic_orb_gold_frame3.png",
+  orbGold3: "/assets/environment/collectibles/magic_orb_gold_frame4.png",
+  orbPurple0: "/assets/environment/collectibles/magic_orb_purple_frame1.png",
+  orbPurple1: "/assets/environment/collectibles/magic_orb_purple_frame2.png",
+  orbPurple2: "/assets/environment/collectibles/magic_orb_purple_frame3.png",
+  orbPurple3: "/assets/environment/collectibles/magic_orb_purple_frame4.png",
+  burstFire0: "/assets/environment/collectibles/elemental_burst_fire_frame1.png",
+  burstFire1: "/assets/environment/collectibles/elemental_burst_fire_frame2.png",
+  burstFire2: "/assets/environment/collectibles/elemental_burst_fire_frame3.png",
+  burstFire3: "/assets/environment/collectibles/elemental_burst_fire_frame4.png",
+  burstIce0: "/assets/environment/collectibles/elemental_burst_ice_frame1.png",
+  burstIce1: "/assets/environment/collectibles/elemental_burst_ice_frame2.png",
+  burstIce2: "/assets/environment/collectibles/elemental_burst_ice_frame3.png",
+  burstIce3: "/assets/environment/collectibles/elemental_burst_ice_frame4.png",
+  medallionGreen0: "/assets/environment/collectibles/medallion_green_frame1.png",
+  medallionGreen1: "/assets/environment/collectibles/medallion_green_frame2.png",
+  medallionGreen2: "/assets/environment/collectibles/medallion_green_frame3.png",
+  medallionGreen3: "/assets/environment/collectibles/medallion_green_frame4.png",
+  medallionGold0: "/assets/environment/collectibles/medallion_gold_frame1.png",
+  medallionGold1: "/assets/environment/collectibles/medallion_gold_frame2.png",
+  medallionGold2: "/assets/environment/collectibles/medallion_gold_frame3.png",
+  medallionGold3: "/assets/environment/collectibles/medallion_gold_frame4.png",
+  relicPedestalBlue0: "/assets/environment/collectibles/relic_pedestal_blue_frame1.png",
+  relicPedestalBlue1: "/assets/environment/collectibles/relic_pedestal_blue_frame2.png",
+  relicPedestalBlue2: "/assets/environment/collectibles/relic_pedestal_blue_frame3.png",
+  relicPedestalBlue3: "/assets/environment/collectibles/relic_pedestal_blue_frame4.png",
+  relicPedestalFire0: "/assets/environment/collectibles/relic_pedestal_fire_frame1.png",
+  relicPedestalFire1: "/assets/environment/collectibles/relic_pedestal_fire_frame2.png",
+  relicPedestalFire2: "/assets/environment/collectibles/relic_pedestal_fire_frame3.png",
+  relicPedestalFire3: "/assets/environment/collectibles/relic_pedestal_fire_frame4.png",
+  stoneLedge: "/assets/environment/platforms/platform_stone_top_inner.png",
   stump: "/assets/environment/vegetation/stump_1.png",
   tree: "/assets/environment/vegetation/tree_pine_1.png",
   ruinColumn: "/assets/environment/structures/ruin_column_1.png",
   vineHanging: "/assets/environment/vegetation/vine_hanging_1.png",
 } as const;
 
-type AssetKey = keyof typeof ASSET_URLS;
+type AssetKey = string;
+
+interface PixelManifestAsset {
+  png: string;
+  width: number;
+  height: number;
+}
+
+interface PixelAssetManifest {
+  assets: Record<string, PixelManifestAsset>;
+}
+
+const ASSET_MANIFEST_URL = "/assets/manifest.json";
+const manifestAssetFolders = new Map<string, AssetKey[]>();
+const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
 
 const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
 type BiomeId = typeof BIOME_IDS[number];
@@ -236,12 +424,33 @@ function biomeForChunkY(chunkY: number): BiomeId {
   return "pineValley";
 }
 
+function biomeDisplayName(biome: BiomeId): string {
+  if (biome === "pineValley") return "PINE VALLEY";
+  if (biome === "cloudRidge") return "CLOUD RIDGE";
+  if (biome === "snowfallCliffs") return "SNOWFALL CLIFFS";
+  if (biome === "frozenSpires") return "FROZEN SPIRES";
+  return "CELESTIAL SUMMIT";
+}
+
 function altitude01(chunkY: number, start: number, end: number): number {
   return Math.max(0, Math.min(1, (chunkY - start) / Math.max(1, end - start)));
 }
 
-const CHARACTER_IDS = ["character1", "character2", "character3", "character4"] as const;
-const CHARACTER_ANIMATION_NAMES = ["idle", "walk", "run", "jump_fall", "kick_push", "shoot_fire", "hit_death_special"] as const;
+const CHARACTER_IDS = ["character1", "character2", "character3", "character4", "character5", "character6", "character7", "character8"] as const;
+const CHARACTER_ANIMATION_NAMES = [
+  "idle",
+  "walk",
+  "walk_left",
+  "walk_right",
+  "run",
+  "jump_fall",
+  "kick_push",
+  "punch",
+  "hit",
+  "taking_damage",
+  "shoot_fire",
+  "hit_death_special"
+] as const;
 const CHARACTER_SPRITE_SCALE = 0.72;
 const CHARACTER_ANCHOR_Y = 0.96;
 
@@ -263,9 +472,14 @@ const CHARACTER_ANIMATION_URLS = Object.fromEntries(CHARACTER_IDS.map((id) => [i
   main: `/assets/playable_characters/${id}/main_body.png`,
   idle: frameUrls(id, "idle", 4),
   walk: frameUrls(id, "walking", 6),
+  walk_left: frameUrls(id, "walking_left", 6),
+  walk_right: frameUrls(id, "walking_right", 6),
   run: frameUrls(id, "running", 6),
   jump_fall: [...frameUrls(id, "jumping", 2), ...frameUrls(id, "falling", 2)],
   kick_push: frameUrls(id, "kick", 3),
+  punch: frameUrls(id, "punching", 3),
+  hit: frameUrls(id, "hitting", 3),
+  taking_damage: frameUrls(id, "taking_damage", 2),
   shoot_fire: frameUrls(id, "shooting", 4),
   hit_death_special: frameUrls(id, "lying_dead", 2),
 }])) as Record<CharacterId, { main: string } & Record<CharacterAnimationName, string[]>>;
@@ -327,11 +541,66 @@ await pixi.init({
 pixi.canvas.style.imageRendering = "pixelated";
 gameWrap.prepend(pixi.canvas);
 
-async function loadPixelAssets(): Promise<Partial<Record<AssetKey, Texture>>> {
-  const loaded: Partial<Record<AssetKey, Texture>> = {};
+function pathAliasForAsset(relPath: string): AssetKey {
+  return relPath
+    .replace(/\.[^.]+$/, "")
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_match, chr: string) => chr.toUpperCase())
+    .replace(/^[A-Z]/, (chr) => chr.toLowerCase());
+}
+
+function registerManifestAssetKey(relPath: string, key: AssetKey, width: number, height: number): void {
+  const folder = relPath.split("/").slice(0, -1).join("/");
+  const keys = manifestAssetFolders.get(folder) ?? [];
+  if (!keys.includes(key)) keys.push(key);
+  manifestAssetFolders.set(folder, keys);
+  manifestAssetSizes.set(key, { width, height });
+}
+
+async function loadAssetManifest(): Promise<PixelAssetManifest | null> {
+  try {
+    const response = await fetch(ASSET_MANIFEST_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json() as PixelAssetManifest;
+  } catch (err) {
+    console.warn(`Could not load pixel asset manifest ${ASSET_MANIFEST_URL}`, err);
+    return null;
+  }
+}
+
+async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
+  const loaded: Record<AssetKey, Texture> = {};
+  const aliasByUrl = new Map<string, string>();
+  for (const [key, url] of Object.entries(ASSET_URLS)) aliasByUrl.set(url, key);
+
+  const manifest = await loadAssetManifest();
+  const loadedUrls = new Set<string>();
+  if (manifest) {
+    await Promise.all(Object.entries(manifest.assets).map(async ([relPath, meta]) => {
+      try {
+        const texture = await Assets.load<Texture>(meta.png);
+        const pathAlias = pathAliasForAsset(relPath);
+        loaded[relPath] = texture;
+        loaded[meta.png] = texture;
+        loaded[pathAlias] = texture;
+        registerManifestAssetKey(relPath, relPath, meta.width, meta.height);
+        registerManifestAssetKey(relPath, pathAlias, meta.width, meta.height);
+
+        const semanticAlias = aliasByUrl.get(meta.png);
+        if (semanticAlias) {
+          loaded[semanticAlias] = texture;
+          manifestAssetSizes.set(semanticAlias, { width: meta.width, height: meta.height });
+        }
+        loadedUrls.add(meta.png);
+      } catch (err) {
+        console.warn(`Could not load pixel asset ${meta.png}`, err);
+      }
+    }));
+  }
+
   await Promise.all(Object.entries(ASSET_URLS).map(async ([key, url]) => {
+    if (loaded[key] || loadedUrls.has(url)) return;
     try {
-      loaded[key as AssetKey] = await Assets.load<Texture>(url);
+      loaded[key] = await Assets.load<Texture>(url);
     } catch (err) {
       console.warn(`Could not load pixel asset ${url}`, err);
     }
@@ -378,7 +647,10 @@ async function loadTextureSequence(urls: string[]): Promise<Texture[]> {
 function durationForCharacterAnimation(name: CharacterAnimationName): number {
   if (name === "run") return 82;
   if (name === "walk") return 115;
+  if (name === "walk_left" || name === "walk_right") return 115;
   if (name === "idle") return 180;
+  if (name === "punch" || name === "hit") return 72;
+  if (name === "taking_damage") return 95;
   if (name === "shoot_fire") return 85;
   if (name === "kick_push") return 95;
   if (name === "hit_death_special") return 180;
@@ -397,6 +669,27 @@ function makeSprite(key: AssetKey): Sprite {
   const s = new Sprite(assetTexture(key));
   s.roundPixels = true;
   return s;
+}
+
+function folderAssetKeys(folder: string): AssetKey[] {
+  return manifestAssetFolders.get(folder) ?? [];
+}
+
+function assetPixelSize(key: AssetKey): { width: number; height: number } {
+  const size = manifestAssetSizes.get(key);
+  if (size) return size;
+  const texture = assetTexture(key);
+  return { width: texture.width, height: texture.height };
+}
+
+function uniqueAssetKeys(keys: AssetKey[]): AssetKey[] {
+  return [...new Set(keys)].filter(hasAsset);
+}
+
+function chooseAsset(keys: AssetKey[], seed: number, fallback: AssetKey): AssetKey {
+  const available = uniqueAssetKeys(keys);
+  if (available.length === 0) return fallback;
+  return available[Math.abs(seed) % available.length]!;
 }
 
 function makeCharacterSprite(characterId: CharacterId): Sprite {
@@ -436,14 +729,24 @@ function characterForRemote(colorIndex: number): CharacterId {
 
 function playerAnimationTexture(s: PlayerState, elapsed: number, characterId: CharacterId = "character1"): Texture | null {
   if (!hasCharacterAnimationAssets(characterId)) return null;
-  if (s.kickPhase === "active") return characterAnimationTexture(characterId, "shoot_fire", elapsed) ?? characterAnimationTexture(characterId, "kick_push", elapsed);
+  if (s.kickPhase === "active") {
+    return characterAnimationTexture(characterId, "hit", elapsed) ??
+      characterAnimationTexture(characterId, "shoot_fire", elapsed) ??
+      characterAnimationTexture(characterId, "kick_push", elapsed);
+  }
+  if (s.kickPhase === "windup") return characterAnimationTexture(characterId, "punch", elapsed) ?? characterAnimationTexture(characterId, "kick_push", elapsed);
   if (s.kickPhase !== "idle") return characterAnimationTexture(characterId, "kick_push", elapsed);
-  if (s.invulnerable > 0) return characterAnimationTexture(characterId, "hit_death_special", elapsed) ?? characterAnimationTexture(characterId, "idle", elapsed);
+  if (s.invulnerable > 0) return characterAnimationTexture(characterId, "taking_damage", elapsed) ?? characterAnimationTexture(characterId, "hit_death_special", elapsed) ?? characterAnimationTexture(characterId, "idle", elapsed);
   if (!s.grounded) return characterAnimationTexture(characterId, "jump_fall", elapsed);
 
   const speed = Math.abs(s.velocity.x);
   if (speed > 115) return characterAnimationTexture(characterId, "run", elapsed);
-  if (speed > 28) return characterAnimationTexture(characterId, "walk", elapsed) ?? characterAnimationTexture(characterId, "run", elapsed);
+  if (speed > 28) {
+    const directionalWalk = s.facing < 0 ? "walk_left" : "walk_right";
+    return characterAnimationTexture(characterId, directionalWalk, elapsed) ??
+      characterAnimationTexture(characterId, "walk", elapsed) ??
+      characterAnimationTexture(characterId, "run", elapsed);
+  }
   return characterAnimationTexture(characterId, "idle", elapsed);
 }
 
@@ -461,21 +764,104 @@ function coinFrameAsset(frame: number): AssetKey {
   return "coin";
 }
 
-function collectibleFrames(id: string, tileX: number, tileY: number): AssetKey[] {
+function collectibleVisual(kind: CollectibleKind | undefined): { color: number; label: string; notification: string } {
+  if (kind === "smallHeart" || kind === "bigHeart" || kind === "greenCrystal") {
+    return { color: 0x5dff9c, label: "+HP", notification: "HP +1" };
+  }
+  if (kind === "purpleCrystal" || kind === "blueCrystal") {
+    return { color: 0xb06dff, label: "+JUMP", notification: "JUMP UP" };
+  }
+  return { color: 0xff4d5e, label: "+ATK", notification: "ATTACK UP" };
+}
+
+function firstFrameGroup(groups: AssetKey[][]): AssetKey[] | null {
+  for (const group of groups) {
+    if (group.every(hasAsset)) return group;
+  }
+  return null;
+}
+
+function repeatedFrame(key: AssetKey): AssetKey[] {
+  return [key, key, key, key];
+}
+
+function collectibleFrames(kind: CollectibleKind, id: string, tileX: number, tileY: number): AssetKey[] {
+  const hpGroup = firstFrameGroup([
+    ["heart", "heart", "heart", "heart"],
+    ["gemGreen", "gemGreen", "gemGreen", "gemGreen"],
+    ["medallionGreen0", "medallionGreen1", "medallionGreen2", "medallionGreen3"],
+  ]);
+  const jumpGroup = firstFrameGroup([
+    ["orbPurple0", "orbPurple1", "orbPurple2", "orbPurple3"],
+    ["gemPurple", "gemPurple", "gemPurple", "gemPurple"],
+    ["magicOrbPurple", "magicOrbPurple", "magicOrbPurple", "magicOrbPurple"],
+  ]);
+  const attackGroup = firstFrameGroup([
+    ["relicPedestalFire0", "relicPedestalFire1", "relicPedestalFire2", "relicPedestalFire3"],
+    ["burstFire0", "burstFire1", "burstFire2", "burstFire3"],
+    ["gemRed", "potionRed", "gemRed", "potionRed"],
+    ["relicPink0", "relicPink1", "relicPink2", "relicPink3"],
+  ]);
+
+  if (kind === "smallHeart" || kind === "bigHeart" || kind === "greenCrystal") return hpGroup ?? repeatedFrame("coin");
+  if (kind === "purpleCrystal" || kind === "blueCrystal") return jumpGroup ?? repeatedFrame("coin");
+  if (attackGroup) return attackGroup;
+
   const groups: AssetKey[][] = [
     ["coinSpin0", "coinSpin1", "coinSpin2", "coinSpin3"],
     ["gemCyan0", "gemCyan1", "gemCyan2", "gemCyan3"],
     ["relicPink0", "relicPink1", "relicPink2", "relicPink3"],
     ["seedGreen0", "seedGreen1", "seedGreen2", "seedGreen3"],
     ["starShard0", "starShard1", "starShard2", "starShard3"],
+    ["orbBlue0", "orbBlue1", "orbBlue2", "orbBlue3"],
+    ["orbGold0", "orbGold1", "orbGold2", "orbGold3"],
+    ["orbPurple0", "orbPurple1", "orbPurple2", "orbPurple3"],
+    ["burstFire0", "burstFire1", "burstFire2", "burstFire3"],
+    ["burstIce0", "burstIce1", "burstIce2", "burstIce3"],
+    ["medallionGreen0", "medallionGreen1", "medallionGreen2", "medallionGreen3"],
+    ["medallionGold0", "medallionGold1", "medallionGold2", "medallionGold3"],
+    ["relicPedestalBlue0", "relicPedestalBlue1", "relicPedestalBlue2", "relicPedestalBlue3"],
+    ["relicPedestalFire0", "relicPedestalFire1", "relicPedestalFire2", "relicPedestalFire3"],
+    ["gemRed", "gemBlue", "gemGreen", "gemPurple"],
+    ["coinGold", "coinSilver", "coinCopper", "coinRuneBlue"],
+    ["crownGold", "crownBlue", "potionBlue", "potionRed"],
+    ["treasureChest", "treasureChestBlue", "treasureChestRed", "gemGold"],
   ];
   const hash = [...id].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, tileX * 131 + tileY * 977);
+  const manifestCollectibles = uniqueAssetKeys(folderAssetKeys("environment/collectibles"));
+  if (manifestCollectibles.length >= 4 && hash % 3 === 0) {
+    const start = hash % manifestCollectibles.length;
+    return [0, 1, 2, 3].map((offset) => manifestCollectibles[(start + offset) % manifestCollectibles.length]!);
+  }
   for (let tries = 0; tries < groups.length; tries++) {
     const group = groups[(hash + tries) % groups.length]!;
     if (group.every(hasAsset)) return group;
   }
+  if (manifestCollectibles.length >= 4) {
+    const start = hash % manifestCollectibles.length;
+    return [0, 1, 2, 3].map((offset) => manifestCollectibles[(start + offset) % manifestCollectibles.length]!);
+  }
   const coinFrames: AssetKey[] = ["coinSpin0", "coinSpin1", "coinSpin2", "coinSpin3"];
   return coinFrames.every(hasAsset) ? coinFrames : ["coin", "coin", "coin", "coin"];
+}
+
+function enemyAssetForKind(kind: EnemyKind): AssetKey {
+  const keyByKind: Record<EnemyKind, AssetKey> = {
+    goblin: "enemyGoblin",
+    goblinScout: "enemyGoblinScout",
+    goblinChief: "enemyGoblinChief",
+    archer: "enemyArcher",
+    iceBat: "enemyIceBat",
+    skeleton: "enemySkeleton",
+    skeletonArmored: "enemySkeletonArmored",
+    yeti: "enemyYeti",
+    iceGolem: "enemyIceGolem",
+    windSpirit: "enemyWindSpirit",
+  };
+  const preferred = keyByKind[kind];
+  if (hasAsset(preferred)) return preferred;
+  const fallback = folderAssetKeys("environment/enemies")[0];
+  return fallback && hasAsset(fallback) ? fallback : "enemyGoblin";
 }
 
 function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
@@ -484,6 +870,7 @@ function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
     : layer === "mid"
       ? ["cloud", "cloudLong", "cloudPuff", "cloudTall", "cloudCluster"]
       : ["cloudLong", "cloudStreak", "cloudTall", "cloudPuff", "cloudCluster", "cloudFlat", "cloud"];
+  variants.push(...folderAssetKeys("environment/clouds"), ...folderAssetKeys("environment/backgrounds").filter((key) => key.includes("cloud")));
   for (let tries = 0; tries < variants.length; tries++) {
     const key = variants[(i + tries) % variants.length]!;
     if (hasAsset(key)) return key;
@@ -491,20 +878,63 @@ function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
   return "cloud";
 }
 
-function platformCapAsset(seed: number, biome: BiomeId): AssetKey {
-  const variantsByBiome: Record<BiomeId, AssetKey[]> = {
-    pineValley: ["mossPlatform", "mossPlatformFlowers", "mossPlatformRoots", "mossPlatformCracked"],
-    cloudRidge: ["mossPlatformRunes", "stoneLedge", "snowPlatform", "mossPlatformOverhang"],
-    snowfallCliffs: ["snowPlatform", "crumblingPlatform", "stoneLedge", "frozenPlatform"],
-    frozenSpires: ["frozenPlatform", "snowPlatform", "crumblingPlatform", "brokenCliff"],
-    celestialSummit: ["summitPlatform", "frozenPlatform", "mossPlatformRunes", "stoneLedge"],
+type MidMountainTileRole = "cap" | "body" | "left" | "right" | "bottom";
+type PlatformPartRole =
+  | "top_left" | "top_inner" | "top_right"
+  | "body_left" | "body_inner" | "body_right"
+  | "bottom_left" | "bottom_inner" | "bottom_right"
+  | "outer_left" | "outer_right";
+
+function midMountainTileAsset(biome: BiomeId, role: MidMountainTileRole): AssetKey {
+  const keysByBiome: Record<BiomeId, Record<MidMountainTileRole, AssetKey>> = {
+    pineValley: {
+      cap: "midMountainPineCap",
+      body: "midMountainPineBody",
+      left: "midMountainPineLeft",
+      right: "midMountainPineRight",
+      bottom: "midMountainPineBottom",
+    },
+    cloudRidge: {
+      cap: "midMountainCloudCap",
+      body: "midMountainCloudBody",
+      left: "midMountainCloudLeft",
+      right: "midMountainCloudRight",
+      bottom: "midMountainCloudBottom",
+    },
+    snowfallCliffs: {
+      cap: "midMountainSnowCap",
+      body: "midMountainSnowBody",
+      left: "midMountainSnowLeft",
+      right: "midMountainSnowRight",
+      bottom: "midMountainSnowBottom",
+    },
+    frozenSpires: {
+      cap: "midMountainFrozenCap",
+      body: "midMountainFrozenBody",
+      left: "midMountainFrozenLeft",
+      right: "midMountainFrozenRight",
+      bottom: "midMountainFrozenBottom",
+    },
+    celestialSummit: {
+      cap: "midMountainSummitCap",
+      body: "midMountainSummitBody",
+      left: "midMountainSummitLeft",
+      right: "midMountainSummitRight",
+      bottom: "midMountainSummitBottom",
+    },
   };
-  const variants = variantsByBiome[biome];
-  for (let tries = 0; tries < variants.length; tries++) {
-    const key = variants[(seed + tries) % variants.length]!;
-    if (hasAsset(key)) return key;
-  }
-  return "mossPlatform";
+  return keysByBiome[biome][role];
+}
+
+function platformPartAsset(biome: BiomeId, role: PlatformPartRole, seed = 0): AssetKey {
+  const theme: "moss" | "stone" | "snow" | "ice" | "summit" | "crumble" =
+    biome === "pineValley" ? "moss" :
+    biome === "cloudRidge" ? "stone" :
+    biome === "snowfallCliffs" ? (seed % 11 === 0 ? "crumble" : "snow") :
+    biome === "frozenSpires" ? (seed % 9 === 0 ? "crumble" : "ice") :
+    "summit";
+  const folder = theme === "moss" || theme === "stone" ? "environment/platforms" : "environment/platformVariants";
+  return `${folder}/platform_${theme}_${role}.png`;
 }
 
 // ── Layer hierarchy ───────────────────────────────────────────────────────────
@@ -515,6 +945,7 @@ function platformCapAsset(seed: number, biome: BiomeId): AssetKey {
 //   decorationLayer     — decorations / hazards as non-blocking sprites
 //   portalLayer         — relic shrines and portal effects
 //   relicLayer          — collectibles
+//   enemyLayer          — server-authoritative NPCs
 //   remoteLayer         — players
 //   localLayer          — players
 //   effectLayer         — particles
@@ -527,13 +958,21 @@ const chunkLayer  = new Container();
 const decorationLayer = new Container();
 const portalLayer = new Container();
 const relicLayer  = new Container();
+const enemyLayer  = new Container();
 const remoteLayer = new Container();
 const localLayer  = new Container();
 const effectLayer = new Container();
 const hudLayer    = new Container();
 
-worldLayer.addChild(backDecorationLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, remoteLayer, localLayer, effectLayer);
+enemyLayer.sortableChildren = true;
+worldLayer.addChild(backDecorationLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer);
 pixi.stage.addChild(skyLayer, worldLayer, hudLayer);
+
+const screenFlashGfx = new Graphics();
+hudLayer.addChild(screenFlashGfx);
+let screenFlashLife = 0;
+let screenFlashMax = 0;
+let screenFlashColor = 0xffffff;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -546,20 +985,50 @@ let serverSeed = 0x5eed_babe; // updated from welcome message to match server ch
 const loadedChunks   = new Map<number, GeneratedChunk>();
 const chunkGraphics  = new Map<number, Graphics>();
 const chunkDecorations = new Map<number, { back: Container; front: Container }>();
+const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const collectedRelics = new Set<string>();
 
+interface HazardTelegraph {
+  gfx: Graphics;
+  x: number;
+  y: number;
+  seed: number;
+  style: "spike" | "falling" | "wind" | "rune";
+  width: number;
+}
+
 interface RelicAnim {
   container: Container;
+  aura: Graphics;
   gfx: Graphics;
   sprite: Sprite;
   sparkle: Sprite | null;
   ring: Sprite | null;
+  kind: CollectibleKind;
+  auraColor: number;
   frames: AssetKey[];
   tileX: number;
   tileY: number;
 }
 const relicAnims = new Map<string, RelicAnim>();
+
+interface JumpPadAnim {
+  container: Container;
+  aura: Graphics;
+  sprite: Sprite | null;
+  pad: JumpPadSpawn;
+  worldX: number;
+  worldY: number;
+}
+const jumpPadAnims = new Map<string, JumpPadAnim>();
+
+interface EnemyEntry {
+  state: EnemyState;
+  sprite: Sprite;
+  hp: Graphics;
+}
+const enemyEntries = new Map<string, EnemyEntry>();
 
 interface RemoteEntry {
   states: Array<{ state: PlayerState; t: number }>;
@@ -602,6 +1071,7 @@ let cameraY   = 0;
 let cameraSnap = true;
 let showDebug  = false;
 let elapsedMs  = 0;
+let lastLocalJumpPadFxMs = -Infinity;
 
 // Camera shake
 let shakeX = 0, shakeY = 0;
@@ -757,6 +1227,7 @@ function clearWorldChunks(): void {
     c.front.destroy({ children: true });
   }
   chunkDecorations.clear();
+  chunkHazardTelegraphs.clear();
   backDecorationLayer.removeChildren();
   chunkLayer.removeChildren();
   decorationLayer.removeChildren();
@@ -764,6 +1235,13 @@ function clearWorldChunks(): void {
   relicAnims.clear();
   for (const a of portalAnims.values()) a.container.destroy({ children: true });
   portalAnims.clear();
+  for (const a of jumpPadAnims.values()) a.container.destroy({ children: true });
+  jumpPadAnims.clear();
+  for (const e of enemyEntries.values()) {
+    e.sprite.destroy();
+    e.hp.destroy();
+  }
+  enemyEntries.clear();
 }
 
 function destroyChunkVisuals(chunkY: number): void {
@@ -779,10 +1257,12 @@ function destroyChunkVisuals(chunkY: number): void {
     decor.front.destroy({ children: true });
     chunkDecorations.delete(chunkY);
   }
+  chunkHazardTelegraphs.delete(chunkY);
 
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
-    if (id.startsWith(relicPrefix)) {
+    const animChunkY = Math.max(0, -Math.floor(anim.tileY / CHUNK_HEIGHT_TILES));
+    if (id.startsWith(relicPrefix) || animChunkY === chunkY) {
       anim.container.destroy({ children: true });
       relicAnims.delete(id);
     }
@@ -793,10 +1273,18 @@ function destroyChunkVisuals(chunkY: number): void {
     portal.container.destroy({ children: true });
     portalAnims.delete(chunkY);
   }
+  clearJumpPadAnimsForChunk(chunkY);
+  for (const [enemyId, entry] of [...enemyEntries.entries()]) {
+    if (entry.state.chunkY === chunkY) {
+      entry.sprite.destroy();
+      entry.hp.destroy();
+      enemyEntries.delete(enemyId);
+    }
+  }
 }
 
-function getSpawnPos(): { x: number; y: number } {
-  const chunk = loadedChunks.get(0);
+function getSpawnPos(chunkY = 0): { x: number; y: number } {
+  const chunk = loadedChunks.get(chunkY) ?? loadedChunks.get(0);
   if (!chunk) return { x: WORLD_WIDTH / 2 - PLAYER_WIDTH / 2, y: -PLAYER_HEIGHT };
   return {
     x: (chunk.entry.x + Math.floor(chunk.entry.width / 2)) * TILE_SIZE - PLAYER_WIDTH / 2,
@@ -806,8 +1294,13 @@ function getSpawnPos(): { x: number; y: number } {
 
 function respawnLocal(): void {
   if (!localPlayerId) { localPlayerId = "local"; playerNames.set("local", nameInput.value || "Explorer"); }
-  const { x, y } = getSpawnPos();
-  localPlayer = createPlayerState(localPlayerId, x, y);
+  const checkpointChunkY = Math.max(0, localPlayer?.checkpointChunkY ?? 0);
+  const { x, y } = getSpawnPos(checkpointChunkY);
+  if (localPlayer) {
+    respawnPlayerState(localPlayer, x, y, checkpointChunkY);
+  } else {
+    localPlayer = createPlayerState(localPlayerId, x, y);
+  }
   snapLocalVisualToSimulation();
   resetLocalPrediction();
   cameraSnap = true;
@@ -963,6 +1456,9 @@ function buildSkyStatic(sw: number, sh: number): void {
 
   skyArchesBack.removeChildren();
   addWideBackdrop(skyArchesBack, "bgSkyArches", sw, sh * 0.28, 0.12);
+  for (const [i, key] of uniqueAssetKeys(folderAssetKeys("environment/mountainBackgrounds")).entries()) {
+    addWideBackdrop(skyArchesBack, key, sw, sh * (0.18 + i * 0.12), 0.1);
+  }
 
   cloudBankBack.removeChildren();
   addWideBackdrop(cloudBankBack, "bgCloudBank", sw, sh * 0.12, 0.18);
@@ -1158,6 +1654,10 @@ function renderChunk(chunk: GeneratedChunk): void {
     if (!collectedRelics.has(rel.id)) spawnRelicAnim(rel.id, rel.x, baseTileY + rel.y);
   }
 
+  for (const pad of chunk.jumpPads) {
+    spawnJumpPadAnim(pad, baseTileY + pad.y);
+  }
+
   // Portal at exit platform (the upward goal for this chunk)
   spawnPortalAt(chunk.chunkY, chunk.exit.x, baseTileY + chunk.exit.y, chunk.exit.width, chunk.chunkY > 0);
 }
@@ -1177,17 +1677,530 @@ function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, w
   return true;
 }
 
+function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
+  const baseTileY = chunk.worldTileY;
+  const placed = new Set<string>();
+
+  const placeTile = (lx: number, ly: number, role: MidMountainTileRole): void => {
+    if (lx < 0 || lx >= chunk.width || ly < 0 || ly >= chunk.height) return;
+    const key = midMountainTileAsset(biome, role);
+    if (!hasAsset(key)) return;
+    const placedKey = `${lx}:${ly}`;
+    if (placed.has(placedKey)) return;
+    placed.add(placedKey);
+    const tile = makeSprite(key);
+    tile.x = lx * TILE_SIZE;
+    tile.y = (baseTileY + ly) * TILE_SIZE;
+    tile.alpha = 1;
+    tile.zIndex = -3;
+    target.addChild(tile);
+  };
+
+  // A continuous second-layer ridge behind the whole chunk keeps platforms
+  // visually attached to one mountain mass without changing collision.
+  for (let ly = 0; ly < chunk.height; ly++) {
+    const sway = Math.round(Math.sin((chunk.chunkY * 1.7 + ly) * 0.48) * 2);
+    const center = Math.round(chunk.width * 0.5) + sway;
+    const half = 2 + ((chunk.chunkY + ly) % 2);
+    for (let ox = -half; ox <= half; ox++) {
+      const role: MidMountainTileRole = ox === -half ? "left" : ox === half ? "right" : "body";
+      placeTile(center + ox, ly, role);
+    }
+  }
+
+  for (let ly = 0; ly < chunk.height; ly++) {
+    for (let lx = 0; lx < chunk.width; lx++) {
+      const kind = chunk.tiles[ly * chunk.width + lx] as TileKind;
+      const above = ly > 0 ? chunk.tiles[(ly - 1) * chunk.width + lx] as TileKind : "empty";
+      if (kind !== "oneWay" || (above !== "empty" && above !== "relic" && above !== "hazard")) continue;
+
+      const seed = (chunk.chunkY * 193 + lx * 37 + ly * 17) >>> 0;
+      const depth = 4 + (seed % 5);
+      for (let dy = 0; dy < depth; dy++) {
+        const half = Math.max(0, Math.floor((depth - dy + 1) / 3));
+        for (let ox = -half; ox <= half; ox++) {
+          const role: MidMountainTileRole =
+            dy === 0 ? "cap" :
+            dy === depth - 1 ? "bottom" :
+            ox === -half ? "left" :
+            ox === half ? "right" :
+            "body";
+          placeTile(lx + ox, ly + dy, role);
+        }
+      }
+    }
+  }
+}
+
+function composePlatformPartLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
+  const baseTileY = chunk.worldTileY;
+  const addPart = (key: AssetKey, tileX: number, tileY: number, zIndex: number): void => {
+    if (!hasAsset(key)) return;
+    const part = makeSprite(key);
+    part.x = tileX * TILE_SIZE;
+    part.y = tileY * TILE_SIZE;
+    part.zIndex = zIndex;
+    part.alpha = 0.98;
+    target.addChild(part);
+  };
+
+  for (const platform of chunk.platforms) {
+    const seed = (chunk.chunkY * 92821 + platform.x * 3701 + platform.y * 809 + platform.width * 97) >>> 0;
+    const visualDepth =
+      biome === "pineValley" ? 2 :
+      biome === "cloudRidge" ? 2 :
+      biome === "snowfallCliffs" ? 2 :
+      biome === "frozenSpires" ? 3 :
+      2;
+
+    const roleFor = (row: "top" | "body" | "bottom", localX: number): PlatformPartRole => {
+      if (platform.width <= 1) return `${row}_inner` as PlatformPartRole;
+      if (localX === 0) return `${row}_left` as PlatformPartRole;
+      if (localX === platform.width - 1) return `${row}_right` as PlatformPartRole;
+      return `${row}_inner` as PlatformPartRole;
+    };
+
+    const topTileY = baseTileY + platform.y;
+    for (let lx = 0; lx < platform.width; lx++) {
+      const tileX = platform.x + lx;
+      addPart(platformPartAsset(biome, roleFor("top", lx), seed), tileX, topTileY, 2);
+    }
+
+    if (visualDepth > 1) {
+      for (let dy = 1; dy < visualDepth; dy++) {
+        const row: "body" | "bottom" = dy === visualDepth - 1 ? "bottom" : "body";
+        for (let lx = 0; lx < platform.width; lx++) {
+          const tileX = platform.x + lx;
+          addPart(platformPartAsset(biome, roleFor(row, lx), seed), tileX, topTileY + dy, 1);
+        }
+      }
+    }
+
+    if (platform.x > 0) {
+      addPart(platformPartAsset(biome, "outer_left", seed), platform.x - 1, topTileY, 1);
+    }
+    if (platform.x + platform.width < chunk.width) {
+      addPart(platformPartAsset(biome, "outer_right", seed), platform.x + platform.width, topTileY, 1);
+    }
+  }
+}
+
+function biomeDecorationFolders(biome: BiomeId): string[] {
+  const common = [
+    "environment/decorations",
+    "environment/structures",
+    "environment/rocks",
+    "environment/ladders",
+    "environment/ropeBridges",
+    "environment/lanterns",
+    "environment/lights",
+    "environment/crystals",
+    "environment/banners",
+    "environment/sheetElements",
+    "environment/effects",
+    "environment/particleEffects",
+  ];
+  if (biome === "pineValley") {
+    return [...common, "environment/flora", "environment/vegetation", "environment/pineTrees", "environment/mossTiles", "environment/terrainTiles"];
+  }
+  if (biome === "cloudRidge") {
+    return [...common, "environment/flora", "environment/vegetation", "environment/pineTrees", "environment/ruinTiles", "environment/clouds", "environment/terrainTiles"];
+  }
+  if (biome === "snowfallCliffs") {
+    return [...common, "environment/flora", "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles", "environment/clouds"];
+  }
+  if (biome === "frozenSpires") {
+    return [...common, "environment/snowTrees", "environment/snowTiles", "environment/ruinTiles"];
+  }
+  return [...common, "environment/relicShrines", "environment/snowTiles", "environment/ruinTiles", "environment/terrainTiles"];
+}
+
+function folderChoiceForBiome(biome: BiomeId, seed: number): AssetKey | null {
+  const folders = biomeDecorationFolders(biome);
+  const folder = folders[Math.abs(seed) % folders.length]!;
+  const keys = folderAssetKeys(folder);
+  if (keys.length === 0) return null;
+  return chooseAsset(keys, seed >> 3, "");
+}
+
+function placeManifestDecoration(
+  target: Container,
+  key: AssetKey,
+  wx: number,
+  wy: number,
+  seed: number,
+  backLayer: boolean
+): void {
+  if (!key || !hasAsset(key)) return;
+  const sprite = makeSprite(key);
+  const size = assetPixelSize(key);
+  const maxWidth = backLayer ? 64 : 52;
+  const maxHeight = backLayer ? 72 : 58;
+  const scale = Math.min(1, maxWidth / Math.max(1, size.width), maxHeight / Math.max(1, size.height));
+  sprite.anchor.set(0.5, 1);
+  sprite.x = wx + TILE_SIZE / 2 + ((seed >> 4) % 5) - 2;
+  sprite.y = wy + (backLayer ? 4 : 2);
+  sprite.scale.set(scale);
+  sprite.alpha = backLayer ? 0.5 : 0.78;
+  sprite.zIndex = backLayer ? -1 : 3;
+  target.addChild(sprite);
+}
+
+interface SceneSpriteOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  alpha?: number;
+  zIndex?: number;
+  anchorX?: number;
+  anchorY?: number;
+  xJitter?: number;
+  yOffset?: number;
+  scaleMultiplier?: number;
+  tint?: number;
+  addBlend?: boolean;
+}
+
+function chooseAssetFromFolders(folders: string[], seed: number): AssetKey | null {
+  const keys = uniqueAssetKeys(folders.flatMap((folder) => folderAssetKeys(folder)));
+  if (keys.length === 0) return null;
+  return keys[Math.abs(seed) % keys.length]!;
+}
+
+function placeSceneSprite(
+  target: Container,
+  key: AssetKey | null,
+  wx: number,
+  wy: number,
+  seed: number,
+  options: SceneSpriteOptions = {}
+): Sprite | null {
+  if (!key || !hasAsset(key)) return null;
+  const sprite = makeSprite(key);
+  const size = assetPixelSize(key);
+  const maxWidth = options.maxWidth ?? 58;
+  const maxHeight = options.maxHeight ?? 64;
+  const fitScale = Math.min(1, maxWidth / Math.max(1, size.width), maxHeight / Math.max(1, size.height));
+  const jitter = options.xJitter ?? 0;
+  const jitterX = jitter > 0 ? ((seed >> 5) % (jitter * 2 + 1)) - jitter : 0;
+  sprite.anchor.set(options.anchorX ?? 0.5, options.anchorY ?? 1);
+  sprite.x = Math.round(wx + jitterX);
+  sprite.y = Math.round(wy + (options.yOffset ?? 0));
+  sprite.scale.set(fitScale * (options.scaleMultiplier ?? 1));
+  sprite.alpha = options.alpha ?? 0.86;
+  sprite.zIndex = options.zIndex ?? 2;
+  if (typeof options.tint === "number") sprite.tint = options.tint;
+  if (options.addBlend) sprite.blendMode = "add";
+  target.addChild(sprite);
+  return sprite;
+}
+
+function platformCenterX(platform: GeneratedChunk["platforms"][number]): number {
+  return (platform.x + platform.width / 2) * TILE_SIZE;
+}
+
+function platformTopY(chunk: GeneratedChunk, platform: GeneratedChunk["platforms"][number]): number {
+  return (chunk.worldTileY + platform.y) * TILE_SIZE;
+}
+
+function platformSeed(chunk: GeneratedChunk, platform: GeneratedChunk["platforms"][number], salt = 0): number {
+  return (chunk.chunkY * 1664525 + platform.x * 1013904223 + platform.y * 69069 + platform.width * 362437 + salt) >>> 0;
+}
+
+function biomePropFolders(biome: BiomeId): string[] {
+  if (biome === "pineValley") {
+    return ["environment/pineTrees", "environment/vegetation", "environment/flora", "environment/rocks", "environment/lights", "environment/decorations"];
+  }
+  if (biome === "cloudRidge") {
+    return ["environment/pineTrees", "environment/clouds", "environment/structures", "environment/decorations", "environment/crystals", "environment/rocks"];
+  }
+  if (biome === "snowfallCliffs") {
+    return ["environment/snowTrees", "environment/rocks", "environment/ruinTiles", "environment/decorations", "environment/lanterns", "environment/crystals"];
+  }
+  if (biome === "frozenSpires") {
+    return ["environment/snowTrees", "environment/rocks", "environment/decorations", "environment/crystals", "environment/particleEffects"];
+  }
+  return ["environment/relicShrines", "environment/decorations", "environment/crystals", "environment/structures", "environment/lights", "environment/banners"];
+}
+
+function biomeSmallPropFolders(biome: BiomeId): string[] {
+  if (biome === "pineValley") return ["environment/flora", "environment/vegetation", "environment/rocks"];
+  if (biome === "cloudRidge") return ["environment/flora", "environment/rocks", "environment/clouds", "environment/crystals"];
+  if (biome === "snowfallCliffs") return ["environment/rocks", "environment/snowTrees", "environment/lanterns", "environment/crystals"];
+  if (biome === "frozenSpires") return ["environment/rocks", "environment/crystals", "environment/particleEffects", "environment/hazards"];
+  return ["environment/crystals", "environment/decorations", "environment/lights", "environment/banners"];
+}
+
+function hazardTelegraphStyle(assetKey: AssetKey): HazardTelegraph["style"] {
+  if (assetKey.includes("falling") || assetKey.includes("icicle")) return "falling";
+  if (assetKey.includes("wind")) return "wind";
+  if (assetKey.includes("lightning") || assetKey.includes("rune") || assetKey.includes("arc")) return "rune";
+  return "spike";
+}
+
+function addHazardTelegraph(
+  target: Container,
+  chunkY: number,
+  wx: number,
+  wy: number,
+  seed: number,
+  style: HazardTelegraph["style"],
+  width: number
+): void {
+  const gfx = new Graphics();
+  gfx.x = wx;
+  gfx.y = wy;
+  gfx.zIndex = 3;
+  target.addChild(gfx);
+
+  const telegraphs = chunkHazardTelegraphs.get(chunkY) ?? [];
+  telegraphs.push({ gfx, x: wx, y: wy, seed, style, width });
+  chunkHazardTelegraphs.set(chunkY, telegraphs);
+}
+
+function updateHazardTelegraphs(tSec: number): void {
+  for (const telegraphs of chunkHazardTelegraphs.values()) {
+    for (const h of telegraphs) {
+      if (h.gfx.destroyed) continue;
+      const pulse = Math.sin(tSec * 4.8 + h.seed * 0.013) * 0.5 + 0.5;
+      h.gfx.clear();
+      if (h.style === "falling") {
+        const w = Math.max(16, h.width);
+        h.gfx.rect(-2, -30, w + 4, 2).fill({ color: PAL.hazardGlow, alpha: 0.18 + pulse * 0.22 });
+        h.gfx.rect(Math.round(w / 2) - 1, -28, 2, 22).fill({ color: PAL.hazardGlow, alpha: 0.08 + pulse * 0.18 });
+        h.gfx.poly([Math.round(w / 2) - 5, -8, Math.round(w / 2), -1, Math.round(w / 2) + 5, -8])
+          .fill({ color: PAL.hazardRed, alpha: 0.18 + pulse * 0.18 });
+      } else if (h.style === "wind") {
+        for (let i = 0; i < 3; i++) {
+          const y = -24 + i * 8;
+          const x = -28 + ((tSec * 28 + h.seed + i * 19) % 32);
+          h.gfx.rect(x, y, 26, 1).fill({ color: PAL.portalGlow, alpha: 0.14 + pulse * 0.16 });
+          h.gfx.rect(x + 14, y + 2, 12, 1).fill({ color: PAL.portalBlue, alpha: 0.12 + pulse * 0.14 });
+        }
+      } else if (h.style === "rune") {
+        const r = 10 + Math.round(pulse * 4);
+        h.gfx.circle(8, -8, r).stroke({ color: PAL.portalBlue, alpha: 0.22 + pulse * 0.26, width: 1 });
+        h.gfx.rect(7, -18, 2, 20).fill({ color: PAL.hazardGlow, alpha: 0.12 + pulse * 0.2 });
+        h.gfx.rect(-2, -9, 20, 2).fill({ color: PAL.hazardGlow, alpha: 0.12 + pulse * 0.2 });
+      } else {
+        h.gfx.rect(0, 10, TILE_SIZE, 2).fill({ color: PAL.hazardRed, alpha: 0.14 + pulse * 0.26 });
+        h.gfx.rect(2, 12, TILE_SIZE - 4, 1).fill({ color: PAL.hazardGlow, alpha: 0.14 + pulse * 0.2 });
+      }
+    }
+  }
+}
+
+function composeChunkAtmosphere(chunk: GeneratedChunk, back: Container, biome: BiomeId): void {
+  const baseTileY = chunk.worldTileY;
+  const chunkTop = baseTileY * TILE_SIZE;
+  const seed = (chunk.chunkY * 48271 + 97) >>> 0;
+  const cloudDensity =
+    biome === "pineValley" ? 1 :
+    biome === "cloudRidge" ? 4 :
+    biome === "snowfallCliffs" ? 3 :
+    biome === "frozenSpires" ? 2 :
+    5;
+
+  const cloudFolders = biome === "pineValley"
+    ? ["environment/backgrounds"]
+    : ["environment/clouds", "environment/backgrounds"];
+  const mountainKeys = uniqueAssetKeys([
+    "bgMountainTall",
+    "bgMountainWide",
+    "bgMountainWide2",
+    "bgSkyArches",
+    ...folderAssetKeys("environment/mountainBackgrounds"),
+  ]);
+
+  if (chunk.chunkY % 2 === 0 && mountainKeys.length > 0) {
+    const key = mountainKeys[seed % mountainKeys.length]!;
+    const mountain = placeSceneSprite(back, key, WORLD_WIDTH * (0.24 + (seed % 36) / 80), chunkTop + CHUNK_HEIGHT_TILES * TILE_SIZE + 18, seed, {
+      maxWidth: 210,
+      maxHeight: 150,
+      alpha: biome === "pineValley" ? 0.16 : biome === "celestialSummit" ? 0.1 : 0.13,
+      zIndex: -8,
+      xJitter: 18,
+      scaleMultiplier: biome === "celestialSummit" ? 0.82 : 1,
+    });
+    if (mountain && biome === "celestialSummit") mountain.tint = 0xddefff;
+  }
+
+  for (let i = 0; i < cloudDensity; i++) {
+    const cSeed = (seed + i * 7919) >>> 0;
+    const cloudKey = chooseAssetFromFolders(cloudFolders, cSeed);
+    if (!cloudKey || !cloudKey.includes("cloud")) continue;
+    const x = ((cSeed % 310) / 310) * WORLD_WIDTH;
+    const y = chunkTop + 30 + ((cSeed >> 7) % Math.max(1, CHUNK_HEIGHT_TILES * TILE_SIZE - 40));
+    const cloud = placeSceneSprite(back, cloudKey, x, y, cSeed, {
+      maxWidth: 126,
+      maxHeight: 48,
+      alpha: biome === "cloudRidge" || biome === "celestialSummit" ? 0.34 : 0.22,
+      zIndex: -6,
+      xJitter: 10,
+      scaleMultiplier: 0.75 + (cSeed % 35) / 100,
+    });
+    if (cloud && biome === "frozenSpires") cloud.tint = 0xc8dcff;
+  }
+
+  if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("environment/effects/fog_strip_1.png")) {
+    placeSceneSprite(back, "environment/effects/fog_strip_1.png", WORLD_WIDTH / 2, chunkTop + CHUNK_HEIGHT_TILES * TILE_SIZE * 0.66, seed, {
+      maxWidth: WORLD_WIDTH,
+      maxHeight: 38,
+      alpha: biome === "cloudRidge" ? 0.22 : 0.14,
+      zIndex: -4,
+      scaleMultiplier: 1.25,
+    });
+  }
+}
+
+function composeTraversalConnectors(chunk: GeneratedChunk, back: Container, front: Container, biome: BiomeId): void {
+  const platforms = [...chunk.platforms].sort((a, b) => b.y - a.y);
+  const ladderKey = biome === "pineValley" || biome === "cloudRidge"
+    ? chooseAsset(["environment/ladders/frosted_wood_ladder.png", "climbingChain"], chunk.chunkY, "climbingChain")
+    : chooseAsset(["climbingChain", "environment/ladders/climbing_chain.png"], chunk.chunkY, "climbingChain");
+  const bridgeKey = chooseAsset(["environment/ropeBridges/rope_bridge_worn.png", "ropeBridge"], chunk.chunkY, "ropeBridge");
+
+  for (let i = 0; i < platforms.length; i++) {
+    const lower = platforms[i]!;
+    const lowerCx = platformCenterX(lower) / TILE_SIZE;
+    let best: GeneratedChunk["platforms"][number] | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let j = i + 1; j < platforms.length; j++) {
+      const upper = platforms[j]!;
+      const dy = lower.y - upper.y;
+      if (dy < 2 || dy > 5) continue;
+      const dx = Math.abs(lowerCx - platformCenterX(upper) / TILE_SIZE);
+      if (dx > 2.8) continue;
+      const score = dx * 2 + dy;
+      if (score < bestScore) {
+        best = upper;
+        bestScore = score;
+      }
+    }
+    if (!best) continue;
+    const seed = platformSeed(chunk, lower, 1123);
+    if (seed % 4 === 0) continue;
+    const wx = (platformCenterX(lower) + platformCenterX(best)) / 2;
+    const lowerY = platformTopY(chunk, lower);
+    placeSceneSprite(back, ladderKey, wx, lowerY + 2, seed, {
+      maxWidth: 24,
+      maxHeight: Math.max(42, (lower.y - best.y) * TILE_SIZE + 12),
+      alpha: biome === "pineValley" ? 0.78 : 0.64,
+      zIndex: 0,
+      yOffset: -1,
+      xJitter: 2,
+    });
+  }
+
+  for (let i = 0; i < platforms.length - 1; i++) {
+    const a = platforms[i]!;
+    const b = platforms[i + 1]!;
+    if (Math.abs(a.y - b.y) > 1) continue;
+    const left = a.x + a.width <= b.x ? a : b;
+    const right = left === a ? b : a;
+    const gap = right.x - (left.x + left.width);
+    if (gap < 2 || gap > 8) continue;
+    const seed = platformSeed(chunk, left, 2701);
+    if (seed % 3 !== 0) continue;
+    const wx = (left.x + left.width + gap / 2) * TILE_SIZE;
+    const wy = (chunk.worldTileY + Math.min(left.y, right.y)) * TILE_SIZE - 1;
+    placeSceneSprite(front, bridgeKey, wx, wy, seed, {
+      maxWidth: gap * TILE_SIZE + 22,
+      maxHeight: 24,
+      alpha: 0.64,
+      zIndex: 1,
+      yOffset: 4,
+      scaleMultiplier: 1.08,
+    });
+  }
+}
+
+function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, front: Container, biome: BiomeId): void {
+  const mainFolders = biomePropFolders(biome);
+  const smallFolders = biomeSmallPropFolders(biome);
+
+  const placeLandmark = (
+    platform: GeneratedChunk["platforms"][number],
+    salt: number,
+    key: AssetKey | null,
+    zIndex: number,
+    alpha = 0.92
+  ): void => {
+    if (!key) return;
+    const seed = platformSeed(chunk, platform, salt);
+    const wx = platformCenterX(platform);
+    const wy = platformTopY(chunk, platform) + 2;
+    placeSceneSprite(front, key, wx, wy, seed, {
+      maxWidth: Math.max(36, platform.width * TILE_SIZE - 8),
+      maxHeight: 66,
+      alpha,
+      zIndex,
+      xJitter: Math.max(0, Math.min(8, platform.width * 2)),
+    });
+  };
+
+  placeLandmark(
+    chunk.entry,
+    31,
+    chooseAssetFromFolders(["environment/banners", "environment/lanterns", "environment/lights"], platformSeed(chunk, chunk.entry, 31)) ??
+      chooseAsset(["decorBannerGreen", "decorLanternGold", "lanternCyan"], chunk.chunkY, "lanternCyan"),
+    4,
+    0.9
+  );
+
+  placeLandmark(
+    chunk.exit,
+    79,
+    biome === "celestialSummit"
+      ? chooseAsset(["ancientBeacon", "relicShrine", "decorPedestalGold"], platformSeed(chunk, chunk.exit, 79), "relicShrine")
+      : chooseAssetFromFolders(["environment/relicShrines", "environment/crystals", "environment/banners"], platformSeed(chunk, chunk.exit, 79)) ??
+        chooseAsset(["crystalMarker", "decorPedestalBlue", "decorBannerBlue"], chunk.chunkY, "crystalMarker"),
+    3,
+    0.82
+  );
+
+  for (const platform of chunk.platforms) {
+    const seed = platformSeed(chunk, platform, 503);
+    const topY = platformTopY(chunk, platform);
+    if (platform.width >= 5 && seed % 3 !== 1) {
+      const mainKey = chooseAssetFromFolders(mainFolders, seed);
+      const frontLayer = seed % 5 !== 0;
+      placeSceneSprite(frontLayer ? front : back, mainKey, platformCenterX(platform), topY + 2, seed, {
+        maxWidth: Math.min(104, platform.width * TILE_SIZE - 6),
+        maxHeight: frontLayer ? 76 : 92,
+        alpha: frontLayer ? 0.8 : 0.48,
+        zIndex: frontLayer ? 2 : -1,
+        xJitter: Math.min(10, platform.width),
+        scaleMultiplier: platform.width >= 8 ? 1.08 : 0.92,
+      });
+    }
+
+    if (platform.width >= 3 && seed % 4 === 0) {
+      const smallKey = chooseAssetFromFolders(smallFolders, seed >> 2);
+      const side = seed % 2 === 0 ? -0.32 : 0.32;
+      placeSceneSprite(front, smallKey, platformCenterX(platform) + side * platform.width * TILE_SIZE, topY + 1, seed, {
+        maxWidth: 42,
+        maxHeight: 48,
+        alpha: 0.86,
+        zIndex: 3,
+        xJitter: 4,
+      });
+    }
+
+    if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && platform.width >= 4 && seed % 9 === 0) {
+      const effectKey = chooseAssetFromFolders(["environment/particleEffects", "environment/effects"], seed);
+      placeSceneSprite(front, effectKey, platformCenterX(platform), topY - 4, seed, {
+        maxWidth: 74,
+        maxHeight: 34,
+        alpha: 0.52,
+        zIndex: 5,
+        addBlend: true,
+      });
+    }
+  }
+}
+
 function decorateChunk(chunk: GeneratedChunk): void {
-  if (
-    !hasAsset("mossPlatform")
-    && !hasAsset("grassClump")
-    && !hasAsset("bush")
-    && !hasAsset("tree")
-    && !hasAsset("hazardSpikes")
-    && !hasAsset("leafCluster")
-    && !hasAsset("mushroomCluster")
-    && !hasAsset("ruinArchFragment")
-  ) return;
+  if (Object.keys(pixelAssets).length === 0) return;
 
   const back = new Container();
   const front = new Container();
@@ -1195,6 +2208,11 @@ function decorateChunk(chunk: GeneratedChunk): void {
   front.sortableChildren = true;
   const baseTileY = chunk.worldTileY;
   const biome = biomeForChunkY(chunk.chunkY);
+  composeChunkAtmosphere(chunk, back, biome);
+  composeMidMountainLayer(chunk, back, biome);
+  composePlatformPartLayer(chunk, front, biome);
+  composeTraversalConnectors(chunk, back, front, biome);
+  composePlatformSceneDressing(chunk, back, front, biome);
 
   for (let ly = 0; ly < chunk.height; ly++) {
     for (let lx = 0; lx < chunk.width; lx++) {
@@ -1204,16 +2222,25 @@ function decorateChunk(chunk: GeneratedChunk): void {
       const kind = chunk.tiles[ly * chunk.width + lx] as TileKind;
 
       if (kind === "hazard") {
-        const hazardKey: AssetKey =
-          biome === "celestialSummit" && hasAsset("lightningHazard") ? "lightningHazard" :
-          (biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("fallingIcicle") ? "fallingIcicle" :
-          "hazardSpikes";
+        const hazardChoicesByBiome: Record<BiomeId, AssetKey[]> = {
+          pineValley: ["stoneSpikes", "spikeMachine", "rollingBoulder", "hazardSpikes"],
+          cloudRidge: ["stoneSpikes", "spikeBall", "crystalSpikesBlue", "magicArcPurple"],
+          snowfallCliffs: ["fallingIciclesCluster", "fallingIcicle", "iceSpikes", "crystalSpikesBlue"],
+          frozenSpires: ["fallingIciclesCluster", "iceSpikes", "spikeBoulder", "magicArcBlue"],
+          celestialSummit: ["lightningHazard", "lightningBlue", "summitSpikes", "runeTrapGold"],
+        };
+        const hazardChoices = [...hazardChoicesByBiome[biome], ...folderAssetKeys("environment/hazards")];
+        let hazardKey = hazardChoices[seed % hazardChoices.length]!;
+        if (!hasAsset(hazardKey)) hazardKey = "hazardSpikes";
         if (hasAsset(hazardKey)) {
           const hazard = makeSprite(hazardKey);
-          hazard.x = hazardKey === "lightningHazard" ? wx - 4 : wx;
-          hazard.y = hazardKey === "fallingIcicle" ? wy - 16 : hazardKey === "lightningHazard" ? wy - 24 : wy;
+          const isHanging = hazardKey === "fallingIcicle" || hazardKey === "fallingIciclesCluster" || hazardKey === "lightningHazard" || hazardKey === "lightningBlue" || hazardKey === "lightningPurple";
+          const isWide = hazardKey === "magicArcPurple" || hazardKey === "magicArcBlue" || hazardKey === "runeTrapGold" || hazardKey === "runeTrapGreen" || hazardKey === "fallingIciclesCluster";
+          hazard.x = wx + (isWide ? -16 : hazardKey === "spikeMachine" ? -12 : hazardKey === "spikeBall" || hazardKey === "spikeBoulder" ? -8 : 0);
+          hazard.y = isHanging ? wy - 24 : hazardKey === "spikeBall" || hazardKey === "spikeBoulder" || hazardKey === "rollingBoulder" ? wy - 14 : wy - 2;
           hazard.alpha = 0.96;
           hazard.zIndex = 4;
+          addHazardTelegraph(front, chunk.chunkY, wx + (isWide ? -16 : 0), wy, seed, hazardTelegraphStyle(hazardKey), isWide ? 48 : TILE_SIZE);
           front.addChild(hazard);
         }
         continue;
@@ -1221,22 +2248,21 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       if (!canPlaceDecoration(chunk, lx, ly)) continue;
 
-      if (hasAsset("mossPlatform") && lx % 2 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const cap = makeSprite(platformCapAsset(seed, biome));
-        cap.x = wx;
-        cap.y = wy - 1;
-        cap.alpha = 0.92;
-        cap.zIndex = 1;
-        front.addChild(cap);
+      if (seed % 23 === 0) {
+        const key = folderChoiceForBiome(biome, seed);
+        if (key) placeManifestDecoration(seed % 2 === 0 ? back : front, key, wx, wy, seed, seed % 2 === 0);
       }
 
-      if (hasAsset("stoneLedge") && seed % 73 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const ledge = makeSprite("stoneLedge");
-        ledge.x = wx;
-        ledge.y = wy - 1;
-        ledge.alpha = 0.74;
-        ledge.zIndex = 1;
-        front.addChild(ledge);
+      if (seed % 41 === 0) {
+        const terrainKeys = [
+          ...folderAssetKeys("environment/terrainTiles"),
+          ...folderAssetKeys("environment/mossTiles"),
+          ...folderAssetKeys("environment/snowTiles"),
+          ...folderAssetKeys("environment/ruinTiles"),
+          ...folderAssetKeys("environment/tiles"),
+        ];
+        const key = chooseAsset(terrainKeys, seed, "");
+        if (key) placeManifestDecoration(back, key, wx, wy + 4, seed, true);
       }
 
       if (biome !== "frozenSpires" && biome !== "celestialSummit" && hasAsset("grassClump") && seed % 7 === 0) {
@@ -1428,6 +2454,28 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(crystal);
       }
 
+      if (seed % 137 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const decorChoices: AssetKey[] =
+          biome === "pineValley" ? ["decorBannerGreen", "decorSignWood", "decorLanternGold", "decorRopePosts", "decorFlowerCrystalGreen", "decorCampfireWarm", "decorTripodRed", "decorRopeGateWood", "decorCrateStackWood", "decorBarrelStackWood", "decorSmallShrineWood", "decorFlowerPostPink"] :
+          biome === "cloudRidge" ? ["decorBannerBlue", "decorLanternBlue", "decorPedestalBlue", "decorSignRune", "decorRopeLanterns", "decorCampfireBlue", "decorTripodBlue", "decorRopeGateLit", "decorCrateStackRune", "decorCrystalTotemBlue", "decorFlowerPostWhite"] :
+          biome === "snowfallCliffs" ? ["decorPedestalBlue", "decorBrazierBlue", "decorFlowerCrystalBlue", "decorSkeletonMarker", "decorCampfireBlue", "decorRopeGateIce", "decorStatueSnow", "decorSmallShrineSnow", "decorSnowLampBlue", "decorCrystalTotemBlue", "decorFlowerPostBlue"] :
+          biome === "frozenSpires" ? ["decorBrazierBlue", "decorFlowerCrystalPurple", "decorSkeletonMarker", "decorLanternBlue", "decorTripodPurple", "decorRopeGateIce", "decorStatueSnow", "decorSnowLampPurple", "decorCrystalTotemPurple", "decorSmallShrinePurple"] :
+          ["decorBannerGold", "decorPedestalGold", "decorBrazierGold", "decorLanternGreen", "decorFlowerCrystalBlue", "decorCampfireGreen", "decorRopeGateLit", "decorStatueStone", "decorSnowLampGold", "decorCrystalTotemGreen", "decorSmallShrineSnow"];
+        let decorKey = decorChoices[(seed >> 5) % decorChoices.length]!;
+        if (!hasAsset(decorKey)) decorKey = "decorSignWood";
+        if (hasAsset(decorKey)) {
+          const decor = makeSprite(decorKey);
+          const tallDecor = decorKey === "decorBannerBlue" || decorKey === "decorBannerGold" || decorKey === "decorBannerGreen" || decorKey === "decorPedestalBlue" || decorKey === "decorPedestalGreen" || decorKey === "decorPedestalGold" || decorKey === "decorSkeletonMarker" || decorKey === "decorStatueStone" || decorKey === "decorStatueSnow" || decorKey === "decorCrystalTotemBlue" || decorKey === "decorCrystalTotemGreen" || decorKey === "decorCrystalTotemPurple";
+          const mediumDecor = decorKey === "decorTripodRed" || decorKey === "decorTripodBlue" || decorKey === "decorTripodPurple" || decorKey === "decorSmallShrineWood" || decorKey === "decorSmallShrineSnow" || decorKey === "decorSmallShrinePurple" || decorKey === "decorSnowLampBlue" || decorKey === "decorSnowLampGold" || decorKey === "decorSnowLampPurple";
+          const wideDecor = decorKey === "decorRopePosts" || decorKey === "decorRopeLanterns" || decorKey === "decorRopeGateWood" || decorKey === "decorRopeGateLit" || decorKey === "decorRopeGateIce" || decorKey === "decorSignWood" || decorKey === "decorSignRune";
+          decor.x = wx + (wideDecor ? -8 : decorKey.startsWith("decorLantern") ? 2 : -2);
+          decor.y = wy - (tallDecor ? 50 : mediumDecor ? 38 : decorKey.startsWith("decorBrazier") || decorKey.startsWith("decorCampfire") ? 30 : decorKey.startsWith("decorFlowerCrystal") || decorKey.startsWith("decorFlowerPost") ? 31 : 25);
+          decor.alpha = biome === "celestialSummit" ? 0.88 : 0.82;
+          decor.zIndex = 2;
+          front.addChild(decor);
+        }
+      }
+
       if ((biome === "pineValley" || biome === "cloudRidge") && hasAsset("bush") && seed % 47 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
         const bush = makeSprite("bush");
         bush.x = wx - 6;
@@ -1460,6 +2508,31 @@ function decorateChunk(chunk: GeneratedChunk): void {
         back.addChild(chain);
       }
 
+      if (seed % 173 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const clusterKey: AssetKey =
+          biome === "celestialSummit" && hasAsset("tileClusterSummit") ? "tileClusterSummit" :
+          (biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("tileClusterSnow") ? "tileClusterSnow" :
+          biome === "pineValley" && hasAsset("tileClusterMoss") ? "tileClusterMoss" :
+          "tileClusterStone";
+        if (hasAsset(clusterKey)) {
+          const cluster = makeSprite(clusterKey);
+          cluster.x = wx - 7;
+          cluster.y = wy - 49;
+          cluster.alpha = 0.46;
+          cluster.zIndex = -1;
+          back.addChild(cluster);
+        }
+      }
+
+      if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("tallPillar") && seed % 197 === 0 && lx < chunk.width - 2 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
+        const pillar = makeSprite("tallPillar");
+        pillar.x = wx - 8;
+        pillar.y = wy - 54;
+        pillar.alpha = 0.42;
+        pillar.zIndex = -2;
+        back.addChild(pillar);
+      }
+
       if ((biome === "snowfallCliffs" || biome === "frozenSpires") && hasAsset("windZone") && seed % 167 === 0) {
         const wind = makeSprite("windZone");
         wind.x = wx - 24;
@@ -1469,15 +2542,6 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(wind);
       }
 
-      if (hasAsset("jumpPad") && seed % 211 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
-        const pad = makeSprite("jumpPad");
-        pad.x = wx;
-        pad.y = wy - 25;
-        pad.alpha = 0.9;
-        pad.zIndex = 4;
-        front.addChild(pad);
-      }
-
       if ((biome === "frozenSpires" || biome === "celestialSummit") && hasAsset("rollingBoulder") && seed % 223 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
         const boulder = makeSprite("rollingBoulder");
         boulder.x = wx - 4;
@@ -1485,22 +2549,6 @@ function decorateChunk(chunk: GeneratedChunk): void {
         boulder.alpha = 0.82;
         boulder.zIndex = 3;
         front.addChild(boulder);
-      }
-
-      if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires") && seed % 241 === 0) {
-        const enemyKeys: AssetKey[] =
-          biome === "cloudRidge" ? ["enemyGoblin", "enemyArcher"] :
-          biome === "snowfallCliffs" ? ["enemyIceBat", "enemySkeleton"] :
-          ["enemyYeti", "enemyWindSpirit"];
-        const enemyKey = enemyKeys[(seed >> 3) % enemyKeys.length]!;
-        if (hasAsset(enemyKey)) {
-          const enemy = makeSprite(enemyKey);
-          enemy.x = wx - 6;
-          enemy.y = wy - 26;
-          enemy.alpha = 0.72;
-          enemy.zIndex = 4;
-          front.addChild(enemy);
-        }
       }
 
       if (biome === "celestialSummit" && hasAsset("relicShrine") && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
@@ -1529,6 +2577,15 @@ function drawTile(
   const h1 = (tileX * 2503 + tileY * 1237) & 0xffff;
   const h2 = (tileX * 3701 + tileY * 809)  & 0xffff;
   const hNorm = Math.min(1, chunkIdx / 28);
+  const biome = biomeForChunkY(chunkIdx);
+  const snowT = altitude01(chunkIdx, 4, 14);
+  const iceT = altitude01(chunkIdx, 10, 16);
+  const summitT = altitude01(chunkIdx, 16, 20);
+  const grassT = Math.max(0, 1 - snowT);
+  const snowCol = lerpColor(0xe9f2ff, 0xf8fbff, summitT);
+  const snowShade = lerpColor(0xaac4df, 0xd7e7f6, summitT);
+  const stoneCol = lerpColor(lerpColor(PAL.stoneMid, PAL.stoneWorn, snowT * 0.8), 0xd1d9e2, summitT);
+  const stoneShade = lerpColor(PAL.stoneShadow, 0x55667f, summitT);
 
   const hasTop = above === "empty" || above === "hazard" || above === "relic";
   const hasBot = below === "empty" || below === "hazard" || below === "relic";
@@ -1536,134 +2593,240 @@ function drawTile(
   if (kind === "oneWay") {
     // ── Floating island platform (main gameplay surface) ──────────────────
 
-    // Altitude-shifted stone colour: cool sandstone → worn ruins at altitude
-    const stoneCol = lerpColor(PAL.stoneMid, PAL.stoneWorn, hNorm * 0.55);
-
     // Outline + body
-    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(PAL.stoneShadow);
+    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(stoneShade);
     g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2).fill(stoneCol);
 
     // Brick mortar seams — staggered rows give classic masonry look
     const stagger = (tileY % 2 === 0) ? 0 : 8;
-    g.rect(px + 1, py + 8, TILE_SIZE - 2, 1).fill({ color: PAL.stoneShadow, alpha: 0.5 });
+    g.rect(px + 1, py + 8, TILE_SIZE - 2, 1).fill({ color: stoneShade, alpha: 0.5 });
     const vs1 = px + 1 + ((stagger + 7) % (TILE_SIZE - 2));
     const vs2 = px + 1 + ((stagger + 7 + 8) % (TILE_SIZE - 2));
-    g.rect(vs1, py + 1, 1, 7).fill({ color: PAL.stoneShadow, alpha: 0.38 });
-    g.rect(vs2, py + 9, 1, TILE_SIZE - 10).fill({ color: PAL.stoneShadow, alpha: 0.38 });
+    g.rect(vs1, py + 1, 1, 7).fill({ color: stoneShade, alpha: 0.38 });
+    g.rect(vs2, py + 9, 1, TILE_SIZE - 10).fill({ color: stoneShade, alpha: 0.38 });
 
     // Subtle top highlight (light from above)
-    g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill({ color: PAL.stoneLight, alpha: 0.22 });
+    g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill({ color: PAL.stoneLight, alpha: 0.22 + summitT * 0.18 });
     // Right-edge shadow
-    g.rect(px + TILE_SIZE - 2, py + 2, 1, TILE_SIZE - 3).fill({ color: PAL.stoneShadow, alpha: 0.20 });
+    g.rect(px + TILE_SIZE - 2, py + 2, 1, TILE_SIZE - 3).fill({ color: stoneShade, alpha: 0.20 });
 
-    // Moss patch (1 in 3 tiles, position varies)
-    if (h1 % 3 < 1) {
+    // Moss patch (common low, rare high)
+    if (grassT > 0.16 && h1 % 3 < 1) {
       const mx = px + 2 + (h1 % 5);
-      g.rect(mx, py + 3, 3, 2).fill(PAL.mossGreen);
-      g.rect(mx, py + 2, 2, 1).fill(PAL.mossBright);
+      g.rect(mx, py + 3, 3, 2).fill({ color: PAL.mossGreen, alpha: 0.25 + grassT * 0.75 });
+      g.rect(mx, py + 2, 2, 1).fill({ color: PAL.mossBright, alpha: 0.2 + grassT * 0.7 });
     }
 
     // Altitude rune glow (rare, high chunks only)
-    if (hNorm > 0.55 && (h2 % 9) < 2) {
-      g.rect(px + 5 + (h2 % 5), py + 5, 2, 4).fill({ color: PAL.runeGlow, alpha: 0.38 + hNorm * 0.25 });
+    if ((biome === "cloudRidge" || biome === "snowfallCliffs" || biome === "frozenSpires" || biome === "celestialSummit") && (h2 % 9) < 2) {
+      g.rect(px + 5 + (h2 % 5), py + 5, 2, 4).fill({ color: PAL.runeGlow, alpha: 0.22 + hNorm * 0.34 });
     }
 
     // ── Grass top (exposed upper face) ──────────────────────────────────
     if (hasTop) {
-      const gCol = lerpColor(PAL.grassTop, PAL.mossBright, hNorm * 0.45);
-      // Soil backing under grass
-      g.rect(px + 1, py + 1, TILE_SIZE - 2, 4).fill(PAL.soilWarm);
-      // Grass layer
-      g.rect(px + 1, py + 1, TILE_SIZE - 2, 2).fill(PAL.grassDark);
-      g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill(gCol);
-      // Tiny grass tufts above the tile edge
-      for (let t = 0; t < 4; t++) {
-        const tx = px + 1 + t * 4 + (h1 % 3);
-        const th = 1 + ((h1 + t * 3) % 2);
-        g.rect(tx, py - th, 1, th).fill(gCol);
+      const gCol = lerpColor(PAL.grassTop, PAL.mossBright, Math.min(0.65, hNorm * 0.35));
+      if (grassT > 0.18) {
+        g.rect(px + 1, py + 1, TILE_SIZE - 2, 4).fill(PAL.soilWarm);
+        g.rect(px + 1, py + 1, TILE_SIZE - 2, 2).fill(PAL.grassDark);
+        g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill(gCol);
+        for (let t = 0; t < 4; t++) {
+          const tx = px + 1 + t * 4 + (h1 % 3);
+          const th = 1 + ((h1 + t * 3) % 2);
+          g.rect(tx, py - th, 1, th).fill({ color: gCol, alpha: 0.25 + grassT * 0.75 });
+        }
+        const fl = (tileX * 11 + tileY * 17) % 37;
+        if (grassT > 0.55 && fl < 2) {
+          const fcol = fl === 0 ? 0xf4dc6b : 0xbba4ff;
+          g.rect(px + 3 + fl * 5, py - 2, 1, 2).fill(lerpColor(PAL.grassDark, gCol, 0.5));
+          g.rect(px + 3 + fl * 5, py - 3, 1, 1).fill(fcol);
+        }
+        if ((h1 % 4) < 2) g.rect(px, py, 1, 3).fill({ color: PAL.mossBright, alpha: 0.18 + grassT * 0.42 });
+        if ((h2 % 4) < 2) g.rect(px + TILE_SIZE - 1, py, 1, 3).fill({ color: PAL.mossBright, alpha: 0.18 + grassT * 0.42 });
       }
-      // Occasional tiny flower (-2 to -3 px above tile)
-      const fl = (tileX * 11 + tileY * 17) % 23;
-      if (fl < 3) {
-        const fcol = fl === 0 ? 0xffaabb : fl === 1 ? PAL.coinGold : 0xffffff;
-        g.rect(px + 3 + fl * 4, py - 2, 1, 2).fill(lerpColor(PAL.grassDark, gCol, 0.5)); // stem
-        g.rect(px + 3 + fl * 4, py - 3, 1, 1).fill(fcol);
+      if (snowT > 0.12) {
+        const capH = 1 + Math.round(snowT * 3);
+        g.rect(px + 1, py, TILE_SIZE - 2, capH).fill(snowShade);
+        g.rect(px + 2, py, TILE_SIZE - 4, Math.max(1, capH - 1)).fill(snowCol);
+        if ((h2 % 4) < 3) g.rect(px + 2 + (h1 % 8), py + capH - 1, 4, 1).fill({ color: 0xffffff, alpha: 0.45 });
       }
-      // Moss overflow on edges (gives organic silhouette)
-      if ((h1 % 4) < 2) g.rect(px, py, 1, 3).fill({ color: PAL.mossBright, alpha: 0.55 });
-      if ((h2 % 4) < 2) g.rect(px + TILE_SIZE - 1, py, 1, 3).fill({ color: PAL.mossBright, alpha: 0.55 });
     }
 
     // ── Soil underside with hanging roots ───────────────────────────────
     if (hasBot) {
-      // Soil underside band
-      g.rect(px + 1, py + TILE_SIZE - 4, TILE_SIZE - 2, 3).fill(PAL.soilDark);
-      g.rect(px + 1, py + TILE_SIZE - 4, TILE_SIZE - 2, 1).fill(PAL.soilWarm);
-      // Hanging roots (2–4 per tile)
-      const rc = 2 + (h1 % 3);
-      const rStep = Math.floor((TILE_SIZE - 4) / rc);
-      for (let r = 0; r < rc; r++) {
-        const rx = px + 2 + r * rStep + (h2 % 3);
-        const rlen = 2 + ((h1 + r * 5) % 5);
-        g.rect(rx, py + TILE_SIZE, 1, rlen).fill(PAL.soilRoot);
-        if (rlen >= 4) g.rect(rx - 1, py + TILE_SIZE + rlen - 2, 3, 1).fill(lerpColor(PAL.soilRoot, PAL.soilDark, 0.5));
-      }
-      // Occasional hanging vine (thicker, 2px wide)
-      if ((h2 % 5) < 2) {
-        const vx = px + 5 + (h2 % 8);
-        const vlen = 4 + (h1 % 5);
-        g.rect(vx, py + TILE_SIZE, 2, vlen).fill(PAL.mossGreen);
-        g.rect(vx, py + TILE_SIZE, 2, 1).fill(PAL.mossBright);
+      g.rect(px + 1, py + TILE_SIZE - 4, TILE_SIZE - 2, 3).fill(lerpColor(PAL.soilDark, stoneShade, snowT));
+      g.rect(px + 1, py + TILE_SIZE - 4, TILE_SIZE - 2, 1).fill(lerpColor(PAL.soilWarm, snowShade, snowT));
+      if (grassT > 0.25) {
+        const rc = 2 + (h1 % 3);
+        const rStep = Math.floor((TILE_SIZE - 4) / rc);
+        for (let r = 0; r < rc; r++) {
+          const rx = px + 2 + r * rStep + (h2 % 3);
+          const rlen = 2 + ((h1 + r * 5) % 5);
+          g.rect(rx, py + TILE_SIZE, 1, rlen).fill({ color: PAL.soilRoot, alpha: grassT });
+          if (rlen >= 4) g.rect(rx - 1, py + TILE_SIZE + rlen - 2, 3, 1).fill({ color: lerpColor(PAL.soilRoot, PAL.soilDark, 0.5), alpha: grassT });
+        }
+        if ((h2 % 5) < 2) {
+          const vx = px + 5 + (h2 % 8);
+          const vlen = 4 + (h1 % 5);
+          g.rect(vx, py + TILE_SIZE, 2, vlen).fill({ color: PAL.mossGreen, alpha: grassT });
+          g.rect(vx, py + TILE_SIZE, 2, 1).fill({ color: PAL.mossBright, alpha: grassT });
+        }
+      } else if (iceT > 0.25 && (h2 % 5) < 2) {
+        const ix = px + 3 + (h2 % 8);
+        const il = 3 + (h1 % 5);
+        g.poly([ix, py + TILE_SIZE, ix + 2, py + TILE_SIZE + il, ix + 4, py + TILE_SIZE]).fill({ color: snowCol, alpha: 0.72 });
       }
     }
 
   } else if (kind === "solid") {
     // ── Floor / wall tiles ───────────────────────────────────────────────
-    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(PAL.stoneShadow);
-    g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2).fill(PAL.stoneDark);
-    g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill({ color: PAL.stoneMid, alpha: 0.25 });
+    g.rect(px, py, TILE_SIZE, TILE_SIZE).fill(stoneShade);
+    g.rect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2).fill(lerpColor(PAL.stoneDark, stoneCol, 0.35));
+    g.rect(px + 1, py + 1, TILE_SIZE - 2, 1).fill({ color: PAL.stoneLight, alpha: 0.25 + summitT * 0.18 });
+    if (hasTop && snowT > 0.15) {
+      g.rect(px + 1, py, TILE_SIZE - 2, 2 + Math.round(snowT * 2)).fill(snowCol);
+    }
 
   } else if (kind === "hazard") {
-    // ── Stone spike hazard ───────────────────────────────────────────────
-    g.rect(px, py + TILE_SIZE - 5, TILE_SIZE, 5).fill(PAL.hazardBase);
-    g.rect(px, py + TILE_SIZE - 5, TILE_SIZE, 1).fill({ color: PAL.hazardRed, alpha: 0.5 });
+    // ── Natural mountain spike hazard ───────────────────────────────────
+    const spikeCol = lerpColor(0x59646f, snowCol, iceT);
+    const spikeShade = lerpColor(PAL.hazardBase, 0x536784, iceT);
+    g.rect(px, py + TILE_SIZE - 5, TILE_SIZE, 5).fill(spikeShade);
+    g.rect(px, py + TILE_SIZE - 5, TILE_SIZE, 1).fill({ color: PAL.hazardRed, alpha: 0.25 });
     for (let i = 0; i < 3; i++) {
       const sx = px + 2 + i * 5;
-      g.poly([sx, py + TILE_SIZE - 5, sx + 2, py + 1, sx + 4, py + TILE_SIZE - 5]).fill(PAL.hazardRed);
-      g.rect(sx + 1, py + 1, 2, 4).fill(PAL.hazardGlow);
-      g.rect(sx + 1, py + 1, 1, 1).fill(0xffffff); // tip gleam
+      g.poly([sx, py + TILE_SIZE - 5, sx + 2, py + 1, sx + 4, py + TILE_SIZE - 5]).fill(spikeCol);
+      g.rect(sx + 1, py + 3, 1, 6).fill({ color: spikeShade, alpha: 0.45 });
+      g.rect(sx + 1, py + 1, 1, 1).fill(0xffffff);
     }
   }
+}
+
+// ── Jump pad animations ───────────────────────────────────────────────────────
+
+function spawnJumpPadAnim(pad: JumpPadSpawn, worldTileY: number): void {
+  if (jumpPadAnims.has(pad.id)) return;
+  const container = new Container();
+  const aura = new Graphics();
+  const sprite = hasAsset("jumpPad") ? makeSprite("jumpPad") : null;
+  const worldX = pad.x * TILE_SIZE + TILE_SIZE / 2;
+  const worldY = worldTileY * TILE_SIZE + TILE_SIZE / 2;
+
+  container.x = worldX;
+  container.y = worldY;
+  container.zIndex = 5;
+  container.addChild(aura);
+  if (sprite) {
+    sprite.anchor.set(0.5);
+    sprite.y = 1;
+    sprite.blendMode = "normal";
+    container.addChild(sprite);
+  }
+  portalLayer.addChild(container);
+  jumpPadAnims.set(pad.id, { container, aura, sprite, pad, worldX, worldY });
+}
+
+function updateJumpPadAnims(tSec: number): void {
+  for (const anim of jumpPadAnims.values()) {
+    const pulse = Math.sin(tSec * 5.4 + anim.pad.x) * 0.5 + 0.5;
+    anim.aura.clear();
+    anim.aura.ellipse(0, 2, 18 + pulse * 4, 7 + pulse * 1.5)
+      .fill({ color: PAL.portalBlue, alpha: 0.13 + pulse * 0.08 });
+    anim.aura.ellipse(0, 2, 11 + pulse * 2, 4 + pulse)
+      .stroke({ color: PAL.portalGlow, alpha: 0.42 + pulse * 0.24, width: 1 });
+    anim.aura.rect(-10, 5, 20, 2).fill({ color: PAL.portalGlow, alpha: 0.18 + pulse * 0.18 });
+    if (anim.sprite) {
+      anim.sprite.y = 2 + Math.sin(tSec * 4.2 + anim.pad.y) * 1.2;
+      anim.sprite.scale.set(0.9 + pulse * 0.06);
+      anim.sprite.tint = 0xffffff;
+    }
+  }
+}
+
+function clearJumpPadAnimsForChunk(chunkY: number): void {
+  for (const [id, anim] of [...jumpPadAnims.entries()]) {
+    const animChunkY = Math.max(0, -Math.floor(anim.worldY / (CHUNK_HEIGHT_TILES * TILE_SIZE)));
+    if (animChunkY === chunkY) {
+      anim.container.destroy({ children: true });
+      jumpPadAnims.delete(id);
+    }
+  }
+}
+
+function applyLocalJumpPads(player: PlayerState): boolean {
+  if (player.health <= 0 || player.velocity.y < 0) return false;
+  const playerCenterX = player.position.x + PLAYER_WIDTH / 2;
+  const playerBottom = player.position.y + PLAYER_HEIGHT;
+  for (const chunk of loadedChunks.values()) {
+    for (const pad of chunk.jumpPads) {
+      const padX = pad.x * TILE_SIZE + TILE_SIZE / 2;
+      const padY = (chunk.worldTileY + pad.y) * TILE_SIZE + TILE_SIZE / 2;
+      const nearX = Math.abs(playerCenterX - padX) <= TILE_SIZE * 0.85;
+      const nearY = playerBottom >= padY - TILE_SIZE * 0.9 && playerBottom <= padY + TILE_SIZE * 0.9;
+      if (!nearX || !nearY) continue;
+      player.velocity.y = -JUMP_SPEED * Math.max(1, pad.multiplier);
+      player.grounded = false;
+      player.coyoteTimer = 0;
+      player.jumpBufferTimer = 0;
+      player.fallStartY = null;
+      return true;
+    }
+  }
+  return false;
+}
+
+function jumpPadFeedback(wx: number, wy: number, multiplier: number): void {
+  spawnRing(wx, wy, PAL.portalBlue);
+  spawnWorldPulse(wx, wy, PAL.portalGlow, 64, 0.5, 3);
+  spawnFloatingText(wx, wy - 18, `${Math.round(multiplier)}x JUMP`, PAL.portalGlow);
+  triggerShake(2.2, -3.5);
 }
 
 // ── Relic animations ──────────────────────────────────────────────────────────
 
 function spawnRelicAnim(id: string, tileX: number, tileY: number): void {
   if (relicAnims.has(id)) return;
+  const kind = collectibleKindForRelicId(id);
+  const visual = collectibleVisual(kind);
   const container = new Container();
+  const aura = new Graphics();
   const gfx = new Graphics();
   const sprite = makeSprite("coin");
   const sparkle = hasAsset("collectibleSparkle") ? makeSprite("collectibleSparkle") : null;
   const ring = hasAsset("collectibleRing") ? makeSprite("collectibleRing") : null;
   sprite.anchor.set(0.5);
-  sprite.visible = hasAsset("coin");
+  sprite.visible = true;
+  container.addChild(aura);
   if (ring) {
     ring.anchor.set(0.5);
     ring.alpha = 0.42;
     ring.blendMode = "add";
+    ring.tint = visual.color;
     container.addChild(ring);
   }
   if (sparkle) {
     sparkle.anchor.set(0.5);
     sparkle.alpha = 0.55;
     sparkle.blendMode = "add";
+    sparkle.tint = visual.color;
     container.addChild(sparkle);
   }
   container.addChild(sprite, gfx);
   container.x = tileX * TILE_SIZE + TILE_SIZE / 2;
   container.y = tileY * TILE_SIZE + TILE_SIZE / 2;
   relicLayer.addChild(container);
-  relicAnims.set(id, { container, gfx, sprite, sparkle, ring, frames: collectibleFrames(id, tileX, tileY), tileX, tileY });
+  relicAnims.set(id, {
+    container,
+    aura,
+    gfx,
+    sprite,
+    sparkle,
+    ring,
+    kind,
+    auraColor: visual.color,
+    frames: collectibleFrames(kind, id, tileX, tileY),
+    tileX,
+    tileY
+  });
 }
 
 function updateRelicAnims(tSec: number): void {
@@ -1679,6 +2842,12 @@ function updateRelicAnims(tSec: number): void {
     const frame  = Math.floor((tSec * 5) % 4);
     const coinW  = frame === 0 ? 8 : frame === 1 ? 5 : frame === 2 ? 2 : 5;
     const cx     = -coinW / 2;
+    const pulse = 0.5 + Math.sin(tSec * 4.6 + a.tileX * 0.7 + a.tileY * 0.3) * 0.5;
+
+    a.aura.clear();
+    a.aura.circle(0, 0, 14 + pulse * 2).fill({ color: a.auraColor, alpha: 0.12 + pulse * 0.06 });
+    a.aura.circle(0, 0, 9 + pulse * 1.5).stroke({ color: a.auraColor, alpha: 0.4 + pulse * 0.18, width: 1 });
+    a.aura.circle(0, 0, 5 + pulse).stroke({ color: 0xffffff, alpha: 0.12 + pulse * 0.14, width: 1 });
 
     if (hasAsset("coin")) {
       a.gfx.clear();
@@ -1944,16 +3113,56 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
 // ── Particle system ───────────────────────────────────────────────────────────
 
 interface Particle { gfx: Graphics; vx: number; vy: number; life: number; max: number; gravity: number }
+interface WorldPulse { gfx: Graphics; wx: number; wy: number; life: number; max: number; color: number; radius: number; width: number }
+interface FloatingText { txt: Text; vx: number; vy: number; life: number; max: number }
 const particles:   Particle[] = [];
 const partPool:    Graphics[] = [];
+const worldPulses: WorldPulse[] = [];
+const floatingTexts: FloatingText[] = [];
+let fallStreakTimer = 0;
 
 function spawnPart(wx: number, wy: number, vx: number, vy: number, life: number, color: number, size = 2, gravity = 200): void {
+  if (particles.length > 220) return;
   const gfx = partPool.pop() ?? new Graphics();
   gfx.clear();
   gfx.rect(0, 0, size, size).fill(color);
   gfx.x = wx; gfx.y = wy; gfx.alpha = 1; gfx.visible = true;
   effectLayer.addChild(gfx);
   particles.push({ gfx, vx, vy, life, max: life, gravity });
+}
+
+function spawnWorldPulse(wx: number, wy: number, color: number, radius = 34, life = 0.42, width = 2): void {
+  if (worldPulses.length > 24) return;
+  const gfx = new Graphics();
+  gfx.x = wx;
+  gfx.y = wy;
+  effectLayer.addChild(gfx);
+  worldPulses.push({ gfx, wx, wy, life, max: life, color, radius, width });
+}
+
+function spawnFloatingText(wx: number, wy: number, msg: string, color: number): void {
+  if (floatingTexts.length > 12) return;
+  const txt = new Text({
+    text: msg,
+    style: {
+      fill: color,
+      fontFamily: "monospace",
+      fontSize: 9,
+      fontWeight: "900",
+      stroke: { color: PAL.uiInk, width: 2 },
+    },
+  });
+  txt.anchor.set(0.5);
+  txt.x = wx;
+  txt.y = wy;
+  effectLayer.addChild(txt);
+  floatingTexts.push({ txt, vx: (Math.random() - 0.5) * 12, vy: -26, life: 0.92, max: 0.92 });
+}
+
+function triggerScreenFlash(color: number, life = 0.22): void {
+  screenFlashColor = color;
+  screenFlashLife = life;
+  screenFlashMax = life;
 }
 
 function updateParticles(dt: number): void {
@@ -1971,6 +3180,46 @@ function updateParticles(dt: number): void {
     p.gfx.y += p.vy * dt;
     p.vy    += p.gravity * dt;
     p.gfx.alpha = p.life / p.max;
+  }
+
+  for (let i = worldPulses.length - 1; i >= 0; i--) {
+    const p = worldPulses[i]!;
+    p.life -= dt;
+    if (p.life <= 0) {
+      effectLayer.removeChild(p.gfx);
+      p.gfx.destroy();
+      worldPulses.splice(i, 1);
+      continue;
+    }
+    const t = 1 - p.life / p.max;
+    const r = p.radius * (0.25 + t);
+    p.gfx.clear();
+    p.gfx.circle(0, 0, r).stroke({ color: p.color, alpha: (1 - t) * 0.78, width: p.width });
+    p.gfx.circle(0, 0, r * 0.55).stroke({ color: 0xffffff, alpha: (1 - t) * 0.22, width: 1 });
+  }
+
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const f = floatingTexts[i]!;
+    f.life -= dt;
+    if (f.life <= 0) {
+      effectLayer.removeChild(f.txt);
+      f.txt.destroy();
+      floatingTexts.splice(i, 1);
+      continue;
+    }
+    f.txt.x += f.vx * dt;
+    f.txt.y += f.vy * dt;
+    f.vy += 18 * dt;
+    f.txt.alpha = Math.min(1, f.life / 0.25);
+  }
+
+  if (screenFlashLife > 0) {
+    screenFlashLife -= dt;
+    const alpha = Math.max(0, screenFlashLife / Math.max(0.001, screenFlashMax)) * 0.22;
+    screenFlashGfx.clear();
+    screenFlashGfx.rect(0, 0, pixi.screen.width, pixi.screen.height).fill({ color: screenFlashColor, alpha });
+  } else if (screenFlashGfx.children.length > 0 || screenFlashGfx.width > 0) {
+    screenFlashGfx.clear();
   }
 }
 
@@ -1997,13 +3246,31 @@ function spawnAmbientParticles(dt: number): void {
   }
 }
 
+function spawnFallStreaks(dt: number): void {
+  if (!localPlayer || localPlayer.grounded || localPlayer.velocity.y < 260 || particles.length > 180) {
+    fallStreakTimer = 0;
+    return;
+  }
+  fallStreakTimer += dt;
+  if (fallStreakTimer < 0.035) return;
+  fallStreakTimer = 0;
+  const wx = localPlayer.position.x + PLAYER_WIDTH / 2 + (Math.random() - 0.5) * 22;
+  const wy = localPlayer.position.y + PLAYER_HEIGHT * 0.35 + Math.random() * 12;
+  spawnPart(wx, wy, (Math.random() - 0.5) * 18, -90 - Math.random() * 70, 0.22, PAL.cloudBright, 1, 0);
+  if (localPlayer.velocity.y > 340) {
+    spawnPart(wx + (Math.random() - 0.5) * 12, wy, (Math.random() - 0.5) * 12, -130, 0.18, PAL.portalGlow, 1, 0);
+  }
+}
+
 function jumpDust(wx: number, wy: number, facing: number): void {
-  for (let i = 0; i < 5; i++)
-    spawnPart(wx + i * 3 - 6, wy, (i - 2) * 22 - facing * 12, -28 - Math.random() * 18, 0.22, PAL.stoneMid);
+  spawnWorldPulse(wx, wy - 2, PAL.stoneLight, 18, 0.22, 1);
+  for (let i = 0; i < 9; i++)
+    spawnPart(wx + i * 2 - 8, wy, (i - 4) * 24 - facing * 12, -30 - Math.random() * 22, 0.22 + Math.random() * 0.08, i % 3 === 0 ? PAL.mossBright : PAL.stoneMid);
 }
 
 function landDust(wx: number, wy: number, impactVy: number): void {
-  const n = Math.min(10, Math.round(impactVy / 28));
+  const n = Math.min(16, Math.round(impactVy / 22));
+  if (impactVy > 180) spawnWorldPulse(wx, wy - 2, PAL.stoneLight, Math.min(42, impactVy * 0.16), 0.34, impactVy > 260 ? 3 : 2);
   for (let i = 0; i < n; i++) {
     const a = Math.PI + (Math.random() - 0.5) * Math.PI * 0.55;
     const spd = 35 + Math.random() * impactVy * 0.28;
@@ -2021,6 +3288,7 @@ function kickSpark(wx: number, wy: number, facing: number, color: number): void 
 }
 
 function coinBurst(wx: number, wy: number): void {
+  spawnWorldPulse(wx, wy, PAL.coinGold, 28, 0.38, 2);
   for (let i = 0; i < 8; i++) {
     const a = (Math.PI * 2 * i) / 8 - Math.PI / 2;
     spawnPart(wx, wy, Math.cos(a) * 75, Math.sin(a) * 75 - 18, 0.38, PAL.coinGold, 3);
@@ -2029,6 +3297,7 @@ function coinBurst(wx: number, wy: number): void {
 }
 
 function spawnRing(wx: number, wy: number, color: number): void {
+  spawnWorldPulse(wx, wy, color, 42, 0.48, 2);
   for (let i = 0; i < 12; i++) {
     const a = (Math.PI * 2 * i) / 12;
     spawnPart(wx + Math.cos(a) * 4, wy + Math.sin(a) * 4, Math.cos(a) * 56, Math.sin(a) * 56, 0.38, color, 3);
@@ -2036,9 +3305,102 @@ function spawnRing(wx: number, wy: number, color: number): void {
 }
 
 function burst(wx: number, wy: number, color: number): void {
+  spawnWorldPulse(wx, wy, color, 36, 0.36, 3);
   for (let i = 0; i < 8; i++) {
     const a = (Math.PI * 2 * i) / 8;
     spawnPart(wx + Math.cos(a) * 8, wy + Math.sin(a) * 8, Math.cos(a) * 55, Math.sin(a) * 55 - 18, 0.28, color, 3);
+  }
+}
+
+function pickupBurst(wx: number, wy: number, pickupType: string | undefined): void {
+  const visual = collectibleVisual(pickupType as CollectibleKind | undefined);
+  coinBurst(wx, wy);
+  spawnWorldPulse(wx, wy, visual.color, 36, 0.44, 2);
+  spawnFloatingText(wx, wy - 14, visual.label, visual.color);
+}
+
+function checkpointCeremony(chunkY: number): void {
+  const chunk = loadedChunks.get(chunkY);
+  const wx = chunk
+    ? (chunk.entry.x + chunk.entry.width / 2) * TILE_SIZE
+    : WORLD_WIDTH / 2;
+  const wy = chunk
+    ? (chunk.worldTileY + chunk.entry.y) * TILE_SIZE - 4
+    : (localPlayer?.position.y ?? 0);
+  spawnRing(wx, wy, PAL.portalBlue);
+  spawnWorldPulse(wx, wy, PAL.portalGlow, 72, 0.72, 3);
+  spawnFloatingText(wx, wy - 42, "CHECKPOINT", PAL.portalGlow);
+  for (let i = 0; i < 26; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 0.55;
+    const spd = 70 + Math.random() * 90;
+    spawnPart(wx + (Math.random() - 0.5) * 28, wy, Math.cos(a) * spd, Math.sin(a) * spd, 0.6 + Math.random() * 0.28, i % 3 === 0 ? PAL.portalGlow : PAL.portalBlue, i % 4 === 0 ? 3 : 2, 18);
+  }
+  triggerShake(2, -2);
+  triggerScreenFlash(PAL.portalBlue, 0.18);
+}
+
+function damageFeedback(wx: number, wy: number, amount: number): void {
+  burst(wx, wy, PAL.hazardRed);
+  spawnFloatingText(wx, wy - 12, `-${Math.max(1, Math.round(amount))} HP`, PAL.hazardRed);
+  triggerShake(3.5, 2.5);
+  triggerScreenFlash(PAL.hazardRed, 0.18);
+}
+
+function createEnemyEntry(state: EnemyState): EnemyEntry {
+  const sprite = makeSprite(enemyAssetForKind(state.kind));
+  sprite.anchor.set(0.5, 1);
+  sprite.zIndex = 7;
+  const size = assetPixelSize(enemyAssetForKind(state.kind));
+  const scale = Math.min(1.15, 34 / Math.max(1, size.height));
+  sprite.scale.set(scale);
+  const hp = new Graphics();
+  hp.zIndex = 8;
+  enemyLayer.addChild(sprite, hp);
+  return { state, sprite, hp };
+}
+
+function updateEnemyEntries(enemies: EnemyState[], tSec: number): void {
+  const ids = new Set(enemies.map((e) => e.id));
+  for (const [id, entry] of [...enemyEntries.entries()]) {
+    if (!ids.has(id)) {
+      entry.sprite.destroy();
+      entry.hp.destroy();
+      enemyEntries.delete(id);
+    }
+  }
+
+  for (const enemy of enemies) {
+    let entry = enemyEntries.get(enemy.id);
+    if (!entry) {
+      entry = createEnemyEntry(enemy);
+      enemyEntries.set(enemy.id, entry);
+    }
+    entry.state = enemy;
+    const bob = enemy.kind === "iceBat" || enemy.kind === "windSpirit"
+      ? Math.sin(tSec * 7 + enemy.position.x * 0.03) * 2
+      : 0;
+    entry.sprite.texture = assetTexture(enemyAssetForKind(enemy.kind));
+    entry.sprite.x = Math.round(enemy.position.x + 11);
+    entry.sprite.y = Math.round(enemy.position.y + 25 + bob);
+    entry.sprite.scale.x = Math.abs(entry.sprite.scale.x) * enemy.facing;
+    entry.sprite.alpha = enemy.hurtCooldown > 0 ? 0.68 + Math.sin(tSec * 42) * 0.24 : 0.96;
+    entry.sprite.tint = enemy.hurtCooldown > 0 ? 0xffc7c7 : 0xffffff;
+
+    entry.hp.clear();
+    if (enemy.health < enemy.maxHealth) {
+      const w = 20;
+      const x = Math.round(enemy.position.x + 1);
+      const y = Math.round(enemy.position.y - 5 + bob);
+      entry.hp.rect(x - 1, y - 1, w + 2, 4).fill({ color: 0x100d18, alpha: 0.84 });
+      entry.hp.rect(x, y, w, 2).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+      entry.hp.rect(x, y, Math.round(w * Math.max(0, enemy.health / enemy.maxHealth)), 2).fill(PAL.hazardRed);
+    }
+  }
+}
+
+function spawnDropAnimations(drops: RelicSpawn[]): void {
+  for (const drop of drops) {
+    if (!collectedRelics.has(drop.id)) spawnRelicAnim(drop.id, drop.x, drop.y);
   }
 }
 
@@ -2052,9 +3414,13 @@ function updateCamera(dt: number, scale: number): void {
   const renderPos = getLocalRenderPosition();
   if (localPlayer && renderPos) {
     const vh     = Math.max(300, pixi.screen.height) / scale;
-    const target = renderPos.y + PLAYER_HEIGHT / 2 - vh * 0.30;
+    const climbLead = localPlayer.velocity.y < -80 ? -vh * 0.05 : 0;
+    const fallPullback = localPlayer.velocity.y > 230 ? Math.min(vh * 0.10, (localPlayer.velocity.y - 230) * 0.14) : 0;
+    const attackBias = localPlayer.kickPhase !== "idle" ? localPlayer.facing * 8 : 0;
+    const target = renderPos.y + PLAYER_HEIGHT / 2 - vh * 0.30 + climbLead + fallPullback;
     if (cameraSnap) { cameraY = target; cameraSnap = false; }
     else            { cameraY += (target - cameraY) * Math.min(1, dt * 7); }
+    shakeX += attackBias * 0.003;
   }
 
   shakeX *= 0.84; shakeY *= 0.84;
@@ -2122,9 +3488,12 @@ let hudCoinSprite: Sprite | null = null;
 let hudHeightSprite: Sprite | null = null;
 let hudCoinTxt:  Text;
 let hudHeightTxt:Text;
+let hudHealthTxt:Text;
+let hudLevelTxt: Text;
 let hudPhaseTxt: Text;
 let hudPingTxt:  Text;
 let hudRankTxt:  Text;
+let lastHudBiome: BiomeId | null = null;
 
 function buildHudPanels(): void {
   if (hudPanelGfx) hudPanelGfx.destroy();
@@ -2136,11 +3505,11 @@ function buildHudPanels(): void {
     hudPanelSprite.x = 2;
     hudPanelSprite.y = 2;
     hudPanelSprite.width = 90;
-    hudPanelSprite.height = 60;
+    hudPanelSprite.height = 78;
     hudLayer.addChildAt(hudPanelSprite, 0);
   } else {
     // Left stat panel — tall enough to include rank and ping rows
-    drawHudPanel(hudPanelGfx, 6, 6, 82, 56);
+    drawHudPanel(hudPanelGfx, 6, 6, 82, 72);
     hudLayer.addChildAt(hudPanelGfx, 0);
   }
 }
@@ -2151,6 +3520,8 @@ function ensureHud(): void {
   const base = { fontFamily: "monospace", fontSize: 9 };
   hudCoinTxt   = new Text({ text: "0",    style: { ...base, fill: PAL.coinGold,     fontWeight: "900" } });
   hudHeightTxt = new Text({ text: "0m",   style: { ...base, fill: PAL.uiParchment,  fontSize: 10, fontWeight: "700" } });
+  hudHealthTxt = new Text({ text: "HP 5/5", style: { ...base, fill: PAL.hazardRed,   fontSize: 9, fontWeight: "900" } });
+  hudLevelTxt  = new Text({ text: "L1",    style: { ...base, fill: PAL.portalBlue,   fontSize: 9, fontWeight: "900" } });
   hudPhaseTxt  = new Text({ text: "",     style: { ...base, fill: PAL.uiHighlight,  fontSize: 11, fontWeight: "900" } });
   hudPingTxt   = new Text({ text: "",     style: { ...base, fill: 0x486878,         fontSize: 8 } });
   hudRankTxt   = new Text({ text: "",     style: { ...base, fill: PAL.uiParchment,  fontSize: 8 } });
@@ -2170,13 +3541,15 @@ function ensureHud(): void {
 
   hudCoinTxt.x   = 28; hudCoinTxt.y   = 10;
   hudHeightTxt.x = 28; hudHeightTxt.y = 26;
-  hudPingTxt.x   = 10; hudPingTxt.y   = 52;
-  hudRankTxt.x   = 10; hudRankTxt.y   = 52;
+  hudHealthTxt.x = 10; hudHealthTxt.y = 42;
+  hudLevelTxt.x  = 54; hudLevelTxt.y  = 42;
+  hudPingTxt.x   = 10; hudPingTxt.y   = 66;
+  hudRankTxt.x   = 10; hudRankTxt.y   = 58;
 
   buildHudPanels();
   if (hudCoinSprite) hudLayer.addChild(hudCoinSprite);
   if (hudHeightSprite) hudLayer.addChild(hudHeightSprite);
-  hudLayer.addChild(hudIconGfx, hudCoinTxt, hudHeightTxt, hudPhaseTxt, hudPingTxt, hudRankTxt);
+  hudLayer.addChild(hudIconGfx, hudCoinTxt, hudHeightTxt, hudHealthTxt, hudLevelTxt, hudPhaseTxt, hudPingTxt, hudRankTxt);
 
   window.addEventListener("resize", () => setTimeout(buildHudPanels, 80));
 }
@@ -2208,6 +3581,8 @@ function updateHud(tSec: number): void {
 
   hudCoinTxt.text   = String(coins);
   hudHeightTxt.text = `${hm}m`;
+  hudHealthTxt.text = `HP ${Math.max(0, Math.ceil(localPlayer.health))}/${localPlayer.maxHealth}`;
+  hudLevelTxt.text  = `L${localPlayer.level}`;
 
   // Rank + ping in lower part of panel
   const rows: Array<{ name: string; h: number; coins: number; local: boolean }> = [];
@@ -2220,15 +3595,24 @@ function updateHud(tSec: number): void {
   hudRankTxt.text = myRank >= 0 ? `#${myRank + 1} / ${rows.length}` : "";
   hudPingTxt.text = pingMs > 0 ? `${pingMs}ms` : "";
   hudPingTxt.x    = 6 + 82 - hudPingTxt.width - 6;
-  hudPingTxt.y    = 52;
-  hudRankTxt.y    = 52;
+  hudPingTxt.y    = 66;
+  hudRankTxt.y    = 58;
 
-  // Center phase banner
-  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING…" : "";
+  const currentBiome = biomeForChunkY(Math.max(0, -Math.floor(localPlayer.position.y / (CHUNK_HEIGHT_TILES * TILE_SIZE))));
+  if (lastHudBiome !== currentBiome) {
+    if (lastHudBiome && matchPhase === "playing") {
+      pushNotification(biomeDisplayName(currentBiome), currentBiome === "celestialSummit" ? PAL.coinGold : PAL.portalGlow);
+    }
+    lastHudBiome = currentBiome;
+  }
+
+  // Center phase / biome banner
+  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : biomeDisplayName(currentBiome);
   hudPhaseTxt.text = phText;
   if (phText) {
     hudPhaseTxt.x = Math.round(pixi.screen.width / 2 - hudPhaseTxt.width / 2);
     hudPhaseTxt.y = 10;
+    hudPhaseTxt.alpha = matchPhase === "playing" ? 0.76 : 1;
   }
 
   // HTML scoreboard — diff-update to avoid per-frame DOM churn causing flash artifacts.
@@ -2398,19 +3782,49 @@ function connectRoom(name: string): void {
         for (const ev2 of parsed.events) {
           if (ev2.type === "COIN_COLLECTED") {
             collectedRelics.add(ev2.coinId);
-            coinBurst(ev2.x, ev2.y);
-            if (ev2.playerId === localPlayerId) pushNotification("RELIC ◆ +1", PAL.coinGold);
+            pickupBurst(ev2.x, ev2.y, ev2.pickupType);
+            if (ev2.playerId === localPlayerId) {
+              const visual = collectibleVisual(ev2.pickupType);
+              pushNotification(visual.notification, visual.color);
+            }
           } else if (ev2.type === "PLAYER_KICK_HIT") {
+            const target = ev2.targetId === localPlayerId
+              ? localPlayer
+              : remotePlayers.get(ev2.targetId)?.current ?? null;
+            if (target) damageFeedback(target.position.x + PLAYER_WIDTH / 2, target.position.y + PLAYER_HEIGHT * 0.45, 1);
             if (ev2.playerId === localPlayerId) pushNotification("KICK HIT", PAL.hazardGlow);
             else if (ev2.targetId === localPlayerId) pushNotification("KICKED!", PAL.hazardRed);
+          } else if (ev2.type === "ENEMY_HIT") {
+            damageFeedback(ev2.x, ev2.y, ev2.damage);
+            if (ev2.playerId === localPlayerId) pushNotification("NPC HIT", PAL.hazardGlow);
+          } else if (ev2.type === "ENEMY_KILLED") {
+            burst(ev2.x, ev2.y, PAL.coinGold);
+            spawnFloatingText(ev2.x, ev2.y - 14, "DROP", PAL.coinGold);
+            spawnDropAnimations(ev2.drops);
+            if (ev2.playerId === localPlayerId) pushNotification("NPC DOWN", PAL.coinGold);
+          } else if (ev2.type === "JUMP_PAD_TRIGGERED") {
+            if (ev2.playerId !== localPlayerId || elapsedMs - lastLocalJumpPadFxMs > 250) {
+              jumpPadFeedback(ev2.x, ev2.y, ev2.multiplier);
+            }
           } else if (ev2.type === "CHECKPOINT_REACHED" && ev2.playerId === localPlayerId) {
+            checkpointCeremony(ev2.chunkY);
             pushNotification("CHECKPOINT REACHED", PAL.portalGlow);
+          } else if (ev2.type === "PLAYER_DIED" && ev2.playerId === localPlayerId) {
+            triggerScreenFlash(PAL.hazardRed, 0.22);
+            triggerShake(4, 3);
+          } else if (ev2.type === "PLAYER_RESPAWNED" && ev2.playerId === localPlayerId) {
+            const p = localPlayer;
+            if (p) {
+              spawnRing(p.position.x + PLAYER_WIDTH / 2, p.position.y + PLAYER_HEIGHT / 2, PAL.portalBlue);
+              spawnFloatingText(p.position.x + PLAYER_WIDTH / 2, p.position.y - 10, "RESPAWN", PAL.portalGlow);
+            }
           }
         }
         for (const sp of parsed.players) {
           if (sp.id === localPlayerId) reconcileLocalPlayer(sp, parsed.lastProcessedSeq[sp.id] ?? -1);
           else updateRemotePlayer(sp, parsed.serverTime);
         }
+        updateEnemyEntries(parsed.enemies ?? [], elapsedMs / 1000);
         { const ids = new Set(parsed.players.map((p) => p.id));
           for (const pid of remotePlayers.keys()) {
             if (!ids.has(pid)) { const e = remotePlayers.get(pid); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(pid); }
@@ -2531,6 +3945,10 @@ function reqChunks(): void {
 
 function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
   if (!localPlayer) { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; return; }
+  const healthDelta = localPlayer.health - ss.health;
+  if (healthDelta > 0) {
+    damageFeedback(ss.position.x + PLAYER_WIDTH / 2, ss.position.y + PLAYER_HEIGHT * 0.45, healthDelta);
+  }
   if (lastSeq < 0) {
     if (Math.hypot(ss.position.x - localPlayer.position.x, ss.position.y - localPlayer.position.y) > RECONCILIATION_TOLERANCE_PX * 4)
       { localPlayer = clonePlayerState(ss); snapLocalVisualToSimulation(); cameraSnap = true; }
@@ -2708,6 +4126,9 @@ pixi.ticker.add((ticker) => {
   updateAdaptiveInterpDelay();
   updateParticles(dt);
   spawnAmbientParticles(dt);
+  spawnFallStreaks(dt);
+  updateHazardTelegraphs(tSec);
+  updateJumpPadAnims(tSec);
   updateRelicAnims(tSec);
   updatePortals(tSec);
   updateNotifications(dt);
@@ -2742,11 +4163,17 @@ pixi.ticker.add((ticker) => {
       const inp = createPredictionInput(frameInput);
       const wasGrounded = localPlayer.grounded;
       const wasVelY = localPlayer.velocity.y;
+      const wasHealth = localPlayer.health;
       const wasKickPhase = localPlayer.kickPhase;
       const willJump = inp.jumpPressed && (localPlayer.grounded || localPlayer.coyoteTimer > 0);
       const { player: next } = stepPlayer(localPlayer, inp, tileMap, PHYSICS_STEP_SECONDS);
+      const hitJumpPad = applyLocalJumpPads(next);
 
       if (willJump && wasGrounded) jumpDust(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT, next.facing);
+      if (hitJumpPad && elapsedMs - lastLocalJumpPadFxMs > 250) {
+        lastLocalJumpPadFxMs = elapsedMs;
+        jumpPadFeedback(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT, 5);
+      }
 
       const justLanded = !wasGrounded && next.grounded && wasVelY > 55;
       if (justLanded) {
@@ -2762,9 +4189,13 @@ pixi.ticker.add((ticker) => {
         );
       }
 
-      const floorY = (CHUNK_HEIGHT_TILES + 1) * TILE_SIZE;
-      if (next.position.y > floorY && next.invulnerable <= 0) {
+      if (next.health < wasHealth) {
+        damageFeedback(next.position.x + PLAYER_WIDTH / 2, next.position.y + PLAYER_HEIGHT * 0.45, wasHealth - next.health);
+      }
+
+      if (isPlayerDead(next)) {
         burst(next.position.x + PLAYER_WIDTH / 2, next.position.y, PAL.hazardRed);
+        localPlayer = next;
         respawnLocal();
         break;
       }
