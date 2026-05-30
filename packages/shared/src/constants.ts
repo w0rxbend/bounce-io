@@ -1,8 +1,9 @@
 export const GAME_VERSION = "0.1.0";
 
 export const TILE_SIZE = 16;
-export const CHUNK_WIDTH_TILES = 24;
+export const CHUNK_WIDTH_TILES = 36;
 export const CHUNK_HEIGHT_TILES = 18;
+export const CHECKPOINT_PORTAL_WIDTH_TILES = 4;
 
 // Hitbox from BALANCE_TABLES.md (14×22 inside 24×32 sprite)
 export const PLAYER_WIDTH = 14;
@@ -45,7 +46,7 @@ export const PLAYER_BASE_KNOCKBACK_RESISTANCE = 0;
 export const PLAYER_BASE_MOVEMENT_SPEED = 1;
 export const RELICS_PER_LEVEL = 5;
 export const CRYSTALS_PER_MOVEMENT_TIER = 3;
-export const FATAL_FALL_DISTANCE_PX = 20 * 32;
+export const FATAL_FALL_DISTANCE_PX = 6 * 32;
 export const HIT_STUN_SECONDS = 0.16;
 export const HAZARD_HIT_INVULNERABLE_SECONDS = 0.85;
 export const MELEE_ATTACK_COOLDOWN_SECONDS = 0.80;

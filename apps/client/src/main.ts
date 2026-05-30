@@ -2,6 +2,7 @@ import { Application, Assets, Container, Graphics, Particle as PixiParticle, Par
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
+  CHECKPOINT_PORTAL_WIDTH_TILES,
   GAME_VERSION,
   JUMP_SPEED,
   KICK_ACTIVE_SECONDS,
@@ -105,7 +106,7 @@ const PLAYER_COLORS = [
   0xff6b6b, 0xff9f4a, 0xe8c8ff, 0x69a969,
 ] as const;
 
-const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 384px
+const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 576px
 
 // ── Network interpolation tuning ──────────────────────────────────────────────
 const MIN_INTERP_DELAY_MS   = 50;    // floor for local/LAN play
@@ -538,6 +539,18 @@ function shouldSkipManifestAsset(relPath: string): boolean {
 
 const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
 type BiomeId = typeof BIOME_IDS[number];
+const REGION_LENGTH_CHUNKS = [4, 4, 5, 4, 5, 5] as const;
+
+function regionStartChunkY(regionIndex: number): number {
+  let chunkY = 0;
+  for (let i = 0; i < regionIndex; i++) chunkY += REGION_LENGTH_CHUNKS[i % REGION_LENGTH_CHUNKS.length]!;
+  return chunkY;
+}
+
+function isCheckpointChunk(chunkY: number, chunk?: GeneratedChunk): boolean {
+  if (typeof chunk?.checkpoint === "boolean") return chunk.checkpoint;
+  return chunkY === regionStartChunkY(regionIndexForChunkY(chunkY));
+}
 
 function biomeForChunkY(chunkY: number): BiomeId {
   if (chunkY >= 16) return "celestialSummit";
@@ -548,11 +561,32 @@ function biomeForChunkY(chunkY: number): BiomeId {
 }
 
 function biomeDisplayName(biome: BiomeId): string {
-  if (biome === "pineValley") return "PINE VALLEY";
-  if (biome === "cloudRidge") return "CLOUD RIDGE";
-  if (biome === "snowfallCliffs") return "SNOWFALL CLIFFS";
-  if (biome === "frozenSpires") return "FROZEN SPIRES";
-  return "CELESTIAL SUMMIT";
+  if (biome === "pineValley") return "FLOATING GARDEN";
+  if (biome === "cloudRidge") return "ANCIENT RUINS";
+  if (biome === "snowfallCliffs") return "CRYSTAL HEIGHTS";
+  if (biome === "frozenSpires") return "MECHANICAL SKYWORKS";
+  return "CELESTIAL SANCTUARY";
+}
+
+function regionIndexForChunkY(chunkY: number): number {
+  let cursor = 0;
+  for (let region = 0; region < 512; region++) {
+    const next = cursor + REGION_LENGTH_CHUNKS[region % REGION_LENGTH_CHUNKS.length]!;
+    if (chunkY < next) return region;
+    cursor = next;
+  }
+  return 0;
+}
+
+function regionDisplayNameForChunkY(chunkY: number): string {
+  return [
+    "FLOATING GARDEN",
+    "ANCIENT RUINS",
+    "CRYSTAL HEIGHTS",
+    "MECHANICAL SKYWORKS",
+    "STORM ISLANDS",
+    "CELESTIAL SANCTUARY",
+  ][regionIndexForChunkY(chunkY)]!;
 }
 
 function altitude01(chunkY: number, start: number, end: number): number {
@@ -3297,8 +3331,15 @@ function renderChunk(chunk: GeneratedChunk): void {
     spawnJumpPadAnim(pad, baseTileY + pad.y);
   }
 
-  // Portal at exit platform (the upward goal for this chunk)
-  spawnPortalAt(chunk.chunkY, chunk.exit.x, baseTileY + chunk.exit.y, chunk.exit.width, chunk.chunkY > 0);
+  // Arc portals are the checkpoint. Non-checkpoint chunk exits stay readable
+  // through landmarks and route dressing without becoming respawn anchors.
+  if (chunk.portal) {
+    spawnPortalAt(chunk.chunkY, chunk.portal.x, baseTileY + chunk.portal.y, chunk.portal.width, chunk.portal.checkpoint);
+  } else if (chunk.chunkY > 0 && isCheckpointChunk(chunk.chunkY, chunk)) {
+    const portalW = Math.min(CHECKPOINT_PORTAL_WIDTH_TILES, chunk.entry.width);
+    const portalX = Math.max(0, Math.min(CHUNK_WIDTH_TILES - portalW, chunk.entry.x + Math.floor((chunk.entry.width - portalW) / 2)));
+    spawnPortalAt(chunk.chunkY, portalX, baseTileY + chunk.entry.y, portalW, true);
+  }
 }
 
 function canPlaceDecoration(chunk: GeneratedChunk, lx: number, ly: number): boolean {
@@ -4272,8 +4313,6 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
     });
   };
 
-  placeProceduralCheckpointMarker(front, chunk, chunk.entry, biome, platformSeed(chunk, chunk.entry, 31));
-
   placeLandmark(
     chunk.exit,
     79,
@@ -4710,14 +4749,6 @@ function decorateChunk(chunk: GeneratedChunk): void {
         frontStatic.addChild(boulder);
       }
 
-      if (biome === "celestialSummit" && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const shrine = makeProceduralCheckpointMarker(biome, seed);
-        shrine.x = wx + TILE_SIZE;
-        shrine.y = wy + 2;
-        shrine.alpha = 0.82;
-        shrine.zIndex = 2;
-        backStatic.addChild(shrine);
-      }
     }
   }
 
@@ -5117,14 +5148,18 @@ interface PortalAnim {
 }
 const portalAnims = new Map<number, PortalAnim>(); // keyed by chunkY
 
-function drawProceduralPortalArch(body: Graphics, glow: Graphics, hw: number, ph: number, isExit: boolean, tSec: number): void {
+function portalPaletteForBiome(biome: BiomeId, isExit: boolean): { energy: number; energy2: number; stone: number; stoneLight: number; stoneShade: number; moss: number } {
+  if (biome === "pineValley") return { energy: 0x6dffb0, energy2: 0xe8ffd6, stone: 0x596b49, stoneLight: 0xb7d589, stoneShade: 0x32422f, moss: PAL.canopyLight };
+  if (biome === "cloudRidge") return { energy: 0x40d8f8, energy2: 0xf5dc8a, stone: 0x746955, stoneLight: 0xd6c383, stoneShade: 0x3d3750, moss: 0xd6c383 };
+  if (biome === "snowfallCliffs") return { energy: 0x9b7cff, energy2: 0xe7f6ff, stone: 0x536f86, stoneLight: 0xb7ecff, stoneShade: 0x26354a, moss: 0xa881ff };
+  if (biome === "frozenSpires") return { energy: 0xffcf66, energy2: 0x8ffff5, stone: 0x59616f, stoneLight: 0xd6dde8, stoneShade: 0x2d3445, moss: 0xffcf66 };
+  return { energy: isExit ? PAL.portalBlue : PAL.uiHighlight, energy2: PAL.portalGlow, stone: 0x7b6d90, stoneLight: 0xf0e9ff, stoneShade: 0x332b55, moss: PAL.coinGold };
+}
+
+function drawProceduralPortalArch(body: Graphics, glow: Graphics, hw: number, ph: number, isExit: boolean, biome: BiomeId, tSec: number): void {
   const pulse = Math.sin(tSec * (isExit ? 3.5 : 2.5)) * 0.5 + 0.5;
   const shimmer = Math.sin(tSec * 7.2) * 0.5 + 0.5;
-  const energy = isExit ? PAL.portalBlue : PAL.uiHighlight;
-  const energy2 = isExit ? PAL.portalGlow : PAL.coinGlow;
-  const stone = isExit ? 0x7b6d50 : PAL.stoneDark;
-  const stoneLight = isExit ? 0xd6c383 : PAL.stoneWorn;
-  const stoneShade = isExit ? 0x4f4260 : PAL.stoneShadow;
+  const { energy, energy2, stone, stoneLight, stoneShade, moss } = portalPaletteForBiome(biome, isExit);
 
   body.clear();
   glow.clear();
@@ -5178,7 +5213,6 @@ function drawProceduralPortalArch(body: Graphics, glow: Graphics, hw: number, ph
     body.rect(x - 3, y + 2, 6, 1).fill(stoneShade);
   }
 
-  const moss = isExit ? PAL.canopyLight : PAL.mossBright;
   body.rect(-hw - 8, -ph - 5, hw * 2 + 16, 4).fill(moss);
   for (let i = 0; i < 8; i++) {
     const side = i % 2 === 0 ? -1 : 1;
@@ -5232,8 +5266,9 @@ function updatePortals(tSec: number): void {
     if (!active) continue;
     const hw    = Math.round((a.tileW * TILE_SIZE) * 0.40);
     const ph    = a.isExit ? 32 : 22;
-    const col   = a.isExit ? PAL.portalBlue : PAL.uiHighlight;
-    drawProceduralPortalArch(a.bodyGfx, a.glowGfx, hw, ph, a.isExit, tSec);
+    const biome = biomeForChunkY(chunkY);
+    const col   = portalPaletteForBiome(biome, a.isExit).energy;
+    drawProceduralPortalArch(a.bodyGfx, a.glowGfx, hw, ph, a.isExit, biome, tSec);
 
     if (elapsedMs - a.lastParticleMs > (a.isExit ? 80 : 130) * activePerformanceConfig().portalParticleIntervalScale) {
       a.lastParticleMs = elapsedMs;
@@ -5906,7 +5941,7 @@ let hudLevelTxt: Text;
 let hudPhaseTxt: Text;
 let hudPingTxt:  Text;
 let hudRankTxt:  Text;
-let lastHudBiome: BiomeId | null = null;
+let lastHudRegion: number | null = null;
 
 function buildHudPanels(): void {
   if (hudPanelGfx) hudPanelGfx.destroy();
@@ -6011,16 +6046,18 @@ function updateHud(tSec: number): void {
   hudPingTxt.y    = 66;
   hudRankTxt.y    = 58;
 
-  const currentBiome = biomeForChunkY(Math.max(0, -Math.floor(localPlayer.position.y / (CHUNK_HEIGHT_TILES * TILE_SIZE))));
-  if (lastHudBiome !== currentBiome) {
-    if (lastHudBiome && matchPhase === "playing") {
-      pushNotification(biomeDisplayName(currentBiome), currentBiome === "celestialSummit" ? PAL.coinGold : PAL.portalGlow);
+  const currentChunkY = Math.max(0, -Math.floor(localPlayer.position.y / (CHUNK_HEIGHT_TILES * TILE_SIZE)));
+  const currentBiome = biomeForChunkY(currentChunkY);
+  const currentRegion = regionIndexForChunkY(currentChunkY);
+  if (lastHudRegion !== currentRegion) {
+    if (lastHudRegion !== null && matchPhase === "playing") {
+      pushNotification(regionDisplayNameForChunkY(currentChunkY), currentBiome === "celestialSummit" ? PAL.coinGold : PAL.portalGlow);
     }
-    lastHudBiome = currentBiome;
+    lastHudRegion = currentRegion;
   }
 
   // Center phase / biome banner
-  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : biomeDisplayName(currentBiome);
+  const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : regionDisplayNameForChunkY(currentChunkY);
   hudPhaseTxt.text = phText;
   if (phText) {
     hudPhaseTxt.x = Math.round(pixi.screen.width / 2 - hudPhaseTxt.width / 2);
@@ -6174,7 +6211,37 @@ function drawWorldDebugOverlay(): void {
   for (const chunk of chunks) {
     const worldTileY = chunk.worldTileY;
     const sourceColor = authoritativeChunks.has(chunk.chunkY) ? 0x66e7ff : 0xffcf66;
-    addLabel(authoritativeChunks.has(chunk.chunkY) ? `server c${chunk.chunkY}` : `local c${chunk.chunkY}`, 4, worldTileY * TILE_SIZE + 4);
+    const chunkTop = worldTileY * TILE_SIZE;
+    const regionName = chunk.regionName ?? regionDisplayNameForChunkY(chunk.chunkY);
+    addLabel(authoritativeChunks.has(chunk.chunkY) ? `server c${chunk.chunkY} ${regionName}` : `local c${chunk.chunkY}`, 4, chunkTop + 4);
+
+    if (isCheckpointChunk(chunk.chunkY, chunk)) {
+      worldDebugGfx.moveTo(0, chunkTop).lineTo(WORLD_WIDTH, chunkTop).stroke({ color: 0xffffff, alpha: 0.72, width: 2 });
+      addLabel(`REGION ${regionName}`, WORLD_WIDTH - 126, chunkTop + 4);
+    }
+
+    for (const route of chunk.routes ?? []) {
+      if (route.nodes.length === 0) continue;
+      const color = route.kind === "safe" ? 0x5dff9c : route.kind === "risk" ? 0xff6969 : route.kind === "relic" ? 0xffd86a : 0xa881ff;
+      worldDebugGfx.moveTo(route.nodes[0]!.x, route.nodes[0]!.y);
+      for (let i = 1; i < route.nodes.length; i++) worldDebugGfx.lineTo(route.nodes[i]!.x, route.nodes[i]!.y);
+      worldDebugGfx.stroke({ color, alpha: route.hidden ? 0.45 : 0.68, width: route.hidden ? 1 : 2 });
+      addLabel(route.kind, route.nodes[0]!.x + 4, route.nodes[0]!.y - 10);
+    }
+
+    if (chunk.portal) {
+      worldDebugGfx.rect(chunk.portal.trigger.x, chunk.portal.trigger.y, chunk.portal.trigger.width, chunk.portal.trigger.height)
+        .stroke({ color: 0xffffff, alpha: 0.9, width: 1 });
+      addLabel(chunk.portal.id, chunk.portal.trigger.x + 2, chunk.portal.trigger.y - 9);
+    }
+
+    for (const landmark of chunk.landmarks ?? []) {
+      const x = landmark.x * TILE_SIZE;
+      const y = (worldTileY + landmark.y) * TILE_SIZE;
+      worldDebugGfx.rect(x, y, landmark.width * TILE_SIZE, landmark.height * TILE_SIZE)
+        .stroke({ color: 0x8ffff5, alpha: landmark.hidden ? 0.35 : 0.58, width: 1 });
+      addLabel(landmark.kind, x + 2, y + 2);
+    }
 
     for (let i = 0; i < chunk.platforms.length; i++) {
       const platform = chunk.platforms[i]!;

@@ -59,6 +59,45 @@ export interface JumpPadSpawn {
   multiplier: number;
 }
 
+export interface TriggerBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface PortalSpawn {
+  id: EntityId;
+  regionId: string;
+  chunkY: number;
+  x: number;
+  y: number;
+  width: number;
+  style: string;
+  checkpoint: boolean;
+  trigger: TriggerBox;
+}
+
+export interface LandmarkSpawn {
+  id: EntityId;
+  regionId: string;
+  kind: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  hidden: boolean;
+}
+
+export interface RouteBranch {
+  id: string;
+  kind: "safe" | "risk" | "relic" | "hidden" | string;
+  label: string;
+  hidden: boolean;
+  reward: number;
+  nodes: Vec2[];
+}
+
 export interface WindZoneSpawn {
   id: EntityId;
   x: number;
@@ -90,10 +129,17 @@ export interface GeneratedChunk {
   width: number;
   height: number;
   worldTileY: number;
+  regionId?: string;
+  regionIndex?: number;
+  regionName?: string;
+  checkpoint?: boolean;
   tiles: TileKind[];
   platforms: PlatformSpan[];
   entry: PlatformSpan;
   exit: PlatformSpan;
+  portal?: PortalSpawn;
+  landmarks?: LandmarkSpawn[];
+  routes?: RouteBranch[];
   relics: RelicSpawn[];
   enemies: EnemySpawn[];
   jumpPads: JumpPadSpawn[];

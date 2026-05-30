@@ -81,6 +81,7 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	if player.Grounded {
 		player.CoyoteTimer = CoyoteTimeSeconds
 	}
+	previousY := player.Position.Y
 
 	accel := AirAcceleration * player.AirControl
 	if player.Grounded {
@@ -158,7 +159,31 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 		player.Grounded = false
 	}
 
+	updateFatalFall(&player, previousY)
 	return player
+}
+
+func updateFatalFall(player *PlayerState, previousY float64) {
+	if !player.Grounded && player.Velocity.Y > 0 {
+		if player.FallStartY == nil {
+			startY := previousY
+			player.FallStartY = &startY
+		}
+		if player.FallStartY != nil && player.Position.Y-*player.FallStartY > FatalFallDistancePX && player.Invulnerable <= 0 {
+			player.Health = 0
+		}
+		return
+	}
+	if player.Grounded {
+		if player.FallStartY != nil && player.Position.Y-*player.FallStartY > FatalFallDistancePX && player.Invulnerable <= 0 {
+			player.Health = 0
+		}
+		player.FallStartY = nil
+		return
+	}
+	if player.Velocity.Y <= 0 {
+		player.FallStartY = nil
+	}
 }
 
 func stepKick(phase string, timer, cooldown float64, kicked bool, dt float64, cooldownSeconds float64) (string, float64, float64) {
@@ -227,55 +252,23 @@ func landingSurfaceY(seed uint32, player PlayerState, drop bool, previousBottom 
 }
 
 func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
+	regionIndex := RegionIndexForChunkY(chunkY)
+	plan := BuildRegionPlan(seed, regionIndex)
+	platformRecords := plan.Platforms[chunkY]
+	platforms := make([]PlatformSpan, 0, len(platformRecords))
+	for _, record := range platformRecords {
+		platforms = append(platforms, record.Span)
+	}
+	if len(platforms) == 0 {
+		platforms = append(platforms, platformFromCenter(ChunkWidthTiles/2, ChunkHeightTiles-2, 8))
+	}
+	entry := plan.EntryForChunk(chunkY)
+	exit := plan.ExitForChunk(chunkY)
+
 	tiles := make([]string, ChunkWidthTiles*ChunkHeightTiles)
 	for i := range tiles {
 		tiles[i] = "empty"
 	}
-
-	entryY := ChunkHeightTiles - 2
-	entryWidth := 6
-	entryX := ChunkWidthTiles/2 - entryWidth/2
-	if chunkY == 0 {
-		entryWidth = ChunkWidthTiles
-		entryX = 0
-	}
-	entry := PlatformSpan{X: entryX, Y: entryY, Width: entryWidth}
-	platforms := []PlatformSpan{entry}
-
-	// Build an always-reachable spine through the chunk. The jump physics can
-	// comfortably climb 3 tiles; larger gaps were the source of unreachable maps.
-	spineXs := []int{8, 10, 7, 9, 8}
-	spineWidths := []int{8, 7, 8, 7, 8}
-	for i, y := range []int{13, 10, 7, 4, 1} {
-		shift := int((seed+uint32(chunkY*31+i*17))%3) - 1
-		x := clampInt(spineXs[i]+shift, 1, ChunkWidthTiles-spineWidths[i]-1)
-		platforms = append(platforms, PlatformSpan{X: x, Y: y, Width: spineWidths[i]})
-	}
-	exit := platforms[len(platforms)-1]
-
-	// Optional side platforms are bonuses, but still close enough to recover
-	// from a jump-pad launch. None of these are required for vertical ascent.
-	sideCandidates := []PlatformSpan{
-		{X: 1, Y: 10, Width: 4},
-		{X: 19, Y: 10, Width: 4},
-		{X: 2, Y: 4, Width: 4},
-		{X: 18, Y: 4, Width: 4},
-	}
-	jumpPads := make([]JumpPadSpawn, 0, len(sideCandidates))
-	for i, p := range sideCandidates {
-		if (seed+uint32(chunkY*13+i))%2 == 0 {
-			platforms = append(platforms, p)
-			if lower, ok := bestAssistedLaunchPlatform(p, platforms); ok {
-				jumpPads = append(jumpPads, JumpPadSpawn{
-					ID:         "jumpPad:" + itoa(chunkY) + ":" + itoa(i),
-					X:          lower.X + lower.Width/2,
-					Y:          lower.Y - 1,
-					Multiplier: 2.2,
-				})
-			}
-		}
-	}
-
 	for _, p := range platforms {
 		for x := p.X; x < p.X+p.Width && x < ChunkWidthTiles; x++ {
 			if x >= 0 && p.Y >= 0 && p.Y < ChunkHeightTiles {
@@ -289,36 +282,586 @@ func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
 		}
 	}
 
-	relicPlatform := platforms[2]
-	relics := []RelicSpawn{
-		{ID: "relic:" + itoa(chunkY) + ":0", X: relicPlatform.X + relicPlatform.Width/2, Y: relicPlatform.Y - 1},
+	relics := plan.Relics[chunkY]
+	if relics == nil {
+		relics = []RelicSpawn{}
 	}
-	enemyPlatform := platforms[3]
-	enemies := []EnemySpawn{}
-	if chunkY > 0 {
-		enemies = append(enemies, EnemySpawn{
-			ID:   "enemy:" + itoa(chunkY) + ":0",
-			Kind: "goblin",
-			X:    enemyPlatform.X + enemyPlatform.Width/2,
-			Y:    enemyPlatform.Y - 1,
-		})
+	for _, relic := range relics {
+		if relic.Y >= 0 && relic.Y < ChunkHeightTiles && relic.X >= 0 && relic.X < ChunkWidthTiles {
+			tiles[relic.Y*ChunkWidthTiles+relic.X] = "relic"
+		}
 	}
+	landmarks := plan.Landmarks[chunkY]
+	if landmarks == nil {
+		landmarks = []LandmarkSpawn{}
+	}
+	routes := plan.ChunkRoutes(chunkY)
+	if routes == nil {
+		routes = []RouteBranch{}
+	}
+	enemies := plan.Enemies[chunkY]
+	if enemies == nil {
+		enemies = []EnemySpawn{}
+	}
+	jumpPads := plan.JumpPads[chunkY]
+	if jumpPads == nil {
+		jumpPads = []JumpPadSpawn{}
+	}
+	portal := plan.PortalForChunk(chunkY)
 
 	return GeneratedChunk{
-		Seed:       seed,
-		ChunkY:     chunkY,
-		Width:      ChunkWidthTiles,
-		Height:     ChunkHeightTiles,
-		WorldTileY: -chunkY * ChunkHeightTiles,
-		Tiles:      tiles,
-		Platforms:  platforms,
-		Entry:      entry,
-		Exit:       exit,
-		Relics:     relics,
-		Enemies:    enemies,
-		JumpPads:   jumpPads,
-		WindZones:  []any{},
+		Seed:        seed,
+		ChunkY:      chunkY,
+		Width:       ChunkWidthTiles,
+		Height:      ChunkHeightTiles,
+		WorldTileY:  -chunkY * ChunkHeightTiles,
+		RegionID:    plan.ID,
+		RegionIndex: plan.Index,
+		RegionName:  plan.Profile.Name,
+		Checkpoint:  IsCheckpointChunk(chunkY),
+		Tiles:       tiles,
+		Platforms:   platforms,
+		Entry:       entry,
+		Exit:        exit,
+		Portal:      portal,
+		Landmarks:   landmarks,
+		Routes:      routes,
+		Relics:      relics,
+		Enemies:     enemies,
+		JumpPads:    jumpPads,
+		WindZones:   []any{},
 	}
+}
+
+type worldRegionProfile struct {
+	ID             string
+	Name           string
+	Landmark       string
+	PortalStyle    string
+	EnemyKind      string
+	LengthChunks   int
+	SafeWidth      int
+	ContestWidth   int
+	CollectibleAdd int
+}
+
+var worldRegionProfiles = []worldRegionProfile{
+	{ID: "floating-garden", Name: "Floating Garden", Landmark: "giant tree", PortalStyle: "living-tree-gate", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 8, ContestWidth: 11, CollectibleAdd: 1},
+	{ID: "ancient-ruins", Name: "Ancient Ruins", Landmark: "broken ruin gate", PortalStyle: "ruin-arch", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 6, ContestWidth: 10, CollectibleAdd: 2},
+	{ID: "crystal-heights", Name: "Crystal Heights", Landmark: "crystal tower", PortalStyle: "crystal-gateway", EnemyKind: "yeti", LengthChunks: 5, SafeWidth: 5, ContestWidth: 8, CollectibleAdd: 3},
+	{ID: "mechanical-skyworks", Name: "Mechanical Skyworks", Landmark: "crashed airship", PortalStyle: "sky-beacon", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 8, ContestWidth: 12, CollectibleAdd: 2},
+	{ID: "storm-islands", Name: "Storm Islands", Landmark: "storm generator", PortalStyle: "storm-ring", EnemyKind: "yeti", LengthChunks: 5, SafeWidth: 4, ContestWidth: 8, CollectibleAdd: 3},
+	{ID: "celestial-sanctuary", Name: "Celestial Sanctuary", Landmark: "celestial shrine", PortalStyle: "celestial-shrine", EnemyKind: "iceGolem", LengthChunks: 5, SafeWidth: 6, ContestWidth: 10, CollectibleAdd: 2},
+}
+
+type RegionPlan struct {
+	ID            string
+	Index         int
+	StartChunkY   int
+	EndChunkY     int
+	ExitChunkY    int
+	Profile       worldRegionProfile
+	Platforms     map[int][]plannedPlatform
+	Relics        map[int][]RelicSpawn
+	JumpPads      map[int][]JumpPadSpawn
+	Enemies       map[int][]EnemySpawn
+	Landmarks     map[int][]LandmarkSpawn
+	RouteBranches []RouteBranch
+	Portal        PortalSpawn
+}
+
+type plannedPlatform struct {
+	Span    PlatformSpan
+	RouteID string
+	Kind    string
+}
+
+func RegionForChunkY(chunkY int) worldRegionProfile {
+	return worldRegionProfiles[RegionIndexForChunkY(chunkY)%len(worldRegionProfiles)]
+}
+
+func RegionIndexForChunkY(chunkY int) int {
+	if chunkY <= 0 {
+		return 0
+	}
+	cursor := 0
+	for regionIndex := 0; ; regionIndex++ {
+		next := cursor + RegionLengthForIndex(regionIndex)
+		if chunkY < next {
+			return regionIndex
+		}
+		cursor = next
+	}
+}
+
+func RegionStartChunkY(regionIndex int) int {
+	if regionIndex <= 0 {
+		return 0
+	}
+	chunkY := 0
+	for i := 0; i < regionIndex; i++ {
+		chunkY += RegionLengthForIndex(i)
+	}
+	return chunkY
+}
+
+func RegionLengthForIndex(regionIndex int) int {
+	return worldRegionProfiles[positiveMod(regionIndex, len(worldRegionProfiles))].LengthChunks
+}
+
+func IsCheckpointChunk(chunkY int) bool {
+	if chunkY <= 0 {
+		return true
+	}
+	return RegionStartChunkY(RegionIndexForChunkY(chunkY)) == chunkY
+}
+
+func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
+	profile := worldRegionProfiles[positiveMod(regionIndex, len(worldRegionProfiles))]
+	startChunkY := RegionStartChunkY(regionIndex)
+	length := profile.LengthChunks
+	exitChunkY := startChunkY + length
+	plan := RegionPlan{
+		ID:          profile.ID + ":" + itoa(regionIndex),
+		Index:       regionIndex,
+		StartChunkY: startChunkY,
+		EndChunkY:   exitChunkY - 1,
+		ExitChunkY:  exitChunkY,
+		Profile:     profile,
+		Platforms:   map[int][]plannedPlatform{},
+		Relics:      map[int][]RelicSpawn{},
+		JumpPads:    map[int][]JumpPadSpawn{},
+		Enemies:     map[int][]EnemySpawn{},
+		Landmarks:   map[int][]LandmarkSpawn{},
+	}
+
+	routeSpecs := buildRouteSpecs(profile)
+	routes := make([]RouteBranch, 0, len(routeSpecs))
+	for _, spec := range routeSpecs {
+		route := RouteBranch{ID: spec.ID, Kind: spec.Kind, Label: spec.Label, Hidden: spec.Hidden, Reward: spec.Reward, Nodes: []Vec2{}}
+		for local := 0; local < length; local++ {
+			chunkY := startChunkY + local
+			entryY := ChunkHeightTiles - 2
+			entryCenter := routeCenterForPlan(seed, profile, regionIndex, local, spec, 0)
+			if spec.Kind == "safe" {
+				entryWidth := profile.ContestWidth
+				if chunkY == 0 {
+					entryWidth = ChunkWidthTiles
+				}
+				plan.addPlatform(chunkY, platformFromCenter(entryCenter, entryY, entryWidth), spec.ID, "portal-entry")
+			}
+			for layer, y := range routeRowsForSpec(spec) {
+				center := routeCenterForPlan(seed, profile, regionIndex, local, spec, layer+1)
+				width := spec.Width
+				if spec.Kind == "safe" && (layer == 1 || layer == 3) {
+					width = min(profile.ContestWidth, width+2)
+				}
+				if local == length-1 && layer == len(routeRowsForSpec(spec))-1 && spec.Kind == "safe" {
+					width = profile.ContestWidth
+				}
+				span := platformFromCenter(center, y, width)
+				plan.addPlatform(chunkY, span, spec.ID, spec.Kind)
+				route.Nodes = append(route.Nodes, Vec2{
+					X: float64(span.X*TileSize) + float64(span.Width*TileSize)/2,
+					Y: float64(((-chunkY * ChunkHeightTiles) + span.Y) * TileSize),
+				})
+			}
+		}
+		routes = append(routes, route)
+	}
+	plan.RouteBranches = routes
+	plan.ensureReachability()
+	plan.placeLandmarks(seed)
+	plan.placePortals()
+	plan.placeCollectibles()
+	plan.placeJumpPads(seed)
+	plan.placeEnemies()
+	return plan
+}
+
+type routeSpec struct {
+	ID     string
+	Kind   string
+	Label  string
+	Offset int
+	Width  int
+	Reward int
+	Hidden bool
+}
+
+func buildRouteSpecs(profile worldRegionProfile) []routeSpec {
+	return []routeSpec{
+		{ID: "safe", Kind: "safe", Label: "safe long route", Offset: 0, Width: profile.SafeWidth, Reward: 1},
+		{ID: "risk", Kind: "risk", Label: "risky shortcut", Offset: -8, Width: max(3, profile.SafeWidth-3), Reward: 3},
+		{ID: "relic", Kind: "relic", Label: "relic detour", Offset: 8, Width: max(4, profile.SafeWidth-2), Reward: 4},
+		{ID: "hidden", Kind: "hidden", Label: "hidden advanced route", Offset: alternatingOffset(profile.LengthChunks, 10), Width: 3, Reward: 5, Hidden: true},
+	}
+}
+
+func routeRowsForSpec(spec routeSpec) []int {
+	switch spec.Kind {
+	case "risk":
+		return []int{13, 10, 7, 4, 1}
+	case "hidden":
+		return []int{13, 10, 7, 4, 1}
+	default:
+		return []int{13, 10, 7, 4, 1}
+	}
+}
+
+func routeCenterForPlan(seed uint32, profile worldRegionProfile, regionIndex, local int, spec routeSpec, layer int) int {
+	baseByProfile := map[string]int{
+		"floating-garden":     11,
+		"ancient-ruins":       13,
+		"crystal-heights":     9,
+		"mechanical-skyworks": 15,
+		"storm-islands":       10,
+		"celestial-sanctuary": 12,
+	}
+	center := scaleDesignX(baseByProfile[profile.ID] + spec.Offset)
+	switch profile.ID {
+	case "floating-garden":
+		center += scaleDesignOffset([]int{-2, 2, -1, 3, 0}[layer%5])
+	case "ancient-ruins":
+		center += scaleDesignOffset(alternatingOffset(local+layer, 2))
+	case "crystal-heights":
+		center += scaleDesignOffset([]int{-3, -2, 0, 2, 3}[layer%5])
+	case "mechanical-skyworks":
+		center += scaleDesignOffset([]int{-4, 3, 4, -2, 0}[layer%5])
+	case "storm-islands":
+		center += scaleDesignOffset(alternatingOffset(local+layer, 4))
+	case "celestial-sanctuary":
+		center += scaleDesignOffset([]int{-5, -2, 3, 5, 0}[layer%5])
+	}
+	center += deterministicSigned(seed, regionIndex*37+local*11, layer+len(spec.ID), 2)
+	return clampInt(center, 3, ChunkWidthTiles-4)
+}
+
+func scaleDesignX(x int) int {
+	return int(math.Round(float64(x) * float64(ChunkWidthTiles) / 24.0))
+}
+
+func scaleDesignOffset(offset int) int {
+	return int(math.Round(float64(offset) * float64(ChunkWidthTiles) / 24.0))
+}
+
+func (p *RegionPlan) addPlatform(chunkY int, span PlatformSpan, routeID, kind string) {
+	for i, existing := range p.Platforms[chunkY] {
+		if existing.Span.Y == span.Y && rangesOverlapOrTouch(existing.Span, span) {
+			mergedLeft := min(existing.Span.X, span.X)
+			mergedRight := max(existing.Span.X+existing.Span.Width, span.X+span.Width)
+			existing.Span.X = mergedLeft
+			existing.Span.Width = clampInt(mergedRight-mergedLeft, 3, ChunkWidthTiles-2)
+			if kind == "safe" || existing.Kind == "" {
+				existing.Kind = kind
+				existing.RouteID = routeID
+			}
+			p.Platforms[chunkY][i] = existing
+			return
+		}
+	}
+	p.Platforms[chunkY] = append(p.Platforms[chunkY], plannedPlatform{Span: span, RouteID: routeID, Kind: kind})
+}
+
+func (p *RegionPlan) ensureReachability() {
+	for chunkY, platforms := range p.Platforms {
+		if len(platforms) == 0 {
+			continue
+		}
+		for i := range platforms {
+			if platforms[i].Span.Y == ChunkHeightTiles-2 {
+				continue
+			}
+			lower := []PlatformSpan{}
+			for _, candidate := range platforms {
+				if candidate.Span.Y > platforms[i].Span.Y {
+					lower = append(lower, candidate.Span)
+				}
+			}
+			platforms[i].Span = makeReachableFromLower(platforms[i].Span, lower)
+		}
+		p.Platforms[chunkY] = platforms
+	}
+}
+
+func (p RegionPlan) EntryForChunk(chunkY int) PlatformSpan {
+	best := platformFromCenter(ChunkWidthTiles/2, ChunkHeightTiles-2, 7)
+	for _, platform := range p.Platforms[chunkY] {
+		if platform.Span.Y == ChunkHeightTiles-2 {
+			if platform.Kind == "portal-entry" || best.Y != ChunkHeightTiles-2 {
+				return platform.Span
+			}
+			best = platform.Span
+		}
+	}
+	return best
+}
+
+func (p RegionPlan) ExitForChunk(chunkY int) PlatformSpan {
+	best := p.EntryForChunk(chunkY)
+	for _, platform := range p.Platforms[chunkY] {
+		if platform.Span.Y < best.Y || (platform.Span.Y == best.Y && platform.Kind == "safe") {
+			best = platform.Span
+		}
+	}
+	return best
+}
+
+func (p RegionPlan) PortalForChunk(chunkY int) *PortalSpawn {
+	if !IsCheckpointChunk(chunkY) || chunkY != p.StartChunkY {
+		return nil
+	}
+	portal := p.Portal
+	return &portal
+}
+
+func (p RegionPlan) ChunkRoutes(chunkY int) []RouteBranch {
+	out := []RouteBranch{}
+	for _, route := range p.RouteBranches {
+		nodes := []Vec2{}
+		top := float64((-chunkY * ChunkHeightTiles) * TileSize)
+		bottom := float64(((-chunkY * ChunkHeightTiles) + ChunkHeightTiles) * TileSize)
+		for _, node := range route.Nodes {
+			if node.Y >= top && node.Y < bottom {
+				nodes = append(nodes, node)
+			}
+		}
+		if len(nodes) == 0 {
+			continue
+		}
+		r := route
+		r.Nodes = nodes
+		out = append(out, r)
+	}
+	return out
+}
+
+func (p *RegionPlan) placePortals() {
+	entry := p.EntryForChunk(p.StartChunkY)
+	width := min(CheckpointPortalWidthTiles, entry.Width)
+	x := clampInt(entry.X+(entry.Width-width)/2, 0, ChunkWidthTiles-width)
+	y := entry.Y
+	p.Portal = PortalSpawn{
+		ID:         "portal:" + p.ID + ":entry",
+		RegionID:   p.ID,
+		ChunkY:     p.StartChunkY,
+		X:          x,
+		Y:          y,
+		Width:      width,
+		Style:      p.Profile.PortalStyle,
+		Checkpoint: true,
+		Trigger: TriggerBox{
+			X:      float64(x * TileSize),
+			Y:      float64(((-p.StartChunkY*ChunkHeightTiles)+y)*TileSize) - 42,
+			Width:  float64(width * TileSize),
+			Height: 58,
+		},
+	}
+}
+
+func (p *RegionPlan) placeLandmarks(seed uint32) {
+	midChunk := p.StartChunkY + max(0, (p.Profile.LengthChunks-1)/2)
+	entry := p.EntryForChunk(p.StartChunkY)
+	p.Landmarks[p.StartChunkY] = append(p.Landmarks[p.StartChunkY], LandmarkSpawn{
+		ID:       "landmark:" + p.ID + ":portal",
+		RegionID: p.ID,
+		Kind:     p.Profile.Landmark,
+		X:        entry.X,
+		Y:        max(0, entry.Y-5),
+		Width:    min(ChunkWidthTiles-entry.X, max(8, entry.Width+4)),
+		Height:   6,
+	})
+	if platforms := p.Platforms[midChunk]; len(platforms) > 0 {
+		span := platforms[len(platforms)/2].Span
+		p.Landmarks[midChunk] = append(p.Landmarks[midChunk], LandmarkSpawn{
+			ID:       "landmark:" + p.ID + ":vista",
+			RegionID: p.ID,
+			Kind:     p.Profile.Landmark + " vista",
+			X:        clampInt(span.X-1, 0, ChunkWidthTiles-2),
+			Y:        max(0, span.Y-6),
+			Width:    min(ChunkWidthTiles-span.X, max(6, span.Width+3)),
+			Height:   5 + int(seed%2),
+			Hidden:   false,
+		})
+	}
+}
+
+func (p *RegionPlan) placeCollectibles() {
+	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
+		target := 4 + p.Profile.CollectibleAdd
+		if chunkY == p.StartChunkY || chunkY == p.EndChunkY {
+			target++
+		}
+		relics := []RelicSpawn{}
+		for _, platform := range p.Platforms[chunkY] {
+			if len(relics) >= target {
+				break
+			}
+			if platform.Span.Y <= 1 {
+				continue
+			}
+			addRelicOnPlatform(&relics, chunkY, platform, platform.Span.Width/2)
+			if len(relics) < target && platform.Kind == "relic" && platform.Span.Width >= 4 {
+				addRelicOnPlatform(&relics, chunkY, platform, max(1, platform.Span.Width-2))
+			}
+			if len(relics) < target && platform.Kind == "hidden" {
+				addRelicOnPlatform(&relics, chunkY, platform, 1)
+			}
+		}
+		p.Relics[chunkY] = relics
+	}
+}
+
+func addRelicOnPlatform(relics *[]RelicSpawn, chunkY int, platform plannedPlatform, offset int) {
+	x := clampInt(platform.Span.X+offset, 1, ChunkWidthTiles-2)
+	y := platform.Span.Y - 1
+	if y < 0 {
+		return
+	}
+	for _, existing := range *relics {
+		if existing.X == x && existing.Y == y {
+			return
+		}
+	}
+	prefix := "relic"
+	if platform.Kind == "hidden" {
+		prefix = "cache"
+	} else if platform.Kind == "risk" {
+		prefix = "riskRelic"
+	}
+	*relics = append(*relics, RelicSpawn{ID: prefix + ":" + itoa(chunkY) + ":" + itoa(len(*relics)), X: x, Y: y})
+}
+
+func (p *RegionPlan) placeJumpPads(seed uint32) {
+	jumpChunk := p.StartChunkY + max(1, p.Profile.LengthChunks-2)
+	if jumpChunk == p.StartChunkY || IsCheckpointChunk(jumpChunk) {
+		return
+	}
+	candidates := []plannedPlatform{}
+	for _, platform := range p.Platforms[jumpChunk] {
+		if (platform.Kind == "risk" || platform.Kind == "hidden") && platform.Span.Y >= 7 && platform.Span.Y <= 13 {
+			candidates = append(candidates, platform)
+		}
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	platform := candidates[int((seed+uint32(p.Index*131))%uint32(len(candidates)))]
+	p.JumpPads[jumpChunk] = []JumpPadSpawn{{
+		ID:         "jumpPad:" + p.ID + ":shortcut",
+		X:          platform.Span.X + platform.Span.Width/2,
+		Y:          platform.Span.Y - 1,
+		Multiplier: 2.35,
+	}}
+}
+
+func (p *RegionPlan) placeEnemies() {
+	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
+		if chunkY == 0 {
+			continue
+		}
+		enemies := []EnemySpawn{}
+		for _, platform := range p.Platforms[chunkY] {
+			if len(enemies) >= 2 || platform.Span.Width < 4 || platform.Span.Y <= 1 {
+				continue
+			}
+			if platform.Kind != "safe" && platform.Kind != "risk" {
+				continue
+			}
+			enemies = append(enemies, EnemySpawn{
+				ID:   "enemy:" + itoa(chunkY) + ":" + itoa(len(enemies)),
+				Kind: p.Profile.EnemyKind,
+				X:    platform.Span.X + platform.Span.Width/2,
+				Y:    platform.Span.Y - 1,
+			})
+		}
+		p.Enemies[chunkY] = enemies
+	}
+}
+
+func platformFromCenter(center, y, width int) PlatformSpan {
+	width = clampInt(width, 3, ChunkWidthTiles-2)
+	return PlatformSpan{
+		X:     clampInt(center-width/2, 1, ChunkWidthTiles-width-1),
+		Y:     y,
+		Width: width,
+	}
+}
+
+func appendReachablePlatform(current []PlatformSpan, lower []PlatformSpan, platform PlatformSpan) []PlatformSpan {
+	platform = makeReachableFromLower(platform, lower)
+	for _, existing := range current {
+		if existing.Y == platform.Y && rangesOverlapOrTouch(existing, platform) {
+			return current
+		}
+		if existing == platform {
+			return current
+		}
+	}
+	return append(current, platform)
+}
+
+func makeReachableFromLower(platform PlatformSpan, lower []PlatformSpan) PlatformSpan {
+	if len(lower) == 0 || reachableFromAnyLower(platform, lower) {
+		return platform
+	}
+	candidates := make([]PlatformSpan, 0, len(lower))
+	for _, candidate := range lower {
+		verticalGap := candidate.Y - platform.Y
+		if verticalGap > 0 && verticalGap <= MaxReachableVerticalGapTiles {
+			candidates = append(candidates, candidate)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = lower
+	}
+	best := candidates[0]
+	bestGap := platformGap(best, platform)
+	for _, candidate := range candidates[1:] {
+		if gap := platformGap(candidate, platform); gap < bestGap {
+			best = candidate
+			bestGap = gap
+		}
+	}
+	if platform.X > best.X {
+		platform.X = best.X + best.Width - 1 + MaxReachableHorizontalGapTiles - platform.Width/2
+	} else {
+		platform.X = best.X - MaxReachableHorizontalGapTiles + platform.Width/2
+	}
+	platform.X = clampInt(platform.X, 1, ChunkWidthTiles-platform.Width-1)
+	return platform
+}
+
+func reachableFromAnyLower(platform PlatformSpan, lower []PlatformSpan) bool {
+	for _, candidate := range lower {
+		verticalGap := candidate.Y - platform.Y
+		if verticalGap <= 0 || verticalGap > MaxReachableVerticalGapTiles {
+			continue
+		}
+		if platformGap(candidate, platform) <= MaxReachableHorizontalGapTiles {
+			return true
+		}
+	}
+	return false
+}
+
+func rangesOverlapOrTouch(a, b PlatformSpan) bool {
+	return a.X <= b.X+b.Width && b.X <= a.X+a.Width
+}
+
+func deterministicSigned(seed uint32, a, b, magnitude int) int {
+	if magnitude <= 0 {
+		return 0
+	}
+	n := int((seed + uint32(a*7349) + uint32(b*9151)) % uint32(magnitude*2+1))
+	return n - magnitude
+}
+
+func alternatingOffset(value, magnitude int) int {
+	if value%2 == 0 {
+		return magnitude
+	}
+	return -magnitude
 }
 
 func EnemyStateFromSpawn(chunk GeneratedChunk, spawn EnemySpawn) EnemyState {
@@ -613,6 +1156,9 @@ type WorldDebugDump struct {
 type ChunkDebugRecord struct {
 	ChunkY       int                   `json:"chunkY"`
 	WorldTileY   int                   `json:"worldTileY"`
+	Region       string                `json:"region"`
+	Landmark     string                `json:"landmark"`
+	Checkpoint   bool                  `json:"checkpoint"`
 	PixelTopY    float64               `json:"pixelTopY"`
 	PixelBottomY float64               `json:"pixelBottomY"`
 	Platforms    []PlatformDebugRecord `json:"platforms"`
@@ -696,9 +1242,13 @@ func BuildWorldDebugDump(roomID string, seed uint32, minChunkY, maxChunkY int) W
 	}
 	for chunkY := minChunkY; chunkY <= maxChunkY; chunkY++ {
 		chunk := GenerateChunk(seed, chunkY)
+		region := RegionForChunkY(chunkY)
 		record := ChunkDebugRecord{
 			ChunkY:       chunkY,
 			WorldTileY:   chunk.WorldTileY,
+			Region:       region.Name,
+			Landmark:     region.Landmark,
+			Checkpoint:   IsCheckpointChunk(chunkY),
 			PixelTopY:    float64(chunk.WorldTileY * TileSize),
 			PixelBottomY: float64((chunk.WorldTileY + ChunkHeightTiles) * TileSize),
 			Platforms:    make([]PlatformDebugRecord, 0, len(chunk.Platforms)),
@@ -837,6 +1387,17 @@ func HashString(s string) uint32 {
 		h *= 0x01000193
 	}
 	return h
+}
+
+func positiveMod(value, divisor int) int {
+	if divisor <= 0 {
+		return 0
+	}
+	out := value % divisor
+	if out < 0 {
+		out += divisor
+	}
+	return out
 }
 
 func itoa(v int) string {

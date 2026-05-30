@@ -236,11 +236,20 @@ func assertChunkShape(t *testing.T, msg map[string]any) {
 	if !ok {
 		t.Fatalf("chunk message missing chunk object: %#v", msg)
 	}
-	requiredArrays := []string{"tiles", "platforms", "relics", "enemies", "jumpPads", "windZones"}
+	requiredArrays := []string{"tiles", "platforms", "relics", "enemies", "jumpPads", "windZones", "landmarks", "routes"}
 	for _, key := range requiredArrays {
 		if _, ok := chunk[key].([]any); !ok {
 			t.Fatalf("chunk.%s must be an array: %#v", key, chunk[key])
 		}
+	}
+	if _, ok := chunk["regionId"].(string); !ok {
+		t.Fatalf("chunk.regionId missing: %#v", chunk)
+	}
+	if _, ok := chunk["regionName"].(string); !ok {
+		t.Fatalf("chunk.regionName missing: %#v", chunk)
+	}
+	if _, ok := chunk["checkpoint"].(bool); !ok {
+		t.Fatalf("chunk.checkpoint missing: %#v", chunk)
 	}
 	if _, ok := chunk["entry"].(map[string]any); !ok {
 		t.Fatalf("chunk.entry missing: %#v", chunk)

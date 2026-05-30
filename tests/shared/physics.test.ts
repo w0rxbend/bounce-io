@@ -214,7 +214,7 @@ test("kick interaction reports authoritative hit event once target becomes invul
   assert.equal(target.health, PLAYER_MAX_HEALTH - kicker.damage);
 });
 
-test("fatal fall over 20m kills the player", () => {
+test("fatal fall over 6m kills the player", () => {
   const emptyMap: TileMap = { isSolid: () => false };
   let player = createPlayerState("p1", 20, 0);
   player.velocity.y = 420;

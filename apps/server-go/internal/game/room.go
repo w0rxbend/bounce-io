@@ -437,9 +437,14 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 			}
 			s.checkRelicCollection(sess)
 			chunkY := ChunkYForWorldY(sess.player.Position.Y)
-			if chunkY > sess.player.CheckpointChunkY {
+			if chunkY > sess.player.CheckpointChunkY && IsCheckpointChunk(chunkY) {
 				sess.player.CheckpointChunkY = chunkY
-				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "CHECKPOINT_REACHED", "playerId": sess.playerID, "chunkY": chunkY})
+				chunk := GenerateChunk(s.room.seed, chunkY)
+				event := MatchEvent{"type": "CHECKPOINT_REACHED", "playerId": sess.playerID, "chunkY": chunkY, "regionId": chunk.RegionID}
+				if chunk.Portal != nil {
+					event["portalId"] = chunk.Portal.ID
+				}
+				s.pendingEvents = append(s.pendingEvents, event)
 			}
 		}
 		s.applyPlayerInteractions(PhysicsStepSeconds)

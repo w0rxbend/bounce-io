@@ -7,8 +7,9 @@ const (
 	ProtocolVersion = 2
 
 	TileSize                       = 16
-	ChunkWidthTiles                = 24
+	ChunkWidthTiles                = 36
 	ChunkHeightTiles               = 18
+	CheckpointPortalWidthTiles     = 4
 	PlayerWidth                    = 14
 	PlayerHeight                   = 22
 	PhysicsStepSeconds             = 1.0 / 60.0
@@ -50,6 +51,7 @@ const (
 	PlayerMaxPushVelocity      = 120.0
 	AirPushFactor              = 0.35
 	RelicsPerLevel             = 5
+	FatalFallDistancePX        = 6 * 32.0
 )
 
 type MessageEnvelope struct {
@@ -262,19 +264,26 @@ type ChunkMessage struct {
 }
 
 type GeneratedChunk struct {
-	Seed       uint32         `json:"seed"`
-	ChunkY     int            `json:"chunkY"`
-	Width      int            `json:"width"`
-	Height     int            `json:"height"`
-	WorldTileY int            `json:"worldTileY"`
-	Tiles      []string       `json:"tiles"`
-	Platforms  []PlatformSpan `json:"platforms"`
-	Entry      PlatformSpan   `json:"entry"`
-	Exit       PlatformSpan   `json:"exit"`
-	Relics     []RelicSpawn   `json:"relics"`
-	Enemies    []EnemySpawn   `json:"enemies"`
-	JumpPads   []JumpPadSpawn `json:"jumpPads"`
-	WindZones  []any          `json:"windZones"`
+	Seed        uint32          `json:"seed"`
+	ChunkY      int             `json:"chunkY"`
+	Width       int             `json:"width"`
+	Height      int             `json:"height"`
+	WorldTileY  int             `json:"worldTileY"`
+	RegionID    string          `json:"regionId"`
+	RegionIndex int             `json:"regionIndex"`
+	RegionName  string          `json:"regionName"`
+	Checkpoint  bool            `json:"checkpoint"`
+	Tiles       []string        `json:"tiles"`
+	Platforms   []PlatformSpan  `json:"platforms"`
+	Entry       PlatformSpan    `json:"entry"`
+	Exit        PlatformSpan    `json:"exit"`
+	Portal      *PortalSpawn    `json:"portal,omitempty"`
+	Landmarks   []LandmarkSpawn `json:"landmarks"`
+	Routes      []RouteBranch   `json:"routes"`
+	Relics      []RelicSpawn    `json:"relics"`
+	Enemies     []EnemySpawn    `json:"enemies"`
+	JumpPads    []JumpPadSpawn  `json:"jumpPads"`
+	WindZones   []any           `json:"windZones"`
 }
 
 type PlatformSpan struct {
@@ -294,4 +303,43 @@ type JumpPadSpawn struct {
 	X          int     `json:"x"`
 	Y          int     `json:"y"`
 	Multiplier float64 `json:"multiplier"`
+}
+
+type TriggerBox struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type PortalSpawn struct {
+	ID         string     `json:"id"`
+	RegionID   string     `json:"regionId"`
+	ChunkY     int        `json:"chunkY"`
+	X          int        `json:"x"`
+	Y          int        `json:"y"`
+	Width      int        `json:"width"`
+	Style      string     `json:"style"`
+	Checkpoint bool       `json:"checkpoint"`
+	Trigger    TriggerBox `json:"trigger"`
+}
+
+type LandmarkSpawn struct {
+	ID       string `json:"id"`
+	RegionID string `json:"regionId"`
+	Kind     string `json:"kind"`
+	X        int    `json:"x"`
+	Y        int    `json:"y"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+	Hidden   bool   `json:"hidden"`
+}
+
+type RouteBranch struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Label  string `json:"label"`
+	Hidden bool   `json:"hidden"`
+	Reward int    `json:"reward"`
+	Nodes  []Vec2 `json:"nodes"`
 }
