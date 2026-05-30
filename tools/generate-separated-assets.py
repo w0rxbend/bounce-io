@@ -738,6 +738,99 @@ PLATFORM_COMPONENT_ROLES = (
 )
 
 
+SEAMLESS_PLATFORM_COMPONENT_ROLES = {
+    "body_left",
+    "body_right",
+    "bottom_left",
+    "bottom_inner",
+    "bottom_right",
+}
+
+
+def seamless_platform_component(
+    kind: str,
+    role: str,
+    outline: tuple[int, int, int, int],
+    body: tuple[int, int, int, int],
+    mid: tuple[int, int, int, int],
+    hi: tuple[int, int, int, int],
+    cap_hi: tuple[int, int, int, int],
+    accent: tuple[int, int, int, int],
+) -> Image.Image:
+    img = canvas(16, 16)
+    d = ImageDraw.Draw(img)
+    is_left = role.endswith("_left")
+    is_right = role.endswith("_right")
+
+    if role.startswith("body"):
+        d.rectangle((0, 0, 15, 15), fill=body)
+        d.rectangle((0, 0, 15, 3), fill=mid)
+        d.rectangle((4, 1, 11, 1), fill=hi)
+        d.rectangle((5, 9, 11, 10), fill=mid)
+        d.point((3, 6), fill=outline)
+        d.point((12, 12), fill=outline)
+
+        if is_left:
+            d.rectangle((0, 0, 1, 15), fill=outline)
+            d.rectangle((2, 2, 3, 6), fill=mid)
+            d.point((2, 10), fill=outline)
+            d.rectangle((14, 0, 15, 15), fill=body)
+            d.rectangle((14, 0, 15, 3), fill=mid)
+        if is_right:
+            d.rectangle((14, 0, 15, 15), fill=outline)
+            d.rectangle((12, 2, 13, 6), fill=mid)
+            d.point((13, 10), fill=outline)
+            d.rectangle((0, 0, 1, 15), fill=body)
+            d.rectangle((0, 0, 1, 3), fill=mid)
+
+        if kind in {"ice", "summit"}:
+            d.rectangle((7, 5, 8, 12), fill=rgba("#1f708d"))
+            d.point((8, 4), fill=accent)
+            d.point((8, 9), fill=accent)
+        elif kind == "crumble":
+            d.line((6, 3, 8, 8, 7, 13), fill=accent, width=1)
+        elif kind == "moss" and is_left:
+            d.rectangle((2, 0, 4, 4), fill=rgba("#314f28"))
+            d.rectangle((2, 0, 3, 1), fill=accent)
+        return img
+
+    d.rectangle((0, 0, 15, 7), fill=body)
+    d.rectangle((0, 0, 15, 2), fill=mid)
+    d.rectangle((3, 1, 12, 1), fill=hi)
+    d.rectangle((0, 7, 15, 8), fill=outline)
+
+    if role == "bottom_inner":
+        d.polygon([(3, 8), (12, 8), (11, 10), (9, 10), (8, 13), (7, 13), (6, 10), (4, 10)], fill=outline)
+        d.polygon([(5, 8), (10, 8), (9, 9), (8, 11), (7, 11), (6, 9)], fill=body)
+        d.point((4, 5), fill=outline)
+        d.point((11, 4), fill=mid)
+    elif is_left:
+        d.polygon([(0, 0), (15, 0), (0, 15)], fill=outline)
+        d.polygon([(2, 1), (14, 1), (2, 12)], fill=body)
+        d.polygon([(2, 1), (13, 1), (2, 4)], fill=mid)
+        d.line((1, 13, 6, 8), fill=outline, width=1)
+        d.point((5, 6), fill=hi)
+        if kind == "moss":
+            d.rectangle((2, 0, 4, 3), fill=rgba("#314f28"))
+            d.point((2, 0), fill=accent)
+    elif is_right:
+        d.polygon([(0, 0), (15, 0), (15, 15)], fill=outline)
+        d.polygon([(1, 1), (13, 1), (13, 12)], fill=body)
+        d.polygon([(2, 1), (13, 1), (13, 4)], fill=mid)
+        d.line((14, 13, 9, 8), fill=outline, width=1)
+        d.point((10, 6), fill=hi)
+
+    if kind in {"snow", "ice"}:
+        d.rectangle((4, 0, 8, 1), fill=cap_hi)
+    if kind == "summit" and role == "bottom_inner":
+        d.rectangle((6, 4, 10, 5), fill=accent)
+        d.point((8, 3), fill=rgba("#d8f6ff"))
+    if kind == "crumble":
+        for x, y in [(4, 11), (10, 6), (12, 13)]:
+            d.point((x, y), fill=outline)
+    return img
+
+
 def platform_component(kind: str, role: str) -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
@@ -795,6 +888,9 @@ def platform_component(kind: str, role: str) -> Image.Image:
         cap_hi = rgba("#e8edf2")
         soil = rgba("#31222b")
         accent = rgba("#c84a4a")
+
+    if role in SEAMLESS_PLATFORM_COMPONENT_ROLES:
+        return seamless_platform_component(kind, role, outline, body, mid, hi, cap_hi, accent)
 
     is_left = role.endswith("_left") or role == "outer_left"
     is_right = role.endswith("_right") or role == "outer_right"
@@ -1123,11 +1219,11 @@ def mid_mountain_tile(biome: str, role: str) -> Image.Image:
     img = canvas(16, 16)
     d = ImageDraw.Draw(img)
     palettes = {
-        "pine": (rgba("#070d12"), rgba("#22313d"), rgba("#31444a"), rgba("#4d6647"), rgba("#05080c"), rgba("#182822")),
-        "cloud": (rgba("#07101b"), rgba("#213145"), rgba("#32465a"), rgba("#48677a"), rgba("#050913"), rgba("#1b2c3e")),
-        "snow": (rgba("#07101b"), rgba("#1f3042"), rgba("#334b60"), rgba("#5d7890"), rgba("#040812"), rgba("#23374b")),
-        "frozen": (rgba("#06101c"), rgba("#1b2f45"), rgba("#2d5470"), rgba("#4f86a7"), rgba("#030711"), rgba("#18304a")),
-        "summit": (rgba("#0b111c"), rgba("#283241"), rgba("#4c5363"), rgba("#7f7f74"), rgba("#060a13"), rgba("#4b3c22")),
+        "pine": (rgba("#020305"), rgba("#111619"), rgba("#1b2820"), rgba("#3f5b37"), rgba("#080b0e"), rgba("#102016")),
+        "cloud": (rgba("#020408"), rgba("#12171d"), rgba("#203042"), rgba("#496178"), rgba("#080c12"), rgba("#142438")),
+        "snow": (rgba("#02050a"), rgba("#121820"), rgba("#26384a"), rgba("#6c8397"), rgba("#090e15"), rgba("#1d3040")),
+        "frozen": (rgba("#020509"), rgba("#101820"), rgba("#1d4158"), rgba("#4f88a7"), rgba("#071019"), rgba("#0f314a")),
+        "summit": (rgba("#03040a"), rgba("#15161c"), rgba("#2b2b37"), rgba("#8a7636"), rgba("#0a0b11"), rgba("#46391f")),
     }
     outline, body, accent, highlight, shadow, vein = palettes[biome]
     # Mid-mountain tiles are an opaque second-layer mass, not floating props.
@@ -2215,9 +2311,19 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/vegetation/moss_patch_1.png", platform(24, 10, "moss")),
         ("environment/vegetation/vine_hanging_1.png", vine()),
         ("environment/vegetation/pebble_cluster_1.png", pebbles()),
-        ("environment/rocks/stone_cap_1.png", stone_cap()),
+        ("environment/rocks/stone_cap_1.png", stone_cap("cloud")),
+        ("environment/rocks/stone_cap_pine_1.png", stone_cap("pine")),
+        ("environment/rocks/stone_cap_cloud_1.png", stone_cap("cloud")),
+        ("environment/rocks/stone_cap_snow_1.png", stone_cap("snow")),
+        ("environment/rocks/stone_cap_ice_1.png", stone_cap("ice")),
+        ("environment/rocks/stone_cap_summit_1.png", stone_cap("summit")),
         ("environment/rocks/rock_cluster_plain_1.png", rock_cluster("plain")),
         ("environment/rocks/rock_cluster_moss_1.png", rock_cluster("moss")),
+        ("environment/rocks/rock_cluster_pine_1.png", rock_cluster("pine")),
+        ("environment/rocks/rock_cluster_cloud_1.png", rock_cluster("cloud")),
+        ("environment/rocks/rock_cluster_snow_1.png", rock_cluster("snow")),
+        ("environment/rocks/rock_cluster_ice_1.png", rock_cluster("ice")),
+        ("environment/rocks/rock_cluster_summit_1.png", rock_cluster("summit")),
         ("environment/rocks/rock_spire_1.png", rock_cluster("tall")),
         ("environment/rocks/rock_single_small_1.png", rock_cluster("small")),
         ("environment/rocks/rock_single_medium_1.png", rock_cluster("medium")),
@@ -2226,8 +2332,14 @@ def generate_environment(manifest: dict[str, dict]) -> None:
         ("environment/rocks/rock_stack_plain_1.png", rock_cluster("stack")),
         ("environment/rocks/rock_stack_snow_1.png", rock_cluster("stack_snow")),
         ("environment/rocks/rock_stack_moss_1.png", rock_cluster("stack_moss")),
+        ("environment/rocks/rock_stack_cloud_1.png", rock_cluster("stack_cloud")),
+        ("environment/rocks/rock_stack_ice_1.png", rock_cluster("stack_ice")),
+        ("environment/rocks/rock_stack_summit_1.png", rock_cluster("stack_summit")),
         ("environment/rocks/rock_spire_snow_1.png", rock_cluster("spire_snow")),
         ("environment/rocks/rock_spire_moss_1.png", rock_cluster("spire_moss")),
+        ("environment/rocks/rock_spire_cloud_1.png", rock_cluster("spire_cloud")),
+        ("environment/rocks/rock_spire_ice_1.png", rock_cluster("spire_ice")),
+        ("environment/rocks/rock_spire_summit_1.png", rock_cluster("spire_summit")),
         ("environment/rocks/rock_rubble_small_1.png", rock_cluster("rubble")),
         ("environment/rocks/rock_rubble_wall_1.png", rock_cluster("rubble_wall")),
         ("environment/rocks/rock_moss_boulder_large_1.png", rock_cluster("moss_boulder_large")),
@@ -2451,23 +2563,75 @@ def pebbles() -> Image.Image:
     return img
 
 
-def _rock_colors(variant: str = "plain") -> dict[str, tuple[int, int, int, int]]:
+def _rock_theme(variant: str = "plain") -> str:
+    if any(token in variant for token in ("moss", "pine")):
+        return "pine"
     if "snow" in variant:
+        return "snow"
+    if "ice" in variant:
+        return "ice"
+    if "summit" in variant:
+        return "summit"
+    if "cloud" in variant or variant in {"plain", "tall", "small", "medium", "large", "slab", "stack", "rubble", "rubble_wall"}:
+        return "cloud"
+    return "cloud"
+
+
+def _rock_colors(variant: str = "plain") -> dict[str, tuple[int, int, int, int]]:
+    theme = _rock_theme(variant)
+    if theme == "pine":
         return {
-            "outline": rgba("#1a1b2b"),
-            "dark": rgba("#6c6f7f"),
-            "mid": rgba("#b9bbc1"),
-            "light": rgba("#eef1f4"),
-            "hot": rgba("#ffffff"),
-            "crack": rgba("#858897"),
+            "outline": rgba("#080f0b"),
+            "dark": rgba("#203129"),
+            "mid": rgba("#3f4f43"),
+            "light": rgba("#708064"),
+            "hot": rgba("#9fb66b"),
+            "crack": rgba("#142019"),
+            "accent": rgba("#75b64b"),
+            "glow": rgba("#c5df7d"),
+        }
+    if theme == "snow":
+        return {
+            "outline": rgba("#091321"),
+            "dark": rgba("#24374d"),
+            "mid": rgba("#536b80"),
+            "light": rgba("#9eb3c5"),
+            "hot": rgba("#f4fbff"),
+            "crack": rgba("#17283d"),
+            "accent": rgba("#d8f6ff"),
+            "glow": rgba("#ffffff"),
+        }
+    if theme == "ice":
+        return {
+            "outline": rgba("#06101e"),
+            "dark": rgba("#14314d"),
+            "mid": rgba("#285d7e"),
+            "light": rgba("#59a7c7"),
+            "hot": rgba("#c8fbff"),
+            "crack": rgba("#0b2238"),
+            "accent": rgba("#42e7ff"),
+            "glow": rgba("#effcff"),
+        }
+    if theme == "summit":
+        return {
+            "outline": rgba("#11121e"),
+            "dark": rgba("#2d324d"),
+            "mid": rgba("#59617d"),
+            "light": rgba("#a5afbd"),
+            "hot": rgba("#f4f8ff"),
+            "crack": rgba("#252940"),
+            "accent": rgba("#d7a847"),
+            "glow": rgba("#fff0a6"),
         }
     return {
-        "outline": rgba("#1c1d2b"),
-        "dark": rgba("#565966"),
-        "mid": rgba("#8f9098"),
-        "light": rgba("#c7c7cb"),
-        "hot": rgba("#f0efec"),
-        "crack": rgba("#3b3d49"),
+        "outline": rgba("#0b1320"),
+        "dark": rgba("#26364a"),
+        "mid": rgba("#4f6177"),
+        "light": rgba("#8ca0b3"),
+        "hot": rgba("#d6e2ed"),
+        "crack": rgba("#172436"),
+        "accent": rgba("#71d6df"),
+        "glow": rgba("#e7f7ff"),
     }
 
 
@@ -2476,8 +2640,7 @@ def _draw_faceted_rock(
     pts: list[tuple[int, int]],
     colors: dict[str, tuple[int, int, int, int]],
     *,
-    moss: bool = False,
-    snow: bool = False,
+    theme: str = "cloud",
 ) -> None:
     xs = [x for x, _ in pts]
     ys = [y for _, y in pts]
@@ -2492,17 +2655,25 @@ def _draw_faceted_rock(
     )
     d.polygon([(x1 - w // 3, y0 + 6), (x1 - 2, y0 + 10), (x1 - 4, y1 - 3), (x0 + w // 2, y1 - 2)], fill=colors["dark"])
     d.line((x0 + 4, y0 + 7, x0 + w // 2, y0 + 12, x1 - 5, y1 - 6), fill=colors["crack"], width=2)
-    if snow:
+    if theme in {"snow", "ice"}:
         d.polygon([(x0 + 2, y0 + 1), (x0 + w // 2, y0), (x1 - 4, y0 + 3), (x1 - 7, y0 + 6), (x0 + 5, y0 + 5)], fill=colors["hot"])
         d.rectangle((x0 + 5, y0 + 5, x0 + 8, y0 + 8), fill=colors["hot"])
         d.rectangle((x1 - 10, y0 + 4, x1 - 7, y0 + 7), fill=colors["hot"])
-    if moss:
-        moss_dark = rgba("#315123")
-        moss_light = rgba("#8ead4a")
-        d.rectangle((x0 + 1, y1 - 7, x1 - 2, y1 - 3), fill=moss_dark)
-        d.rectangle((x0 + 3, y1 - 8, x0 + w // 2, y1 - 6), fill=moss_light)
+        if theme == "ice":
+            d.line((x0 + w // 2, y0 + 4, x0 + w // 2 - 3, y0 + 13, x0 + w // 2 + 5, y1 - 5), fill=colors["accent"], width=1)
+            d.point((x0 + w // 2 + 1, y0 + 6), fill=colors["glow"])
+    if theme == "pine":
+        d.rectangle((x0 + 1, y1 - 7, x1 - 2, y1 - 3), fill=colors["dark"])
+        d.rectangle((x0 + 3, y1 - 8, x0 + w // 2, y1 - 6), fill=colors["accent"])
         for x in (x0 + 4, x0 + w // 2, x1 - 7):
-            d.rectangle((x, y1 - 4, x + 2, y1 + 1), fill=moss_dark)
+            d.rectangle((x, y1 - 4, x + 2, y1 + 1), fill=colors["dark"])
+    if theme == "cloud":
+        d.rectangle((x0 + 3, y0 + 3, x0 + 6, y0 + 4), fill=colors["accent"])
+        d.point((x1 - 7, y0 + 8), fill=colors["glow"])
+    if theme == "summit":
+        d.rectangle((x0 + w // 2 - 1, y0 + 4, x0 + w // 2 + 1, y0 + 6), fill=colors["accent"])
+        d.point((x0 + w // 2, y0 + 5), fill=colors["glow"])
+        d.line((x1 - 8, y0 + 6, x1 - 11, y1 - 7), fill=colors["accent"], width=1)
 
 
 def rock_cluster(variant: str = "plain") -> Image.Image:
@@ -2510,8 +2681,7 @@ def rock_cluster(variant: str = "plain") -> Image.Image:
     img = canvas(48, 48 if wall_like else 32)
     d = ImageDraw.Draw(img)
     colors = _rock_colors(variant)
-    moss = "moss" in variant
-    snow = "snow" in variant
+    theme = _rock_theme(variant)
 
     if wall_like:
         d.rectangle((3, 5, 44, 43), fill=colors["outline"])
@@ -2524,6 +2694,10 @@ def rock_cluster(variant: str = "plain") -> Image.Image:
             fill = colors["mid"] if i % 3 else colors["dark"]
             d.rectangle(box, fill=fill)
             d.rectangle((box[0] + 1, box[1] + 1, box[2] - 3, box[1] + 3), fill=colors["light"])
+            if theme in {"ice", "snow"} and i % 2 == 0:
+                d.rectangle((box[0] + 2, box[1], box[2] - 4, box[1] + 1), fill=colors["hot"])
+            if theme == "summit" and i % 4 == 0:
+                d.point((box[0] + 4, box[1] + 5), fill=colors["glow"])
         return img
 
     shadow_width = 18 if variant == "small" else 34 if variant in {"medium", "slab"} else 41
@@ -2537,14 +2711,14 @@ def rock_cluster(variant: str = "plain") -> Image.Image:
         shapes = [[(5, 26), (12, 12), (25, 5), (39, 10), (46, 20), (40, 29), (13, 29)]]
     elif variant == "slab":
         shapes = [[(6, 25), (11, 16), (27, 13), (43, 17), (44, 25), (33, 29), (11, 29)]]
-    elif variant in {"stack", "stack_snow", "stack_moss"}:
+    elif variant in {"stack", "stack_snow", "stack_moss", "stack_cloud", "stack_ice", "stack_summit"}:
         shapes = [
             [(5, 24), (12, 16), (22, 18), (21, 29), (8, 29)],
             [(14, 17), (21, 8), (32, 7), (38, 17), (32, 25), (18, 25)],
             [(29, 21), (38, 14), (45, 20), (42, 29), (30, 29)],
             [(3, 22), (8, 18), (14, 23), (11, 29), (4, 29)],
         ]
-    elif variant in {"tall", "spire", "spire_snow", "spire_moss"}:
+    elif variant in {"tall", "spire", "spire_snow", "spire_moss", "spire_cloud", "spire_ice", "spire_summit"}:
         shapes = [
             [(6, 28), (15, 10), (22, 3), (25, 28)],
             [(20, 28), (31, 2), (39, 14), (42, 29)],
@@ -2559,10 +2733,8 @@ def rock_cluster(variant: str = "plain") -> Image.Image:
         ]
     elif variant == "moss_boulder_large":
         shapes = [[(4, 26), (10, 13), (25, 4), (41, 10), (46, 22), (39, 29), (12, 29)]]
-        moss = True
     elif variant == "moss_boulder_small":
         shapes = [[(12, 25), (18, 14), (31, 12), (39, 21), (35, 29), (18, 29)]]
-        moss = True
     else:
         shapes = [
             [(5, 23), (11, 14), (19, 17), (20, 27), (9, 28)],
@@ -2572,20 +2744,29 @@ def rock_cluster(variant: str = "plain") -> Image.Image:
         ]
 
     for pts in shapes:
-        _draw_faceted_rock(d, pts, colors, moss=moss, snow=snow)
+        _draw_faceted_rock(d, pts, colors, theme=theme)
     return img
 
 
-def stone_cap() -> Image.Image:
+def stone_cap(variant: str = "cloud") -> Image.Image:
     img = canvas(24, 16)
     d = ImageDraw.Draw(img)
-    colors = _rock_colors("snow")
+    colors = _rock_colors(variant)
+    theme = _rock_theme(variant)
     d.rectangle((4, 12, 21, 14), fill=PAL["shadow"])
     d.polygon([(2, 11), (6, 5), (17, 3), (22, 7), (20, 13), (6, 14)], fill=colors["outline"])
     d.polygon([(3, 10), (7, 5), (17, 4), (21, 7), (19, 12), (6, 13)], fill=colors["mid"])
-    d.polygon([(6, 5), (17, 4), (20, 7), (15, 9), (6, 9)], fill=colors["hot"])
+    d.polygon([(6, 5), (17, 4), (20, 7), (15, 9), (6, 9)], fill=colors["hot"] if theme in {"snow", "ice"} else colors["light"])
     d.rectangle((7, 9, 10, 11), fill=colors["light"])
     d.rectangle((16, 8, 19, 10), fill=colors["light"])
+    if theme == "pine":
+        d.rectangle((4, 11, 18, 13), fill=colors["dark"])
+        d.rectangle((6, 10, 14, 11), fill=colors["accent"])
+    if theme == "ice":
+        d.line((13, 5, 11, 11), fill=colors["accent"], width=1)
+    if theme == "summit":
+        d.point((12, 7), fill=colors["glow"])
+        d.line((17, 7, 15, 11), fill=colors["accent"], width=1)
     return img
 
 

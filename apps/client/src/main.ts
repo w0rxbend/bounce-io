@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Graphics, Sprite, Text, Texture, TextureStyle } from "pixi.js";
+import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Sprite, Text, Texture, TextureStyle } from "pixi.js";
 import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
@@ -197,7 +197,6 @@ const ASSET_URLS = {
   crystalMarker: "/assets/environment/structures/crystal_marker_1.png",
   fence: "/assets/environment/structures/fence_1.png",
   flowerPatch: "/assets/environment/vegetation/flower_patch_1.png",
-  floatingIsland: "/assets/environment/platforms/platform_moss_top_inner.png",
   grassClump: "/assets/environment/vegetation/grass_clump_1.png",
   hazardSpikes: "/assets/environment/hazards/spikes_1.png",
   heightArrow: "/assets/environment/ui/height_arrow_1.png",
@@ -214,30 +213,12 @@ const ASSET_URLS = {
   gemPurple: "/assets/environment/collectibles/gem_purple_1.png",
   gemGold: "/assets/environment/collectibles/gem_gold_1.png",
   heart: "/assets/environment/collectibles/heart_1.png",
-  mossPlatformRoots: "/assets/environment/platforms/platform_moss_bottom_inner.png",
-  mossPlatformRunes: "/assets/environment/platforms/platform_stone_body_inner.png",
-  mossPlatform: "/assets/environment/platforms/platform_moss_top_inner.png",
-  mossPlatformCracked: "/assets/environment/platformVariants/platform_crumble_top_inner.png",
-  mossPlatformOverhang: "/assets/environment/platforms/platform_moss_outer_left.png",
-  mossPlatformFlowers: "/assets/environment/platforms/platform_moss_top_inner.png",
   mushroomCluster: "/assets/environment/vegetation/mushroom_cluster_1.png",
   pebbleCluster: "/assets/environment/vegetation/pebble_cluster_1.png",
   rockCap: "/assets/environment/rocks/stone_cap_1.png",
   rockCluster: "/assets/environment/rocks/rock_cluster_plain_1.png",
   rockClusterMoss: "/assets/environment/rocks/rock_cluster_moss_1.png",
   rockSpire: "/assets/environment/rocks/rock_spire_1.png",
-  snowPlatform: "/assets/environment/platformVariants/platform_snow_top_inner.png",
-  snowIciclePlatform: "/assets/environment/platformVariants/platform_snow_bottom_inner.png",
-  frozenPlatform: "/assets/environment/platformVariants/platform_ice_top_inner.png",
-  iceDarkPlatform: "/assets/environment/platformVariants/platform_ice_body_inner.png",
-  summitPlatform: "/assets/environment/platformVariants/platform_summit_top_inner.png",
-  summitGoldPlatform: "/assets/environment/platformVariants/platform_summit_body_inner.png",
-  crumblingPlatform: "/assets/environment/platformVariants/platform_crumble_top_inner.png",
-  greenTrianglePlatform: "/assets/environment/platforms/platform_moss_bottom_inner.png",
-  mossThinPlatform: "/assets/environment/platforms/platform_moss_top_inner.png",
-  stoneBrokenPlatform: "/assets/environment/platforms/platform_stone_top_inner.png",
-  tallPillar: "/assets/environment/platforms/platform_stone_body_inner.png",
-  brokenCliff: "/assets/environment/platforms/platform_stone_bottom_inner.png",
   tileClusterMoss: "/assets/environment/sheetElements/moss_tile_cluster.png",
   tileClusterStone: "/assets/environment/sheetElements/stone_tile_cluster.png",
   tileClusterSnow: "/assets/environment/sheetElements/snow_tile_cluster.png",
@@ -367,7 +348,6 @@ const ASSET_URLS = {
   relicPedestalFire1: "/assets/environment/collectibles/relic_pedestal_fire_frame2.png",
   relicPedestalFire2: "/assets/environment/collectibles/relic_pedestal_fire_frame3.png",
   relicPedestalFire3: "/assets/environment/collectibles/relic_pedestal_fire_frame4.png",
-  stoneLedge: "/assets/environment/platforms/platform_stone_top_inner.png",
   stump: "/assets/environment/vegetation/stump_1.png",
   tree: "/assets/environment/vegetation/tree_pine_1.png",
   ruinColumn: "/assets/environment/structures/ruin_column_1.png",
@@ -389,7 +369,16 @@ interface PixelAssetManifest {
 const ASSET_MANIFEST_URL = "/assets/manifest.json";
 const manifestAssetFolders = new Map<string, AssetKey[]>();
 const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
-const PROCEDURAL_ASSET_FOLDERS = new Set(["environment/midMountains"]);
+const PROCEDURAL_ASSET_FOLDERS = new Set([
+  "environment/midMountains",
+  "environment/platforms",
+  "environment/platformVariants",
+]);
+
+function isProceduralManifestAsset(relPath: string): boolean {
+  const folder = relPath.split("/").slice(0, -1).join("/");
+  return PROCEDURAL_ASSET_FOLDERS.has(folder);
+}
 
 const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
 type BiomeId = typeof BIOME_IDS[number];
@@ -555,8 +544,7 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
   if (manifest) {
     await Promise.all(Object.entries(manifest.assets).map(async ([relPath, meta]) => {
       try {
-        const folder = relPath.split("/").slice(0, -1).join("/");
-        if (PROCEDURAL_ASSET_FOLDERS.has(folder)) return;
+        if (isProceduralManifestAsset(relPath)) return;
         const texture = await Assets.load<Texture>(meta.png);
         const pathAlias = pathAliasForAsset(relPath);
         loaded[relPath] = texture;
@@ -858,112 +846,700 @@ function cloudAsset(i: number, layer: "far" | "mid" | "front"): AssetKey {
   return "cloud";
 }
 
-type MidMountainTileRole = "cap" | "body" | "left" | "right" | "bottom";
-type PlatformPartRole =
-  | "top_left" | "top_inner" | "top_right"
-  | "body_left" | "body_inner" | "body_right"
-  | "bottom_left" | "bottom_inner" | "bottom_right"
-  | "outer_left" | "outer_right";
+interface PlatformPixelPalette {
+  outline: number;
+  surfaceDark: number;
+  surface: number;
+  surfaceLight: number;
+  surfaceTip: number;
+  soilDark: number;
+  soil: number;
+  rockDark: number;
+  rock: number;
+  rockLight: number;
+  root: number;
+  accent: number;
+}
+
+const PROCEDURAL_PLATFORM_PIXEL_SIZE = 2;
 
 interface MidMountainPalette {
-  base: number;
-  shade: number;
+  core: number;
+  deep: number;
   edge: number;
   ridge: number;
-  cap: number;
-  accent: number;
-  alpha: number;
+  highlight: number;
+  dust: number;
 }
 
 function midMountainPalette(biome: BiomeId): MidMountainPalette {
   if (biome === "pineValley") {
-    return { base: 0x34465a, shade: 0x243247, edge: 0x1b2739, ridge: 0x607454, cap: 0x87a65a, accent: 0x9fb76b, alpha: 0.42 };
+    return { core: 0x111619, deep: 0x080b0e, edge: 0x020305, ridge: 0x1b2820, highlight: 0x3f5b37, dust: 0x4d6042 };
   }
   if (biome === "cloudRidge") {
-    return { base: 0x3e5874, shade: 0x2c3f5f, edge: 0x23324d, ridge: 0x6d87a6, cap: 0xa8c0d8, accent: 0xe8f0f8, alpha: 0.44 };
+    return { core: 0x12171d, deep: 0x080c12, edge: 0x020408, ridge: 0x203042, highlight: 0x496178, dust: 0x5f788e };
   }
   if (biome === "snowfallCliffs") {
-    return { base: 0x465f78, shade: 0x31455f, edge: 0x26354a, ridge: 0x8fa9c4, cap: 0xd7e5ee, accent: 0xf4fbff, alpha: 0.46 };
+    return { core: 0x121820, deep: 0x090e15, edge: 0x02050a, ridge: 0x26384a, highlight: 0x6c8397, dust: 0x8799aa };
   }
   if (biome === "frozenSpires") {
-    return { base: 0x405e82, shade: 0x2a4264, edge: 0x213551, ridge: 0x6fa7cc, cap: 0xc7f0ff, accent: 0xeffcff, alpha: 0.48 };
+    return { core: 0x101820, deep: 0x071019, edge: 0x020509, ridge: 0x1d4158, highlight: 0x4f88a7, dust: 0x69a9c6 };
   }
-  return { base: 0x4f5878, shade: 0x363f61, edge: 0x262e4c, ridge: 0x8796c0, cap: 0xddefff, accent: 0xf8d878, alpha: 0.45 };
+  return { core: 0x15161c, deep: 0x0a0b11, edge: 0x03040a, ridge: 0x2b2b37, highlight: 0x8a7636, dust: 0xa08a4f };
 }
 
-function midMountainCellNoise(chunkY: number, lx: number, ly: number, px: number, py: number): number {
+function platformPixelPalette(biome: BiomeId): PlatformPixelPalette {
+  if (biome === "pineValley") {
+    return {
+      outline: 0x130b08,
+      surfaceDark: 0x5f9519,
+      surface: 0x86c51f,
+      surfaceLight: 0xb0df3a,
+      surfaceTip: 0xd5f36a,
+      soilDark: 0x2c170d,
+      soil: 0x5d3920,
+      rockDark: 0x321d14,
+      rock: 0x6c4327,
+      rockLight: 0x9a6338,
+      root: 0x1f120a,
+      accent: 0x3c5b1d,
+    };
+  }
+  if (biome === "cloudRidge") {
+    return {
+      outline: 0x151516,
+      surfaceDark: 0x6f873d,
+      surface: 0x9bb54c,
+      surfaceLight: 0xc8d86f,
+      surfaceTip: 0xf0ed9b,
+      soilDark: 0x2e2a25,
+      soil: 0x5b5143,
+      rockDark: 0x292d31,
+      rock: 0x58616b,
+      rockLight: 0x89959a,
+      root: 0x211915,
+      accent: 0x8fb0b6,
+    };
+  }
+  if (biome === "snowfallCliffs") {
+    return {
+      outline: 0x09111d,
+      surfaceDark: 0x7c9ab5,
+      surface: 0xc6e6f2,
+      surfaceLight: 0xf4fbff,
+      surfaceTip: 0xffffff,
+      soilDark: 0x1a2634,
+      soil: 0x31445a,
+      rockDark: 0x182337,
+      rock: 0x3e5871,
+      rockLight: 0x7f96aa,
+      root: 0x121a25,
+      accent: 0x9deaff,
+    };
+  }
+  if (biome === "frozenSpires") {
+    return {
+      outline: 0x050b16,
+      surfaceDark: 0x2f7190,
+      surface: 0x59c8e6,
+      surfaceLight: 0xbdf8ff,
+      surfaceTip: 0xf4ffff,
+      soilDark: 0x10172b,
+      soil: 0x202e4c,
+      rockDark: 0x101728,
+      rock: 0x263e60,
+      rockLight: 0x4e82a6,
+      root: 0x07101c,
+      accent: 0x55e8ff,
+    };
+  }
+  return {
+    outline: 0x130f1e,
+    surfaceDark: 0x82733b,
+    surface: 0xc2a84d,
+    surfaceLight: 0xf6d978,
+    surfaceTip: 0xfff4b0,
+    soilDark: 0x342744,
+    soil: 0x6d607e,
+    rockDark: 0x262136,
+    rock: 0x635d79,
+    rockLight: 0x9a99b0,
+    root: 0x181325,
+    accent: 0x8cf7ff,
+  };
+}
+
+interface MidMountainConnection {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  radius: number;
+  strength: number;
+}
+
+interface MidMountainCrumbleEmitter {
+  chunkY: number;
+  container: Container;
+  x: number;
+  y: number;
+  width: number;
+  color: number;
+  accent: number;
+  seed: number;
+  timer: number;
+}
+
+interface MidMountainCrumbleShard {
+  chunkY: number;
+  gfx: Graphics;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+}
+
+type BiomeFlutterKind = "bright" | "frost" | "ember" | "star";
+
+interface BiomeFlutterPalette {
+  wingA: number;
+  wingB: number;
+  body: number;
+  spark: number;
+}
+
+interface BiomeFlutter {
+  chunkY: number;
+  gfx: Graphics;
+  baseX: number;
+  baseY: number;
+  phase: number;
+  speed: number;
+  orbitX: number;
+  orbitY: number;
+  size: number;
+  seed: number;
+  kind: BiomeFlutterKind;
+  palette: BiomeFlutterPalette;
+}
+
+const midMountainCrumbleEmitters = new Map<number, MidMountainCrumbleEmitter[]>();
+const midMountainCrumbleShards: MidMountainCrumbleShard[] = [];
+const biomeFlutters = new Map<number, BiomeFlutter[]>();
+
+function midMountainNoise(chunkY: number, x: number, y: number, salt = 0): number {
   let h = Math.imul(chunkY + 101, 374761393)
-    ^ Math.imul(lx + 17, 668265263)
-    ^ Math.imul(ly + 31, -2048144789)
-    ^ Math.imul(px + 7, -1028477379)
-    ^ Math.imul(py + 11, 1274126177);
+    ^ Math.imul(Math.round(x) + 17, 668265263)
+    ^ Math.imul(Math.round(y) + 31, -2048144789)
+    ^ Math.imul(salt + 7, -1028477379);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-function midMountainCellVisible(role: MidMountainTileRole, px: number, py: number, noise: number): boolean {
-  if (role === "cap") {
-    if (py === 0) return px === 1 || px === 2 || noise % 7 === 0;
-    if (py === 1) return px > 0 || noise % 5 !== 0;
-  }
-  if (role === "left") {
-    if (py === 0) return px >= 1;
-    if (py === 1) return px >= (noise % 4 === 0 ? 1 : 0);
-  }
-  if (role === "right") {
-    if (py === 0) return px <= 2;
-    if (py === 1) return px <= (noise % 4 === 0 ? 2 : 3);
-  }
-  if (role === "bottom" && py === 3) {
-    return px === 1 || px === 2 || noise % 6 === 0;
-  }
-  return true;
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
-function midMountainCellColor(role: MidMountainTileRole, palette: MidMountainPalette, px: number, py: number, noise: number): number {
-  if (role === "cap" && py === 0) return noise % 3 === 0 ? palette.accent : palette.cap;
-  if (role === "cap" && py === 1 && noise % 2 === 0) return palette.ridge;
-  if ((role === "left" && px === 0) || (role === "right" && px === 3)) return palette.edge;
-  if (role === "bottom" && py >= 2) return noise % 4 === 0 ? palette.edge : palette.shade;
-  if (py === 0 && noise % 5 === 0) return palette.ridge;
-  if (noise % 7 === 0) return palette.shade;
-  if (noise % 13 === 0) return palette.ridge;
-  return palette.base;
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const vx = bx - ax;
+  const vy = by - ay;
+  const lenSq = vx * vx + vy * vy;
+  if (lenSq <= 0.001) return Math.hypot(px - ax, py - ay);
+  const t = clamp01(((px - ax) * vx + (py - ay) * vy) / lenSq);
+  return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
 }
 
-function drawMidMountainTile(
-  g: Graphics,
-  lx: number,
-  ly: number,
-  baseTileY: number,
-  role: MidMountainTileRole,
-  palette: MidMountainPalette,
-  chunkY: number,
-  priority: number,
-): void {
-  const pixel = 4;
-  const tileX = lx * TILE_SIZE;
-  const tileY = (baseTileY + ly) * TILE_SIZE;
-  const alpha = Math.min(0.58, palette.alpha + priority * 0.04);
-  for (let py = 0; py < TILE_SIZE / pixel; py++) {
-    for (let px = 0; px < TILE_SIZE / pixel; px++) {
-      const noise = midMountainCellNoise(chunkY, lx, ly, px, py);
-      if (!midMountainCellVisible(role, px, py, noise)) continue;
-      const color = midMountainCellColor(role, palette, px, py, noise);
-      g.rect(tileX + px * pixel, tileY + py * pixel, pixel, pixel).fill({ color, alpha });
+function platformCenterPx(platform: GeneratedChunk["platforms"][number]): { x: number; y: number } {
+  return {
+    x: (platform.x + platform.width / 2) * TILE_SIZE,
+    y: platform.y * TILE_SIZE,
+  };
+}
+
+function buildMidMountainConnections(chunk: GeneratedChunk): MidMountainConnection[] {
+  const connections: MidMountainConnection[] = [];
+  const platforms = [...chunk.platforms].sort((a, b) => b.y - a.y || a.x - b.x);
+
+  for (let i = 0; i < platforms.length; i++) {
+    const from = platforms[i]!;
+    const fromCenter = platformCenterPx(from);
+    let best: GeneratedChunk["platforms"][number] | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const to of platforms) {
+      const dy = from.y - to.y;
+      if (dy <= 0 || dy > 4) continue;
+      const toCenter = platformCenterPx(to);
+      const score = Math.abs(toCenter.x - fromCenter.x) + dy * TILE_SIZE * 0.55;
+      if (score < bestScore) {
+        best = to;
+        bestScore = score;
+      }
+    }
+    if (best) {
+      const toCenter = platformCenterPx(best);
+      connections.push({
+        ax: fromCenter.x,
+        ay: fromCenter.y + TILE_SIZE * 0.9,
+        bx: toCenter.x,
+        by: toCenter.y + TILE_SIZE * 1.6,
+        radius: 20 + Math.min(from.width, best.width) * 2,
+        strength: 1,
+      });
     }
   }
+
+  for (let i = 0; i < platforms.length - 1; i++) {
+    const a = platforms[i]!;
+    const b = platforms[i + 1]!;
+    if (a.y !== b.y) continue;
+    const aCenter = platformCenterPx(a);
+    const bCenter = platformCenterPx(b);
+    connections.push({
+      ax: aCenter.x,
+      ay: aCenter.y + TILE_SIZE * 1.3,
+      bx: bCenter.x,
+      by: bCenter.y + TILE_SIZE * 1.3,
+      radius: 15,
+      strength: 0.9,
+    });
+  }
+
+  return connections;
 }
 
-function platformPartAsset(biome: BiomeId, role: PlatformPartRole, seed = 0): AssetKey {
-  const theme: "moss" | "stone" | "snow" | "ice" | "summit" | "crumble" =
-    biome === "pineValley" ? "moss" :
-    biome === "cloudRidge" ? "stone" :
-    biome === "snowfallCliffs" ? (seed % 11 === 0 ? "crumble" : "snow") :
-    biome === "frozenSpires" ? (seed % 9 === 0 ? "crumble" : "ice") :
-    "summit";
-  const folder = theme === "moss" || theme === "stone" ? "environment/platforms" : "environment/platformVariants";
-  return `${folder}/platform_${theme}_${role}.png`;
+function midMountainDensity(
+  chunk: GeneratedChunk,
+  connections: MidMountainConnection[],
+  x: number,
+  y: number,
+): number {
+  let density = 0;
+
+  for (const platform of chunk.platforms) {
+    const topY = platform.y * TILE_SIZE;
+    const below = y - topY;
+    if (below < -2 || below > 118) continue;
+
+    const left = platform.x * TILE_SIZE - 6;
+    const right = (platform.x + platform.width) * TILE_SIZE + 6;
+    const dx = x < left ? left - x : x > right ? x - right : 0;
+    const rootBand = clamp01(1 - Math.max(0, below) / 34) * clamp01(1 - dx / 20);
+    density = Math.max(density, rootBand);
+
+    const center = platformCenterPx(platform);
+    const leftRootX = platform.x * TILE_SIZE + TILE_SIZE * 0.45;
+    const rightRootX = (platform.x + platform.width) * TILE_SIZE - TILE_SIZE * 0.45;
+    const rootHalfWidth = Math.max(12, platform.width * TILE_SIZE * 0.38 - Math.max(0, below) * 0.12);
+    const rootReach = clamp01(1 - Math.max(0, below) / 112);
+    const centerRoot = clamp01(1 - Math.abs(x - center.x) / rootHalfWidth) * rootReach;
+    const leftRoot = clamp01(1 - Math.abs(x - leftRootX) / 15) * rootReach * 0.86;
+    const rightRoot = clamp01(1 - Math.abs(x - rightRootX) / 15) * rootReach * 0.86;
+    density = Math.max(density, centerRoot, leftRoot, rightRoot);
+  }
+
+  for (const connection of connections) {
+    const d = distanceToSegment(x, y, connection.ax, connection.ay, connection.bx, connection.by);
+    const t = clamp01(1 - d / connection.radius);
+    density = Math.max(density, t * t * connection.strength);
+  }
+
+  return clamp01(density);
+}
+
+function midMountainParticleColor(palette: MidMountainPalette, density: number, noise: number): number {
+  if (density > 0.82 && noise % 11 === 0) return palette.highlight;
+  if (density > 0.66 && noise % 5 === 0) return palette.ridge;
+  if (density < 0.38 && noise % 4 === 0) return palette.dust;
+  if (density < 0.42) return palette.edge;
+  if (noise % 7 === 0) return palette.deep;
+  return palette.core;
+}
+
+function clearMidMountainCrumbleChunk(chunkY: number): void {
+  midMountainCrumbleEmitters.delete(chunkY);
+  for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
+    const shard = midMountainCrumbleShards[i]!;
+    if (shard.chunkY !== chunkY) continue;
+    if (!shard.gfx.destroyed) shard.gfx.destroy();
+    midMountainCrumbleShards.splice(i, 1);
+  }
+}
+
+function registerMidMountainCrumbleEmitters(
+  chunk: GeneratedChunk,
+  container: Container,
+  palette: MidMountainPalette,
+  connections: MidMountainConnection[],
+): void {
+  const emitters: MidMountainCrumbleEmitter[] = [];
+  const baseY = chunk.worldTileY * TILE_SIZE;
+
+  for (const platform of chunk.platforms) {
+    const seed = platformSeed(chunk, platform, 951);
+    const count = platform.width >= 7 ? 3 : 2;
+    for (let i = 0; i < count; i++) {
+      const n = midMountainNoise(chunk.chunkY, platform.x * 29 + i * 47, platform.y * 31, 19);
+      const xT = (i + 1) / (count + 1);
+      emitters.push({
+        chunkY: chunk.chunkY,
+        container,
+        x: (platform.x + platform.width * xT) * TILE_SIZE + (n % 9) - 4,
+        y: baseY + platform.y * TILE_SIZE + 8 + ((n >> 5) % 8),
+        width: Math.max(12, platform.width * TILE_SIZE * 0.34),
+        color: palette.deep,
+        accent: n % 4 === 0 ? palette.ridge : palette.core,
+        seed: seed + i * 177,
+        timer: ((n >> 8) % 100) / 100,
+      });
+    }
+  }
+
+  for (const [i, connection] of connections.entries()) {
+    const n = midMountainNoise(chunk.chunkY, connection.ax + i * 13, connection.ay + i * 17, 37);
+    emitters.push({
+      chunkY: chunk.chunkY,
+      container,
+      x: (connection.ax + connection.bx) * 0.5 + (n % 17) - 8,
+      y: baseY + (connection.ay + connection.by) * 0.5 + ((n >> 4) % 13) - 6,
+      width: connection.radius * 0.8,
+      color: palette.edge,
+      accent: palette.deep,
+      seed: chunk.chunkY * 4099 + i * 733 + n,
+      timer: ((n >> 9) % 100) / 100,
+    });
+  }
+
+  midMountainCrumbleEmitters.set(chunk.chunkY, emitters);
+}
+
+function spawnMidMountainCrumbleShard(emitter: MidMountainCrumbleEmitter): void {
+  if (midMountainCrumbleShards.length > 180 || emitter.container.destroyed) return;
+  const n = midMountainNoise(emitter.chunkY, emitter.x + emitter.timer * 97, emitter.y, emitter.seed);
+  const size = n % 5 === 0 ? 3 : n % 3 === 0 ? 2 : 1;
+  const gfx = new Graphics();
+  gfx.rect(0, 0, size, size).fill(n % 6 === 0 ? emitter.accent : emitter.color);
+  gfx.x = Math.round(emitter.x + ((n >> 4) % Math.max(1, Math.round(emitter.width))) - emitter.width * 0.5);
+  gfx.y = Math.round(emitter.y + ((n >> 11) % 7) - 3);
+  gfx.alpha = 1;
+  emitter.container.addChild(gfx);
+  midMountainCrumbleShards.push({
+    chunkY: emitter.chunkY,
+    gfx,
+    vx: ((n >> 7) % 25) - 12,
+    vy: 18 + ((n >> 13) % 34),
+    life: 0.58 + ((n >> 18) % 45) / 100,
+    max: 1,
+  });
+  const shard = midMountainCrumbleShards[midMountainCrumbleShards.length - 1]!;
+  shard.max = shard.life;
+}
+
+function updateMidMountainCrumble(dt: number): void {
+  for (const emitters of midMountainCrumbleEmitters.values()) {
+    for (const emitter of emitters) {
+      emitter.timer -= dt;
+      if (emitter.timer > 0) continue;
+      spawnMidMountainCrumbleShard(emitter);
+      const n = midMountainNoise(emitter.chunkY, emitter.x, emitter.y, Math.round(elapsedMs) + emitter.seed);
+      emitter.timer = 0.18 + (n % 70) / 100;
+    }
+  }
+
+  for (let i = midMountainCrumbleShards.length - 1; i >= 0; i--) {
+    const shard = midMountainCrumbleShards[i]!;
+    shard.life -= dt;
+    if (shard.life <= 0 || shard.gfx.destroyed) {
+      if (!shard.gfx.destroyed) shard.gfx.destroy();
+      midMountainCrumbleShards.splice(i, 1);
+      continue;
+    }
+    shard.vy += 78 * dt;
+    shard.gfx.x += shard.vx * dt;
+    shard.gfx.y += shard.vy * dt;
+    shard.gfx.alpha = clamp01(shard.life / shard.max);
+  }
+}
+
+function biomeFlutterPalette(biome: BiomeId, seed: number): { kind: BiomeFlutterKind; palette: BiomeFlutterPalette } {
+  if (biome === "pineValley") {
+    const variants: BiomeFlutterPalette[] = [
+      { wingA: 0xbaff5f, wingB: 0xfff06a, body: 0x172313, spark: 0xffffff },
+      { wingA: 0x66f2ff, wingB: 0xff73d9, body: 0x14233a, spark: 0xfff6a4 },
+      { wingA: 0xffc84a, wingB: 0x74ff8d, body: 0x261a0b, spark: 0xffffff },
+    ];
+    return { kind: "bright", palette: variants[seed % variants.length]! };
+  }
+  if (biome === "cloudRidge") {
+    const variants: BiomeFlutterPalette[] = [
+      { wingA: 0xeaf7ff, wingB: 0xa8e7ff, body: 0x263447, spark: 0xffffff },
+      { wingA: 0xf9e8a4, wingB: 0x9fe5d8, body: 0x2a2e35, spark: 0xffffff },
+    ];
+    return { kind: "frost", palette: variants[seed % variants.length]! };
+  }
+  if (biome === "snowfallCliffs") {
+    if (seed % 5 === 0) {
+      return {
+        kind: "ember",
+        palette: { wingA: 0xffd15a, wingB: 0xff6b2a, body: 0x2b1009, spark: 0xfff2a6 },
+      };
+    }
+    return {
+      kind: "frost",
+      palette: { wingA: 0xffffff, wingB: 0xb9ecff, body: 0x263b4d, spark: 0xffffff },
+    };
+  }
+  if (biome === "frozenSpires") {
+    return {
+      kind: "frost",
+      palette: seed % 3 === 0
+        ? { wingA: 0xf6fdff, wingB: 0x65e9ff, body: 0x14283f, spark: 0xffffff }
+        : { wingA: 0xdff7ff, wingB: 0x9cc9ff, body: 0x16223a, spark: 0xffffff },
+    };
+  }
+  return {
+    kind: "star",
+    palette: seed % 2 === 0
+      ? { wingA: 0xffe58a, wingB: 0xb68cff, body: 0x211a38, spark: 0xffffff }
+      : { wingA: 0xf8fbff, wingB: 0x8cf7ff, body: 0x1b1f3e, spark: 0xffde72 },
+  };
+}
+
+function clearBiomeFluttersChunk(chunkY: number): void {
+  const flutters = biomeFlutters.get(chunkY);
+  if (!flutters) return;
+  for (const flutter of flutters) {
+    if (!flutter.gfx.destroyed) flutter.gfx.destroy();
+  }
+  biomeFlutters.delete(chunkY);
+}
+
+function drawBiomeFlutter(flutter: BiomeFlutter, tSec: number): void {
+  const { gfx, kind, palette, size } = flutter;
+  const flap = Math.sin(tSec * flutter.speed + flutter.phase);
+  const spread = size + Math.round((flap + 1) * 1.35);
+  const lift = flap > 0 ? -1 : 1;
+  gfx.clear();
+
+  if (kind === "ember") {
+    gfx.rect(-spread - 3, -3, spread + 3, 7).fill({ color: palette.wingB, alpha: 0.2 });
+    gfx.rect(1, -3, spread + 3, 7).fill({ color: palette.wingB, alpha: 0.2 });
+  } else if (kind === "star") {
+    gfx.rect(-spread - 2, -2, spread + 2, 5).fill({ color: palette.wingB, alpha: 0.16 });
+    gfx.rect(1, -2, spread + 2, 5).fill({ color: palette.wingB, alpha: 0.16 });
+  }
+
+  gfx.rect(-spread - 1, -3 + lift, spread + 1, 3).fill(palette.wingA);
+  gfx.rect(1, -3 + lift, spread + 1, 3).fill(palette.wingA);
+  gfx.rect(-spread, 1 - lift, spread, 2).fill(palette.wingB);
+  gfx.rect(1, 1 - lift, spread, 2).fill(palette.wingB);
+  gfx.rect(-1, -2, 2, 5).fill(palette.body);
+  gfx.rect(0, -3, 1, 1).fill(palette.spark);
+
+  if (size > 1 || kind === "star") {
+    gfx.rect(-spread, -2 + lift, 1, 1).fill(palette.spark);
+    gfx.rect(spread, -2 + lift, 1, 1).fill(palette.spark);
+  }
+}
+
+function composeBiomeFlutters(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
+  clearBiomeFluttersChunk(chunk.chunkY);
+  const flutters: BiomeFlutter[] = [];
+
+  for (const platform of chunk.platforms) {
+    if (platform.width < 3) continue;
+    const baseSeed = platformSeed(chunk, platform, 1379);
+    const count = Math.min(4, Math.max(1, Math.floor(platform.width / 4) + (baseSeed % 2)));
+    for (let i = 0; i < count; i++) {
+      const n = midMountainNoise(chunk.chunkY, platform.x * 41 + i * 97, platform.y * 53, 863);
+      const { kind, palette } = biomeFlutterPalette(biome, baseSeed + i * 31 + n);
+      const xT = (i + 1) / (count + 1);
+      const gfx = new Graphics();
+      gfx.zIndex = 7;
+      if (kind === "ember" || kind === "star") gfx.blendMode = "add";
+      const flutter: BiomeFlutter = {
+        chunkY: chunk.chunkY,
+        gfx,
+        baseX: Math.round((platform.x + platform.width * xT) * TILE_SIZE + (n % 17) - 8),
+        baseY: Math.round(platformTopY(chunk, platform) - 12 - ((n >> 5) % 24)),
+        phase: ((n >> 9) % 628) / 100,
+        speed: 7.5 + ((n >> 16) % 55) / 10,
+        orbitX: 8 + ((n >> 21) % 13),
+        orbitY: 4 + ((n >> 25) % 8),
+        size: kind === "ember" ? 1 : n % 6 === 0 ? 2 : 1,
+        seed: n,
+        kind,
+        palette,
+      };
+      drawBiomeFlutter(flutter, 0);
+      gfx.x = flutter.baseX;
+      gfx.y = flutter.baseY;
+      target.addChild(gfx);
+      flutters.push(flutter);
+    }
+  }
+
+  if (flutters.length > 0) biomeFlutters.set(chunk.chunkY, flutters);
+}
+
+function updateBiomeFlutters(tSec: number): void {
+  for (const [chunkY, flutters] of biomeFlutters) {
+    for (let i = flutters.length - 1; i >= 0; i--) {
+      const flutter = flutters[i]!;
+      if (flutter.gfx.destroyed) {
+        flutters.splice(i, 1);
+        continue;
+      }
+      const drift = Math.sin(tSec * 0.42 + flutter.phase + flutter.seed * 0.001) * 3;
+      flutter.gfx.x = Math.round(flutter.baseX + Math.sin(tSec * 0.85 + flutter.phase) * flutter.orbitX + drift);
+      flutter.gfx.y = Math.round(flutter.baseY + Math.cos(tSec * 1.1 + flutter.phase) * flutter.orbitY);
+      drawBiomeFlutter(flutter, tSec);
+    }
+    if (flutters.length === 0) biomeFlutters.delete(chunkY);
+  }
+}
+
+function proceduralPlatformRockColor(palette: PlatformPixelPalette, xCell: number, yCell: number, seed: number, edge = false): number {
+  const noise = midMountainNoise(seed, xCell, yCell, 421);
+  if (edge) return noise % 7 === 0 ? palette.rockDark : palette.outline;
+  if (noise % 17 === 0) return palette.rockLight;
+  if (noise % 5 === 0) return palette.soil;
+  if (noise % 3 === 0) return palette.rock;
+  if (noise % 17 === 0) return palette.outline;
+  return palette.rockDark;
+}
+
+function proceduralPlatformSurfaceColor(palette: PlatformPixelPalette, xCell: number, yCell: number, seed: number): number {
+  const noise = midMountainNoise(seed, xCell, yCell, 613);
+  if (yCell <= 1 && noise % 5 === 0) return palette.surfaceTip;
+  if (noise % 7 === 0) return palette.surfaceLight;
+  if (noise % 4 === 0) return palette.surfaceDark;
+  return palette.surface;
+}
+
+function drawProceduralPlatformPixel(
+  g: Graphics,
+  x: number,
+  y: number,
+  color: number,
+  alpha = 0.98,
+): void {
+  g.rect(x, y, PROCEDURAL_PLATFORM_PIXEL_SIZE, PROCEDURAL_PLATFORM_PIXEL_SIZE).fill({ color, alpha });
+}
+
+function addProceduralPlatform(
+  target: Container,
+  tileX: number,
+  tileY: number,
+  widthTiles: number,
+  biome: BiomeId,
+  palette: PlatformPixelPalette,
+  seed: number,
+): void {
+  const g = new Graphics();
+  const cell = PROCEDURAL_PLATFORM_PIXEL_SIZE;
+  const cellsPerTile = TILE_SIZE / cell;
+  const widthCells = widthTiles * cellsPerTile;
+  const x = tileX * TILE_SIZE;
+  const y = tileY * TILE_SIZE;
+  const surfaceCells = biome === "pineValley" ? 5 : biome === "snowfallCliffs" || biome === "frozenSpires" ? 4 : 5;
+  const bodyStart = Math.max(3, surfaceCells - 1);
+  const heightCells =
+    biome === "frozenSpires" ? 20 :
+    biome === "snowfallCliffs" ? 18 :
+    biome === "celestialSummit" ? 19 :
+    17;
+  const lobeCenters = [
+    Math.max(1, Math.floor(widthCells * 0.18) + (seed % 4) - 1),
+    Math.floor(widthCells * 0.48) + ((seed >> 3) % 3) - 1,
+    Math.min(widthCells - 2, Math.floor(widthCells * 0.8) - ((seed >> 5) % 4) + 1),
+  ];
+  const lobeRadii = [
+    Math.max(4, Math.floor(widthCells * 0.2)),
+    Math.max(5, Math.floor(widthCells * 0.3)),
+    Math.max(4, Math.floor(widthCells * 0.2)),
+  ];
+  const bottomLimits: number[] = [];
+
+  for (let cx = 0; cx < widthCells; cx++) {
+    let limit = bodyStart + 2;
+    const leftFalloff = Math.min(1, cx / (cellsPerTile * 0.9));
+    const rightDistance = widthCells - 1 - cx;
+    const rightFalloff = Math.min(1, rightDistance / (cellsPerTile * 0.9));
+    const sideTaper = Math.min(leftFalloff, rightFalloff);
+
+    for (let i = 0; i < lobeCenters.length; i++) {
+      const distance = Math.abs(cx - lobeCenters[i]!);
+      const strength = clamp01(1 - distance / lobeRadii[i]!);
+      limit = Math.max(limit, bodyStart + 3 + Math.round(strength * heightCells * sideTaper));
+    }
+
+    const chipNoise = midMountainNoise(seed, cx, limit, 733);
+    if (chipNoise % 11 === 0 && cx > cellsPerTile - 1 && cx < widthCells - cellsPerTile) limit = Math.max(bodyStart + 4, limit - 2);
+    if (chipNoise % 17 === 0 && sideTaper > 0.6) limit = Math.min(heightCells, limit + 1);
+    bottomLimits[cx] = limit;
+
+    for (let cy = bodyStart; cy <= limit; cy++) {
+      const edge = cy === limit || cx === 0 || cx === widthCells - 1;
+      const color = cy <= bodyStart + 1 && !edge
+        ? (midMountainNoise(seed, cx, cy, 149) % 3 === 0 ? palette.soil : palette.soilDark)
+        : proceduralPlatformRockColor(palette, cx, cy, seed, edge);
+      drawProceduralPlatformPixel(g, x + cx * cell, y + cy * cell, color);
+    }
+  }
+
+  for (let cx = 0; cx < widthCells; cx++) {
+    const edgeDip = midMountainNoise(seed, cx, 0, 317) % 3 === 0 ? 1 : 0;
+    for (let cy = 0; cy < surfaceCells + edgeDip; cy++) {
+      if (cy === surfaceCells + edgeDip - 1 && midMountainNoise(seed, cx, cy, 719) % 5 === 0) continue;
+      drawProceduralPlatformPixel(g, x + cx * cell, y + cy * cell, proceduralPlatformSurfaceColor(palette, cx, cy, seed));
+    }
+  }
+
+  for (let cx = 0; cx < widthCells; cx += 2) {
+    if (midMountainNoise(seed, cx, 1, 881) % 4 === 0) continue;
+    const bladeHeight = 1 + (midMountainNoise(seed, cx, 2, 883) % 3);
+    for (let i = 0; i < bladeHeight; i++) {
+      drawProceduralPlatformPixel(g, x + cx * cell, y - i * cell, i === bladeHeight - 1 ? palette.surfaceTip : palette.surfaceLight, 0.95);
+    }
+  }
+
+  for (let tile = 0; tile < widthTiles; tile++) {
+    const rootNoise = midMountainNoise(seed, tile, widthTiles, 977);
+    if (rootNoise % 5 === 0) continue;
+    const rootX = tile * TILE_SIZE + 4 + (rootNoise % 5) * cell;
+    const rootCellX = Math.min(widthCells - 1, Math.max(0, Math.floor(rootX / cell)));
+    const rootY = (bottomLimits[rootCellX] ?? bodyStart + 4) * cell + cell + ((rootNoise >> 3) % 2) * cell;
+    const rootCells = 5 + ((rootNoise >> 5) % 10);
+    for (let i = 0; i < rootCells; i++) {
+      const wiggle = ((rootNoise >> (i + 1)) & 1) === 0 ? 0 : cell;
+      const color = i === rootCells - 1 || i % 3 === 2 ? palette.outline : (i % 2 === 0 ? palette.root : palette.soilDark);
+      drawProceduralPlatformPixel(g, x + rootX + wiggle, y + rootY + i * cell, color, 0.9);
+    }
+  }
+
+  if (biome === "frozenSpires" || biome === "snowfallCliffs") {
+    for (let cx = 2; cx < widthCells - 2; cx += 5) {
+      const n = midMountainNoise(seed, cx, widthCells, 991);
+      if (n % 4 === 0) continue;
+      const icicleCells = 3 + (n % 5);
+      const startY = (bottomLimits[cx] ?? bodyStart + 5) * cell;
+      for (let i = 0; i < icicleCells; i++) {
+        drawProceduralPlatformPixel(g, x + cx * cell, y + startY + i * cell, i === icicleCells - 1 ? palette.surfaceLight : palette.accent, 0.88);
+      }
+    }
+  }
+
+  if (biome === "celestialSummit") {
+    for (let cx = 4; cx < widthCells - 4; cx += 9) {
+      if (midMountainNoise(seed, cx, widthCells, 997) % 3 === 0) continue;
+      const cy = Math.max(bodyStart + 2, Math.floor((bottomLimits[cx] ?? bodyStart + 8) * 0.62));
+      drawProceduralPlatformPixel(g, x + cx * cell, y + cy * cell, palette.accent, 0.95);
+      drawProceduralPlatformPixel(g, x + (cx + 1) * cell, y + cy * cell, palette.surfaceLight, 0.85);
+    }
+  }
+
+  g.zIndex = 2;
+  target.addChild(g);
 }
 
 // ── Layer hierarchy ───────────────────────────────────────────────────────────
@@ -1269,6 +1845,17 @@ function clearWorldChunks(): void {
   }
   chunkDecorations.clear();
   chunkHazardTelegraphs.clear();
+  midMountainCrumbleEmitters.clear();
+  for (const shard of midMountainCrumbleShards) {
+    if (!shard.gfx.destroyed) shard.gfx.destroy();
+  }
+  midMountainCrumbleShards.length = 0;
+  for (const flutters of biomeFlutters.values()) {
+    for (const flutter of flutters) {
+      if (!flutter.gfx.destroyed) flutter.gfx.destroy();
+    }
+  }
+  biomeFlutters.clear();
   backDecorationLayer.removeChildren();
   chunkLayer.removeChildren();
   decorationLayer.removeChildren();
@@ -1299,6 +1886,8 @@ function destroyChunkVisuals(chunkY: number): void {
     chunkDecorations.delete(chunkY);
   }
   chunkHazardTelegraphs.delete(chunkY);
+  clearMidMountainCrumbleChunk(chunkY);
+  clearBiomeFluttersChunk(chunkY);
 
   const relicPrefix = `relic:${chunkY}:`;
   for (const [id, anim] of [...relicAnims.entries()]) {
@@ -1720,118 +2309,66 @@ function canPlaceDecorationSpan(chunk: GeneratedChunk, lx: number, ly: number, w
 
 function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
   const baseTileY = chunk.worldTileY;
-  const placed = new Map<string, { role: MidMountainTileRole; priority: number }>();
-  const gfx = new Graphics();
   const palette = midMountainPalette(biome);
+  const connections = buildMidMountainConnections(chunk);
+  const mountainParticles: PixiParticle[] = [];
+  const topY = baseTileY * TILE_SIZE;
+  const chunkPixelHeight = chunk.height * TILE_SIZE;
+  const step = 4;
 
-  const roleForMass = (offset: number, half: number, isTop: boolean, isBottom: boolean): MidMountainTileRole => {
-    if (offset === -half) return "left";
-    if (offset === half) return "right";
-    if (isTop) return "cap";
-    if (isBottom) return "bottom";
-    return "body";
-  };
+  for (let localY = 0; localY < chunkPixelHeight; localY += step) {
+    for (let x = 0; x < WORLD_WIDTH; x += step) {
+      const sampleX = x + 2;
+      const sampleY = localY + 2;
+      const density = midMountainDensity(chunk, connections, sampleX, sampleY);
+      const noise = midMountainNoise(chunk.chunkY, sampleX, sampleY, 313);
+      const grain = (noise & 255) / 255;
+      const threshold = 0.18 + grain * 0.18;
+      if (density <= threshold) continue;
 
-  const placeTile = (lx: number, ly: number, role: MidMountainTileRole, priority = 0): void => {
-    if (lx < 0 || lx >= chunk.width || ly < 0 || ly >= chunk.height) return;
-    const placedKey = `${lx}:${ly}`;
-    const existing = placed.get(placedKey);
-    if (existing && existing.priority >= priority) return;
-    placed.set(placedKey, { role, priority });
-  };
-
-  // A quiet second-layer spine gives depth without reading as playable terrain.
-  // Keep it narrower and lower-contrast than the foreground tile platforms.
-  const phase = chunk.chunkY * 0.83;
-  for (let ly = 0; ly < chunk.height; ly++) {
-    const sway = Math.round(Math.sin(phase + ly * 0.42) * 2.2 + Math.sin(phase * 1.7 + ly * 0.19) * 1.1);
-    const center = Math.round(chunk.width * 0.5) + sway;
-    const half = 2 + ((chunk.chunkY + Math.floor(ly / 3)) % 3 === 0 ? 1 : 0);
-    for (let ox = -half; ox <= half; ox++) {
-      placeTile(center + ox, ly, roleForMass(ox, half, ly === 0, ly === chunk.height - 1), 0);
+      const edge = density < 0.44;
+      const size = edge
+        ? (noise % 5 === 0 ? 3 : 4)
+        : (density > 0.84 && noise % 7 === 0 ? 7 : 5);
+      const jitter = edge ? 1 : 0;
+      mountainParticles.push(new PixiParticle({
+        texture: Texture.WHITE,
+        x: x + (jitter ? (noise % 3) - 1 : 0),
+        y: topY + localY + (jitter ? ((noise >> 4) % 3) - 1 : 0),
+        scaleX: size,
+        scaleY: size,
+        tint: midMountainParticleColor(palette, density, noise),
+        alpha: 1,
+      }));
     }
   }
 
-  // Sparse buttresses under major platforms imply support. They start below
-  // the gameplay surface so landing edges stay visually dominant.
-  for (const platform of chunk.platforms) {
-    if (platform.width < 5) continue;
-    const seed = platformSeed(chunk, platform, 601);
-    if (seed % 3 === 0) continue;
-    const center = Math.round(platform.x + platform.width / 2);
-    const depth = Math.min(6, Math.max(3, 2 + (seed % 5)));
-    const half = platform.width >= 8 ? 2 : 1;
-    for (let dy = 1; dy <= depth; dy++) {
-      const ly = platform.y + dy;
-      if (ly >= chunk.height) break;
-      const rowHalf = Math.max(1, half - Math.floor(dy / 4));
-      for (let ox = -rowHalf; ox <= rowHalf; ox++) {
-        placeTile(center + ox, ly, roleForMass(ox, rowHalf, false, dy === depth), 1);
-      }
-    }
-  }
-
-  for (const [placedKey, tile] of placed) {
-    const [lxRaw, lyRaw] = placedKey.split(":");
-    const lx = Number(lxRaw);
-    const ly = Number(lyRaw);
-    drawMidMountainTile(gfx, lx, ly, baseTileY, tile.role, palette, chunk.chunkY, tile.priority);
-  }
-
-  gfx.zIndex = -6;
-  target.addChild(gfx);
+  const mountain = new ParticleContainer<PixiParticle>({
+    texture: Texture.WHITE,
+    roundPixels: true,
+    dynamicProperties: {
+      vertex: false,
+      position: false,
+      rotation: false,
+      uvs: false,
+      color: false,
+    },
+  });
+  mountain.zIndex = -6;
+  mountain.particleChildren.push(...mountainParticles);
+  mountain.update();
+  target.addChild(mountain);
+  clearMidMountainCrumbleChunk(chunk.chunkY);
+  registerMidMountainCrumbleEmitters(chunk, target, palette, connections);
 }
 
 function composePlatformPartLayer(chunk: GeneratedChunk, target: Container, biome: BiomeId): void {
   const baseTileY = chunk.worldTileY;
-  const addPart = (key: AssetKey, tileX: number, tileY: number, zIndex: number): void => {
-    if (!hasAsset(key)) return;
-    const part = makeSprite(key);
-    part.x = tileX * TILE_SIZE;
-    part.y = tileY * TILE_SIZE;
-    part.zIndex = zIndex;
-    part.alpha = 0.98;
-    target.addChild(part);
-  };
-
   for (const platform of chunk.platforms) {
     const seed = (chunk.chunkY * 92821 + platform.x * 3701 + platform.y * 809 + platform.width * 97) >>> 0;
-    const visualDepth =
-      biome === "pineValley" ? 2 :
-      biome === "cloudRidge" ? 2 :
-      biome === "snowfallCliffs" ? 2 :
-      biome === "frozenSpires" ? 3 :
-      2;
-
-    const roleFor = (row: "top" | "body" | "bottom", localX: number): PlatformPartRole => {
-      if (platform.width <= 1) return `${row}_inner` as PlatformPartRole;
-      if (localX === 0) return `${row}_left` as PlatformPartRole;
-      if (localX === platform.width - 1) return `${row}_right` as PlatformPartRole;
-      return `${row}_inner` as PlatformPartRole;
-    };
-
+    const platformPalette = platformPixelPalette(biome);
     const topTileY = baseTileY + platform.y;
-    for (let lx = 0; lx < platform.width; lx++) {
-      const tileX = platform.x + lx;
-      addPart(platformPartAsset(biome, roleFor("top", lx), seed), tileX, topTileY, 2);
-    }
-
-    if (visualDepth > 1) {
-      for (let dy = 1; dy < visualDepth; dy++) {
-        const row: "body" | "bottom" = dy === visualDepth - 1 ? "bottom" : "body";
-        for (let lx = 0; lx < platform.width; lx++) {
-          const tileX = platform.x + lx;
-          addPart(platformPartAsset(biome, roleFor(row, lx), seed), tileX, topTileY + dy, 1);
-        }
-      }
-    }
-
-    if (platform.x > 0) {
-      addPart(platformPartAsset(biome, "outer_left", seed), platform.x - 1, topTileY, 1);
-    }
-    if (platform.x + platform.width < chunk.width) {
-      addPart(platformPartAsset(biome, "outer_right", seed), platform.x + platform.width, topTileY, 1);
-    }
+    addProceduralPlatform(target, platform.x, topTileY, platform.width, biome, platformPalette, seed);
   }
 }
 
@@ -1868,7 +2405,7 @@ function biomeDecorationFolders(biome: BiomeId): string[] {
 function folderChoiceForBiome(biome: BiomeId, seed: number): AssetKey | null {
   const folders = biomeDecorationFolders(biome);
   const folder = folders[Math.abs(seed) % folders.length]!;
-  const keys = folderAssetKeys(folder);
+  const keys = folder === "environment/rocks" ? biomeRockAssetKeys(biome) : folderAssetKeys(folder);
   if (keys.length === 0) return null;
   return chooseAsset(keys, seed >> 3, "");
 }
@@ -1910,8 +2447,39 @@ interface SceneSpriteOptions {
   addBlend?: boolean;
 }
 
-function chooseAssetFromFolders(folders: string[], seed: number): AssetKey | null {
-  const keys = uniqueAssetKeys(folders.flatMap((folder) => folderAssetKeys(folder)));
+function biomeRockAssetKeys(biome: BiomeId, shape: "any" | "cap" | "cluster" | "spire" = "any"): AssetKey[] {
+  const keys = uniqueAssetKeys(folderAssetKeys("environment/rocks"));
+  const themeMatch = (key: AssetKey): boolean => {
+    const lower = key.toLowerCase();
+    if (biome === "pineValley") return lower.includes("pine") || lower.includes("moss");
+    if (biome === "cloudRidge") return lower.includes("cloud") || lower.includes("plain") || lower.includes("single") || lower.includes("slab") || lower.includes("rubble");
+    if (biome === "snowfallCliffs") return lower.includes("snow");
+    if (biome === "frozenSpires") return lower.includes("ice");
+    return lower.includes("summit");
+  };
+  const shapeMatch = (key: AssetKey): boolean => {
+    const lower = key.toLowerCase();
+    if (shape === "cap") return lower.includes("stonecap") || lower.includes("stone_cap");
+    if (shape === "cluster") return lower.includes("cluster") || lower.includes("boulder") || lower.includes("stack");
+    if (shape === "spire") return lower.includes("spire") || lower.endsWith("rockSpire1".toLowerCase()) || lower.includes("tall");
+    return true;
+  };
+  const themed = keys.filter((key) => themeMatch(key) && shapeMatch(key));
+  if (themed.length > 0) return themed;
+  const shaped = keys.filter(shapeMatch);
+  return shaped.length > 0 ? shaped : keys;
+}
+
+function chooseBiomeRockAsset(biome: BiomeId, seed: number, shape: "any" | "cap" | "cluster" | "spire" = "any"): AssetKey | null {
+  const keys = biomeRockAssetKeys(biome, shape);
+  if (keys.length === 0) return null;
+  return keys[Math.abs(seed) % keys.length]!;
+}
+
+function chooseAssetFromFolders(folders: string[], seed: number, biome?: BiomeId): AssetKey | null {
+  const keys = uniqueAssetKeys(folders.flatMap((folder) =>
+    folder === "environment/rocks" && biome ? biomeRockAssetKeys(biome) : folderAssetKeys(folder)
+  ));
   if (keys.length === 0) return null;
   return keys[Math.abs(seed) % keys.length]!;
 }
@@ -2212,7 +2780,7 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
     const seed = platformSeed(chunk, platform, 503);
     const topY = platformTopY(chunk, platform);
     if (platform.width >= 5 && seed % 3 !== 1) {
-      const mainKey = chooseAssetFromFolders(mainFolders, seed);
+      const mainKey = chooseAssetFromFolders(mainFolders, seed, biome);
       const frontLayer = seed % 5 !== 0;
       placeSceneSprite(frontLayer ? front : back, mainKey, platformCenterX(platform), topY + 2, seed, {
         maxWidth: Math.min(104, platform.width * TILE_SIZE - 6),
@@ -2225,7 +2793,7 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
     }
 
     if (platform.width >= 3 && seed % 4 === 0) {
-      const smallKey = chooseAssetFromFolders(smallFolders, seed >> 2);
+      const smallKey = chooseAssetFromFolders(smallFolders, seed >> 2, biome);
       const side = seed % 2 === 0 ? -0.32 : 0.32;
       placeSceneSprite(front, smallKey, platformCenterX(platform) + side * platform.width * TILE_SIZE, topY + 1, seed, {
         maxWidth: 42,
@@ -2263,6 +2831,7 @@ function decorateChunk(chunk: GeneratedChunk): void {
   composePlatformPartLayer(chunk, front, biome);
   composeTraversalConnectors(chunk, back, front, biome);
   composePlatformSceneDressing(chunk, back, front, biome);
+  composeBiomeFlutters(chunk, front, biome);
 
   for (let ly = 0; ly < chunk.height; ly++) {
     for (let lx = 0; lx < chunk.width; lx++) {
@@ -2360,8 +2929,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(pebbles);
       }
 
-      if (hasAsset("rockCap") && seed % 89 === 0) {
-        const cap = makeSprite("rockCap");
+      const rockCapKey = seed % 89 === 0 ? chooseBiomeRockAsset(biome, seed, "cap") : null;
+      if (rockCapKey && seed % 89 === 0) {
+        const cap = makeSprite(rockCapKey);
         cap.x = wx - 2;
         cap.y = wy - 9;
         cap.alpha = 0.82;
@@ -2369,8 +2939,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(cap);
       }
 
-      if (hasAsset("rockCluster") && seed % 127 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const rocks = makeSprite(seed % 2 === 0 && hasAsset("rockClusterMoss") ? "rockClusterMoss" : "rockCluster");
+      const rockClusterKey = seed % 127 === 0 ? chooseBiomeRockAsset(biome, seed, "cluster") : null;
+      if (rockClusterKey && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const rocks = makeSprite(rockClusterKey);
         rocks.x = wx - 6;
         rocks.y = wy - 25;
         rocks.alpha = 0.74;
@@ -2378,8 +2949,9 @@ function decorateChunk(chunk: GeneratedChunk): void {
         back.addChild(rocks);
       }
 
-      if (hasAsset("rockSpire") && seed % 193 === 0 && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const spire = makeSprite("rockSpire");
+      const rockSpireKey = seed % 193 === 0 ? chooseBiomeRockAsset(biome, seed, "spire") : null;
+      if (rockSpireKey && lx < chunk.width - 3 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const spire = makeSprite(rockSpireKey);
         spire.x = wx - 5;
         spire.y = wy - 27;
         spire.alpha = 0.68;
@@ -4178,6 +4750,8 @@ pixi.ticker.add((ticker) => {
   maybePing();
   updateAdaptiveInterpDelay();
   updateParticles(dt);
+  updateMidMountainCrumble(dt);
+  updateBiomeFlutters(tSec);
   spawnAmbientParticles(dt);
   spawnFallStreaks(dt);
   updateHazardTelegraphs(tSec);

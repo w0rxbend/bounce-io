@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 800,
+  "assetCount": 816,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -372,8 +372,13 @@
       "environment/relicShrines/relic_shrine_1.png"
     ],
     "environment/rocks": [
+      "environment/rocks/rock_cluster_cloud_1.png",
+      "environment/rocks/rock_cluster_ice_1.png",
       "environment/rocks/rock_cluster_moss_1.png",
+      "environment/rocks/rock_cluster_pine_1.png",
       "environment/rocks/rock_cluster_plain_1.png",
+      "environment/rocks/rock_cluster_snow_1.png",
+      "environment/rocks/rock_cluster_summit_1.png",
       "environment/rocks/rock_moss_boulder_large_1.png",
       "environment/rocks/rock_moss_boulder_small_1.png",
       "environment/rocks/rock_rubble_small_1.png",
@@ -383,12 +388,23 @@
       "environment/rocks/rock_single_small_1.png",
       "environment/rocks/rock_slab_flat_1.png",
       "environment/rocks/rock_spire_1.png",
+      "environment/rocks/rock_spire_cloud_1.png",
+      "environment/rocks/rock_spire_ice_1.png",
       "environment/rocks/rock_spire_moss_1.png",
       "environment/rocks/rock_spire_snow_1.png",
+      "environment/rocks/rock_spire_summit_1.png",
+      "environment/rocks/rock_stack_cloud_1.png",
+      "environment/rocks/rock_stack_ice_1.png",
       "environment/rocks/rock_stack_moss_1.png",
       "environment/rocks/rock_stack_plain_1.png",
       "environment/rocks/rock_stack_snow_1.png",
-      "environment/rocks/stone_cap_1.png"
+      "environment/rocks/rock_stack_summit_1.png",
+      "environment/rocks/stone_cap_1.png",
+      "environment/rocks/stone_cap_cloud_1.png",
+      "environment/rocks/stone_cap_ice_1.png",
+      "environment/rocks/stone_cap_pine_1.png",
+      "environment/rocks/stone_cap_snow_1.png",
+      "environment/rocks/stone_cap_summit_1.png"
     ],
     "environment/ropeBridges": [
       "environment/ropeBridges/rope_bridge_worn.png"
@@ -2511,13 +2527,38 @@
       "width": 48,
       "height": 48
     },
+    "environment/rocks/rock_cluster_cloud_1.png": {
+      "png": "/assets/environment/rocks/rock_cluster_cloud_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_cluster_ice_1.png": {
+      "png": "/assets/environment/rocks/rock_cluster_ice_1.png",
+      "width": 48,
+      "height": 32
+    },
     "environment/rocks/rock_cluster_moss_1.png": {
       "png": "/assets/environment/rocks/rock_cluster_moss_1.png",
       "width": 48,
       "height": 32
     },
+    "environment/rocks/rock_cluster_pine_1.png": {
+      "png": "/assets/environment/rocks/rock_cluster_pine_1.png",
+      "width": 48,
+      "height": 32
+    },
     "environment/rocks/rock_cluster_plain_1.png": {
       "png": "/assets/environment/rocks/rock_cluster_plain_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_cluster_snow_1.png": {
+      "png": "/assets/environment/rocks/rock_cluster_snow_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_cluster_summit_1.png": {
+      "png": "/assets/environment/rocks/rock_cluster_summit_1.png",
       "width": 48,
       "height": 32
     },
@@ -2566,6 +2607,16 @@
       "width": 48,
       "height": 32
     },
+    "environment/rocks/rock_spire_cloud_1.png": {
+      "png": "/assets/environment/rocks/rock_spire_cloud_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_spire_ice_1.png": {
+      "png": "/assets/environment/rocks/rock_spire_ice_1.png",
+      "width": 48,
+      "height": 32
+    },
     "environment/rocks/rock_spire_moss_1.png": {
       "png": "/assets/environment/rocks/rock_spire_moss_1.png",
       "width": 48,
@@ -2573,6 +2624,21 @@
     },
     "environment/rocks/rock_spire_snow_1.png": {
       "png": "/assets/environment/rocks/rock_spire_snow_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_spire_summit_1.png": {
+      "png": "/assets/environment/rocks/rock_spire_summit_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_stack_cloud_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_cloud_1.png",
+      "width": 48,
+      "height": 32
+    },
+    "environment/rocks/rock_stack_ice_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_ice_1.png",
       "width": 48,
       "height": 32
     },
@@ -2591,8 +2657,38 @@
       "width": 48,
       "height": 32
     },
+    "environment/rocks/rock_stack_summit_1.png": {
+      "png": "/assets/environment/rocks/rock_stack_summit_1.png",
+      "width": 48,
+      "height": 32
+    },
     "environment/rocks/stone_cap_1.png": {
       "png": "/assets/environment/rocks/stone_cap_1.png",
+      "width": 24,
+      "height": 16
+    },
+    "environment/rocks/stone_cap_cloud_1.png": {
+      "png": "/assets/environment/rocks/stone_cap_cloud_1.png",
+      "width": 24,
+      "height": 16
+    },
+    "environment/rocks/stone_cap_ice_1.png": {
+      "png": "/assets/environment/rocks/stone_cap_ice_1.png",
+      "width": 24,
+      "height": 16
+    },
+    "environment/rocks/stone_cap_pine_1.png": {
+      "png": "/assets/environment/rocks/stone_cap_pine_1.png",
+      "width": 24,
+      "height": 16
+    },
+    "environment/rocks/stone_cap_snow_1.png": {
+      "png": "/assets/environment/rocks/stone_cap_snow_1.png",
+      "width": 24,
+      "height": 16
+    },
+    "environment/rocks/stone_cap_summit_1.png": {
+      "png": "/assets/environment/rocks/stone_cap_summit_1.png",
       "width": 24,
       "height": 16
     },
