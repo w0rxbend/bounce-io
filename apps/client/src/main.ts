@@ -153,6 +153,10 @@ const ASSET_URLS = {
   decorPedestalGold: "/assets/environment/decorations/pedestal_lamp_gold.png",
   decorSignWood: "/assets/environment/decorations/sign_board_wood.png",
   decorSignRune: "/assets/environment/decorations/sign_board_rune.png",
+  decorBannerHelp: "/assets/environment/decorations/banner_help.png",
+  decorBannerDanger: "/assets/environment/decorations/banner_danger.png",
+  decorBannerCaution: "/assets/environment/decorations/banner_caution.png",
+  decorBannerNoWinners: "/assets/environment/decorations/banner_no_winners.png",
   decorRopePosts: "/assets/environment/decorations/rope_posts_plain.png",
   decorRopeLanterns: "/assets/environment/decorations/rope_posts_lanterns.png",
   decorFlowerCrystalBlue: "/assets/environment/decorations/flower_crystal_blue.png",
@@ -168,9 +172,6 @@ const ASSET_URLS = {
   decorTripodRed: "/assets/environment/decorations/tripod_red.png",
   decorTripodBlue: "/assets/environment/decorations/tripod_blue.png",
   decorTripodPurple: "/assets/environment/decorations/tripod_purple.png",
-  decorRopeGateWood: "/assets/environment/decorations/rope_gate_wood.png",
-  decorRopeGateLit: "/assets/environment/decorations/rope_gate_lit.png",
-  decorRopeGateIce: "/assets/environment/decorations/rope_gate_ice.png",
   decorCrateStackWood: "/assets/environment/decorations/crate_stack_wood.png",
   decorCrateStackRune: "/assets/environment/decorations/crate_stack_rune.png",
   decorBarrelStackWood: "/assets/environment/decorations/barrel_stack_wood.png",
@@ -250,10 +251,7 @@ const ASSET_URLS = {
   lightningPurple: "/assets/environment/hazards/lightning_purple_1.png",
   rollingBoulder: "/assets/environment/hazards/rolling_boulder_1.png",
   rollingBoulderRune: "/assets/environment/hazards/rolling_boulder_rune_1.png",
-  jumpPad: "/assets/environment/relicShrines/jump_pad_1.png",
   climbingChain: "/assets/environment/ladders/climbing_chain.png",
-  relicShrine: "/assets/environment/relicShrines/relic_shrine_1.png",
-  ancientBeacon: "/assets/environment/relicShrines/ancient_beacon_1.png",
   magicOrbBlue: "/assets/environment/collectibles/magic_orb_blue_1.png",
   magicOrbGold: "/assets/environment/collectibles/magic_orb_gold_1.png",
   magicOrbPurple: "/assets/environment/collectibles/magic_orb_purple_1.png",
@@ -291,7 +289,6 @@ const ASSET_URLS = {
   playerJump: "/assets/playable_characters/character1/jumping_frame1.png",
   playerFall: "/assets/playable_characters/character1/falling_frame1.png",
   playerKick: "/assets/playable_characters/character1/kick_frame2.png",
-  portalArch: "/assets/environment/effects/portal_arch_1.png",
   relicPink0: "/assets/environment/collectibles/relic_pink_frame1.png",
   relicPink1: "/assets/environment/collectibles/relic_pink_frame2.png",
   relicPink2: "/assets/environment/collectibles/relic_pink_frame3.png",
@@ -367,10 +364,14 @@ const manifestAssetFolders = new Map<string, AssetKey[]>();
 const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
 const PROCEDURAL_MOUNTAIN_FOLDERS = new Set(["environment/midMountains"]);
 const PROCEDURAL_PLATFORM_FOLDERS = new Set(["environment/platforms", "environment/platformVariants"]);
+const PROCEDURAL_GAMEPLAY_PROP_FOLDERS = new Set(["environment/relicShrines"]);
 
 function isProceduralManifestAsset(relPath: string): boolean {
   const folder = relPath.split("/").slice(0, -1).join("/");
   if (PROCEDURAL_MOUNTAIN_FOLDERS.has(folder)) return true;
+  if (PROCEDURAL_GAMEPLAY_PROP_FOLDERS.has(folder)) return true;
+  if (relPath === "environment/effects/jump_pad_1.png") return true;
+  if (relPath === "environment/effects/portal_arch_1.png") return true;
   if (!PROCEDURAL_PLATFORM_FOLDERS.has(folder)) return false;
   return /^platform_[a-z]+_(top|body|bottom|outer)_(left|inner|right)\.png$/.test(relPath.split("/").pop() ?? "");
 }
@@ -1625,7 +1626,7 @@ const relicAnims = new Map<string, RelicAnim>();
 interface JumpPadAnim {
   container: Container;
   aura: Graphics;
-  sprite: Sprite | null;
+  padGfx: Graphics;
   pad: JumpPadSpawn;
   worldX: number;
   worldY: number;
@@ -2495,7 +2496,7 @@ function chooseBiomeRockAsset(biome: BiomeId, seed: number, shape: "any" | "cap"
 function chooseAssetFromFolders(folders: string[], seed: number, biome?: BiomeId): AssetKey | null {
   const keys = uniqueAssetKeys(folders.flatMap((folder) =>
     folder === "environment/rocks" && biome ? biomeRockAssetKeys(biome) : folderAssetKeys(folder)
-  ));
+  )).filter((key) => !isProceduralGameplayPropAsset(key));
   if (keys.length === 0) return null;
   return keys[Math.abs(seed) % keys.length]!;
 }
@@ -2526,6 +2527,15 @@ function placeSceneSprite(
   if (options.addBlend) sprite.blendMode = "add";
   target.addChild(sprite);
   return sprite;
+}
+
+function isProceduralGameplayPropAsset(key: AssetKey): boolean {
+  const raw = String(key);
+  const url = (ASSET_URLS as Record<string, string>)[raw] ?? raw;
+  return raw === "jumpPad" || raw === "relicShrine" || raw === "ancientBeacon"
+    || url.includes("/relicShrines/")
+    || url.includes("/effects/jump_pad_")
+    || url.includes("/effects/portal_arch_");
 }
 
 type ProceduralTreeShape = "round" | "straight" | "zigzag" | "deformed" | "wind" | "frostRound" | "frostPine" | "dead" | "deadZigzag" | "crystalDead";
@@ -2712,6 +2722,55 @@ function placeProceduralTreeOnPlatform(
   tree.alpha = biome === "celestialSummit" ? 0.82 : biome === "frozenSpires" ? 0.88 : 0.94;
   tree.zIndex = 0;
   target.addChild(tree);
+}
+
+function makeProceduralCheckpointMarker(biome: BiomeId, seed: number): Container {
+  const marker = new Container();
+  const g = new Graphics();
+  const cold = biome === "snowfallCliffs" || biome === "frozenSpires" || biome === "celestialSummit";
+  const accent = biome === "celestialSummit" ? PAL.coinGold : biome === "pineValley" ? PAL.mossBright : PAL.portalGlow;
+  const shade = cold ? 0x5e7390 : PAL.stoneDark;
+
+  g.rect(-13, -4, 26, 5).fill(PAL.stoneShadow);
+  g.rect(-11, -7, 22, 4).fill(shade);
+  g.rect(-9, -8, 18, 1).fill({ color: cold ? PAL.mistPale : PAL.stoneLight, alpha: 0.75 });
+  g.rect(-2, -39, 4, 34).fill(PAL.stoneShadow);
+  g.rect(-1, -40, 2, 34).fill(cold ? PAL.stoneLight : PAL.stoneWorn);
+  g.rect(-8, -36, 8, 3).fill(accent);
+  g.rect(-8, -33, 13, 8).fill(biome === "pineValley" ? PAL.canopyLight : biome === "celestialSummit" ? PAL.coinGold : PAL.portalBlue);
+  g.rect(-8, -25, 9, 3).fill({ color: accent, alpha: 0.78 });
+  g.rect(-10, -22, 2, 8).fill({ color: accent, alpha: 0.45 });
+  g.rect(4, -30, 2, 9).fill({ color: PAL.uiInk, alpha: 0.22 });
+  g.circle(0, -46, 5).fill({ color: accent, alpha: 0.92 });
+  g.circle(0, -46, 9).stroke({ color: accent, alpha: 0.32, width: 1 });
+  g.rect(-1, -50, 2, 8).fill({ color: PAL.cloudBright, alpha: 0.68 });
+  if (cold) {
+    g.rect(-12, -9, 24, 2).fill(PAL.cloudBright);
+    g.rect(-7, -38, 7, 2).fill(PAL.cloudBright);
+  }
+  if (seed % 2 === 0) {
+    g.rect(7, -18, 1, 12).fill({ color: accent, alpha: 0.42 });
+    g.rect(6, -7, 3, 1).fill({ color: accent, alpha: 0.5 });
+  }
+
+  marker.addChild(g);
+  marker.scale.set(SCENE_ASSET_SCALE * 1.04);
+  return marker;
+}
+
+function placeProceduralCheckpointMarker(
+  target: Container,
+  chunk: GeneratedChunk,
+  platform: GeneratedChunk["platforms"][number],
+  biome: BiomeId,
+  seed: number
+): void {
+  const marker = makeProceduralCheckpointMarker(biome, seed);
+  marker.x = platformCenterX(platform);
+  marker.y = platformTopY(chunk, platform) + 3;
+  marker.alpha = 0.96;
+  marker.zIndex = 4;
+  target.addChild(marker);
 }
 
 function platformCenterX(platform: GeneratedChunk["platforms"][number]): number {
@@ -2937,21 +2996,14 @@ function composePlatformSceneDressing(chunk: GeneratedChunk, back: Container, fr
     });
   };
 
-  placeLandmark(
-    chunk.entry,
-    31,
-    chooseAssetFromFolders(["environment/banners", "environment/lanterns", "environment/lights"], platformSeed(chunk, chunk.entry, 31)) ??
-      chooseAsset(["decorBannerGreen", "decorLanternGold", "lanternCyan"], chunk.chunkY, "lanternCyan"),
-    4,
-    0.9
-  );
+  placeProceduralCheckpointMarker(front, chunk, chunk.entry, biome, platformSeed(chunk, chunk.entry, 31));
 
   placeLandmark(
     chunk.exit,
     79,
     biome === "celestialSummit"
-      ? chooseAsset(["ancientBeacon", "relicShrine", "decorPedestalGold"], platformSeed(chunk, chunk.exit, 79), "relicShrine")
-      : chooseAssetFromFolders(["environment/relicShrines", "environment/crystals", "environment/banners"], platformSeed(chunk, chunk.exit, 79)) ??
+      ? chooseAsset(["decorPedestalGold", "decorBrazierGold", "decorBannerGold"], platformSeed(chunk, chunk.exit, 79), "decorPedestalGold")
+      : chooseAssetFromFolders(["environment/crystals", "environment/banners", "environment/lights"], platformSeed(chunk, chunk.exit, 79)) ??
         chooseAsset(["crystalMarker", "decorPedestalBlue", "decorBannerBlue"], chunk.chunkY, "crystalMarker"),
     3,
     0.82
@@ -3274,20 +3326,21 @@ function decorateChunk(chunk: GeneratedChunk): void {
 
       if (seed % 137 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 2)) {
         const decorChoices: AssetKey[] =
-          biome === "pineValley" ? ["decorBannerGreen", "decorSignWood", "decorLanternGold", "decorRopePosts", "decorFlowerCrystalGreen", "decorCampfireWarm", "decorTripodRed", "decorRopeGateWood", "decorCrateStackWood", "decorBarrelStackWood", "decorSmallShrineWood", "decorFlowerPostPink"] :
-          biome === "cloudRidge" ? ["decorBannerBlue", "decorLanternBlue", "decorPedestalBlue", "decorSignRune", "decorRopeLanterns", "decorCampfireBlue", "decorTripodBlue", "decorRopeGateLit", "decorCrateStackRune", "decorCrystalTotemBlue", "decorFlowerPostWhite"] :
-          biome === "snowfallCliffs" ? ["decorPedestalBlue", "decorBrazierBlue", "decorFlowerCrystalBlue", "decorSkeletonMarker", "decorCampfireBlue", "decorRopeGateIce", "decorStatueSnow", "decorSmallShrineSnow", "decorSnowLampBlue", "decorCrystalTotemBlue", "decorFlowerPostBlue"] :
-          biome === "frozenSpires" ? ["decorBrazierBlue", "decorFlowerCrystalPurple", "decorSkeletonMarker", "decorLanternBlue", "decorTripodPurple", "decorRopeGateIce", "decorStatueSnow", "decorSnowLampPurple", "decorCrystalTotemPurple", "decorSmallShrinePurple"] :
-          ["decorBannerGold", "decorPedestalGold", "decorBrazierGold", "decorLanternGreen", "decorFlowerCrystalBlue", "decorCampfireGreen", "decorRopeGateLit", "decorStatueStone", "decorSnowLampGold", "decorCrystalTotemGreen", "decorSmallShrineSnow"];
+          biome === "pineValley" ? ["decorBannerGreen", "decorSignWood", "decorBannerHelp", "decorBannerCaution", "decorLanternGold", "decorRopePosts", "decorFlowerCrystalGreen", "decorCampfireWarm", "decorTripodRed", "decorCrateStackWood", "decorBarrelStackWood", "decorSmallShrineWood", "decorFlowerPostPink"] :
+          biome === "cloudRidge" ? ["decorBannerBlue", "decorBannerHelp", "decorBannerDanger", "decorLanternBlue", "decorPedestalBlue", "decorSignRune", "decorRopeLanterns", "decorCampfireBlue", "decorTripodBlue", "decorCrateStackRune", "decorCrystalTotemBlue", "decorFlowerPostWhite"] :
+          biome === "snowfallCliffs" ? ["decorBannerCaution", "decorBannerDanger", "decorPedestalBlue", "decorBrazierBlue", "decorFlowerCrystalBlue", "decorSkeletonMarker", "decorCampfireBlue", "decorStatueSnow", "decorSmallShrineSnow", "decorSnowLampBlue", "decorCrystalTotemBlue", "decorFlowerPostBlue"] :
+          biome === "frozenSpires" ? ["decorBannerDanger", "decorBannerNoWinners", "decorBrazierBlue", "decorFlowerCrystalPurple", "decorSkeletonMarker", "decorLanternBlue", "decorTripodPurple", "decorStatueSnow", "decorSnowLampPurple", "decorCrystalTotemPurple", "decorSmallShrinePurple"] :
+          ["decorBannerNoWinners", "decorBannerDanger", "decorBannerGold", "decorPedestalGold", "decorBrazierGold", "decorLanternGreen", "decorFlowerCrystalBlue", "decorCampfireGreen", "decorStatueStone", "decorSnowLampGold", "decorCrystalTotemGreen", "decorSmallShrineSnow"];
         let decorKey = decorChoices[(seed >> 5) % decorChoices.length]!;
         if (!hasAsset(decorKey)) decorKey = "decorSignWood";
         if (hasAsset(decorKey)) {
           const decor = makeSceneSprite(decorKey);
           const tallDecor = decorKey === "decorBannerBlue" || decorKey === "decorBannerGold" || decorKey === "decorBannerGreen" || decorKey === "decorPedestalBlue" || decorKey === "decorPedestalGreen" || decorKey === "decorPedestalGold" || decorKey === "decorSkeletonMarker" || decorKey === "decorStatueStone" || decorKey === "decorStatueSnow" || decorKey === "decorCrystalTotemBlue" || decorKey === "decorCrystalTotemGreen" || decorKey === "decorCrystalTotemPurple";
           const mediumDecor = decorKey === "decorTripodRed" || decorKey === "decorTripodBlue" || decorKey === "decorTripodPurple" || decorKey === "decorSmallShrineWood" || decorKey === "decorSmallShrineSnow" || decorKey === "decorSmallShrinePurple" || decorKey === "decorSnowLampBlue" || decorKey === "decorSnowLampGold" || decorKey === "decorSnowLampPurple";
-          const wideDecor = decorKey === "decorRopePosts" || decorKey === "decorRopeLanterns" || decorKey === "decorRopeGateWood" || decorKey === "decorRopeGateLit" || decorKey === "decorRopeGateIce" || decorKey === "decorSignWood" || decorKey === "decorSignRune";
-          decor.x = wx + (wideDecor ? -8 : decorKey.startsWith("decorLantern") ? 2 : -2);
-          decor.y = wy - (tallDecor ? 50 : mediumDecor ? 38 : decorKey.startsWith("decorBrazier") || decorKey.startsWith("decorCampfire") ? 30 : decorKey.startsWith("decorFlowerCrystal") || decorKey.startsWith("decorFlowerPost") ? 31 : 25);
+          const labeledBannerDecor = decorKey === "decorBannerHelp" || decorKey === "decorBannerDanger" || decorKey === "decorBannerCaution" || decorKey === "decorBannerNoWinners";
+          const wideDecor = labeledBannerDecor || decorKey === "decorRopePosts" || decorKey === "decorRopeLanterns" || decorKey === "decorSignWood" || decorKey === "decorSignRune";
+          decor.x = wx + (labeledBannerDecor ? -20 : wideDecor ? -8 : decorKey.startsWith("decorLantern") ? 2 : -2);
+          decor.y = wy - (labeledBannerDecor ? 46 : tallDecor ? 50 : mediumDecor ? 38 : decorKey.startsWith("decorBrazier") || decorKey.startsWith("decorCampfire") ? 30 : decorKey.startsWith("decorFlowerCrystal") || decorKey.startsWith("decorFlowerPost") ? 31 : 25);
           decor.alpha = biome === "celestialSummit" ? 0.88 : 0.82;
           decor.zIndex = 2;
           front.addChild(decor);
@@ -3364,12 +3417,11 @@ function decorateChunk(chunk: GeneratedChunk): void {
         front.addChild(boulder);
       }
 
-      if (biome === "celestialSummit" && hasAsset("relicShrine") && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
-        const shrine = makeSceneSprite(seed % 2 === 0 && hasAsset("ancientBeacon") ? "ancientBeacon" : "relicShrine");
-        shrine.anchor.set(0.5, 1);
+      if (biome === "celestialSummit" && seed % 257 === 0 && canPlaceDecorationSpan(chunk, lx, ly, 3)) {
+        const shrine = makeProceduralCheckpointMarker(biome, seed);
         shrine.x = wx + TILE_SIZE;
         shrine.y = wy + 2;
-        shrine.alpha = 0.9;
+        shrine.alpha = 0.82;
         shrine.zIndex = 2;
         back.addChild(shrine);
       }
@@ -3516,26 +3568,49 @@ function drawTile(
 
 // ── Jump pad animations ───────────────────────────────────────────────────────
 
+function drawProceduralJumpPad(g: Graphics, pulse: number, multiplier: number): void {
+  g.clear();
+  const glow = multiplier >= 2 ? PAL.coinGold : PAL.portalGlow;
+  const spring = multiplier >= 2 ? 0xffd86a : PAL.portalBlue;
+  const lift = Math.round(pulse * 2);
+
+  g.rect(-15, 4, 30, 4).fill(PAL.stoneShadow);
+  g.rect(-13, 1, 26, 5).fill(PAL.stoneDark);
+  g.rect(-11, 0, 22, 2).fill(PAL.stoneWorn);
+  g.rect(-14, 5, 28, 1).fill({ color: PAL.uiInk, alpha: 0.35 });
+
+  for (let i = 0; i < 3; i++) {
+    const x = -8 + i * 8;
+    g.rect(x, -5 - lift, 2, 8 + lift).fill(spring);
+    g.rect(x + 2, -4 - lift, 2, 2).fill({ color: PAL.cloudBright, alpha: 0.7 });
+    g.rect(x + 2, -1, 2, 2).fill({ color: PAL.uiInk, alpha: 0.22 });
+  }
+
+  g.rect(-12, -9 - lift, 24, 5).fill({ color: glow, alpha: 0.86 });
+  g.rect(-10, -11 - lift, 20, 2).fill(PAL.cloudBright);
+  g.rect(-8, -7 - lift, 16, 2).fill({ color: PAL.portalBlue, alpha: 0.55 });
+  g.rect(-2, -18 - lift, 4, 8).fill({ color: glow, alpha: 0.28 + pulse * 0.28 });
+  g.poly([-7, -17 - lift, 0, -25 - lift, 7, -17 - lift]).fill({ color: glow, alpha: 0.22 + pulse * 0.28 });
+  if (multiplier >= 2) {
+    g.rect(-15, -3 - lift, 3, 3).fill(PAL.coinGold);
+    g.rect(12, -3 - lift, 3, 3).fill(PAL.coinGold);
+  }
+}
+
 function spawnJumpPadAnim(pad: JumpPadSpawn, worldTileY: number): void {
   if (jumpPadAnims.has(pad.id)) return;
   const container = new Container();
   const aura = new Graphics();
-  const sprite = hasAsset("jumpPad") ? makeSceneSprite("jumpPad") : null;
+  const padGfx = new Graphics();
   const worldX = pad.x * TILE_SIZE + TILE_SIZE / 2;
   const worldY = worldTileY * TILE_SIZE + TILE_SIZE / 2;
 
   container.x = worldX;
   container.y = worldY;
   container.zIndex = 5;
-  container.addChild(aura);
-  if (sprite) {
-    sprite.anchor.set(0.5);
-    sprite.y = 2;
-    sprite.blendMode = "normal";
-    container.addChild(sprite);
-  }
+  container.addChild(aura, padGfx);
   portalLayer.addChild(container);
-  jumpPadAnims.set(pad.id, { container, aura, sprite, pad, worldX, worldY });
+  jumpPadAnims.set(pad.id, { container, aura, padGfx, pad, worldX, worldY });
 }
 
 function updateJumpPadAnims(tSec: number): void {
@@ -3549,9 +3624,7 @@ function updateJumpPadAnims(tSec: number): void {
     anim.aura.rect(-10, 5, 20, 2).fill({ color: PAL.portalGlow, alpha: 0.18 + pulse * 0.18 });
     anim.aura.rect(-7, -9, 14, 1).fill({ color: PAL.portalGlow, alpha: 0.12 + pulse * 0.2 });
     anim.aura.rect(-1, -12, 2, 7).fill({ color: PAL.portalGlow, alpha: 0.07 + pulse * 0.12 });
-    if (anim.sprite) {
-      anim.sprite.tint = 0xffffff;
-    }
+    drawProceduralJumpPad(anim.padGfx, pulse, anim.pad.multiplier);
   }
 }
 
@@ -3695,13 +3768,104 @@ interface PortalAnim {
   container: Container;
   bodyGfx:   Graphics;
   glowGfx:   Graphics;
-  archSprite: Sprite | null;
   worldX:    number;
   worldY:    number;
   tileW:     number;
   isExit:    boolean;
+  lastParticleMs: number;
 }
 const portalAnims = new Map<number, PortalAnim>(); // keyed by chunkY
+
+function drawProceduralPortalArch(body: Graphics, glow: Graphics, hw: number, ph: number, isExit: boolean, tSec: number): void {
+  const pulse = Math.sin(tSec * (isExit ? 3.5 : 2.5)) * 0.5 + 0.5;
+  const shimmer = Math.sin(tSec * 7.2) * 0.5 + 0.5;
+  const energy = isExit ? PAL.portalBlue : PAL.uiHighlight;
+  const energy2 = isExit ? PAL.portalGlow : PAL.coinGlow;
+  const stone = isExit ? 0x7b6d50 : PAL.stoneDark;
+  const stoneLight = isExit ? 0xd6c383 : PAL.stoneWorn;
+  const stoneShade = isExit ? 0x4f4260 : PAL.stoneShadow;
+
+  body.clear();
+  glow.clear();
+
+  glow.ellipse(0, -ph * 0.48, hw + 18 + pulse * 5, ph + 18 + pulse * 4)
+    .fill({ color: energy, alpha: 0.08 + pulse * 0.06 });
+  glow.ellipse(0, -ph * 0.48, hw + 9 + pulse * 3, ph + 10 + pulse * 3)
+    .stroke({ color: energy2, alpha: 0.32 + pulse * 0.24, width: 2 });
+
+  const innerTop = -ph - 2;
+  const innerW = Math.max(12, hw * 2 - 10);
+  for (let y = innerTop; y < 0; y += 4) {
+    const rowT = (y - innerTop) / Math.max(1, -innerTop);
+    const half = Math.round(innerW * (0.36 + rowT * 0.16) + Math.sin(tSec * 2 + y) * 1.5);
+    glow.rect(-half, y, half * 2, 4).fill({ color: energy, alpha: 0.28 + pulse * 0.18 + (1 - rowT) * 0.06 });
+    if ((y + Math.floor(tSec * 18)) % 12 === 0) {
+      glow.rect(-half + 3, y + 1, half * 2 - 6, 1).fill({ color: 0xffffff, alpha: 0.28 + shimmer * 0.18 });
+    }
+  }
+
+  const coreY = Math.round(-ph * 0.58);
+  glow.rect(-2, innerTop + 4, 4, ph - 8).fill({ color: 0xffffff, alpha: 0.2 + pulse * 0.28 });
+  glow.rect(-Math.round(hw * 0.48), coreY - 1, Math.round(hw * 0.96), 2).fill({ color: 0xffffff, alpha: 0.2 + pulse * 0.34 });
+  glow.poly([0, coreY - 10, 7, coreY, 0, coreY + 10, -7, coreY]).fill({ color: 0xffffff, alpha: 0.38 + pulse * 0.4 });
+  glow.poly([0, coreY - 6, 4, coreY, 0, coreY + 6, -4, coreY]).fill({ color: energy2, alpha: 0.74 });
+
+  body.rect(-hw - 18, 0, hw * 2 + 36, 4).fill(stoneShade);
+  body.rect(-hw - 13, -4, hw * 2 + 26, 5).fill(stone);
+  body.rect(-hw - 9, -7, hw * 2 + 18, 3).fill(stoneLight);
+  for (let step = 0; step < 4; step++) {
+    const w = hw * 2 + 26 - step * 9;
+    body.rect(Math.round(-w / 2), -4 - step * 4, w, 3).fill(step % 2 === 0 ? stoneLight : stone);
+    body.rect(Math.round(-w / 2), -2 - step * 4, w, 1).fill({ color: PAL.cloudBright, alpha: 0.22 });
+  }
+
+  for (const side of [-1, 1]) {
+    const x = side * hw;
+    body.rect(x - side * 5, -ph + 3, 10, ph + 3).fill(stoneShade);
+    body.rect(x - side * 4, -ph + 1, 7, ph + 4).fill(stone);
+    body.rect(x - side * 3, -ph, 3, ph).fill(stoneLight);
+    for (let b = 0; b < 5; b++) body.rect(x - side * 5, -ph + 4 + b * 7, 10, 2).fill({ color: stoneShade, alpha: 0.45 });
+    body.poly([x - side * 9, -ph - 1, x, -ph - 15, x + side * 9, -ph - 1]).fill(stone);
+    body.poly([x - side * 5, -ph - 3, x, -ph - 12, x + side * 5, -ph - 3]).fill(stoneLight);
+  }
+
+  for (let i = 0; i < 9; i++) {
+    const angle = Math.PI + (i / 8) * Math.PI;
+    const x = Math.round(Math.cos(angle) * (hw + 3));
+    const y = Math.round(-ph + Math.sin(angle) * (ph * 0.48));
+    body.rect(x - 3, y - 2, 6, 5).fill(i % 2 === 0 ? stoneLight : stone);
+    body.rect(x - 3, y + 2, 6, 1).fill(stoneShade);
+  }
+
+  const moss = isExit ? PAL.canopyLight : PAL.mossBright;
+  body.rect(-hw - 8, -ph - 5, hw * 2 + 16, 4).fill(moss);
+  for (let i = 0; i < 8; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const x = side * (hw + 7 + (i % 3) * 3);
+    const y = -ph + 4 + i * 4;
+    body.rect(x, y, 3, 10 + (i % 4) * 3).fill(i % 3 === 0 ? PAL.canopyDark : PAL.canopyMid);
+    body.rect(x - side * 3, y + 5, 6, 3).fill(moss);
+    if (i % 2 === 0) {
+      body.rect(x - side * 2, y + 1, 4, 4).fill(0xff5bd6);
+      body.rect(x - side, y + 2, 2, 2).fill(PAL.coinGlow);
+    }
+  }
+
+  for (let i = 0; i < 10; i++) {
+    const a = tSec * 0.9 + (i * Math.PI * 2) / 10;
+    const r = hw * 0.8 + ((tSec * 18 + i * 7) % 18);
+    const x = Math.round(Math.cos(a) * r);
+    const y = Math.round(-ph * 0.52 + Math.sin(a) * r * 0.72);
+    glow.rect(x - 1, y - 1, i % 3 === 0 ? 3 : 2, i % 3 === 0 ? 3 : 2)
+      .fill({ color: i % 2 === 0 ? energy2 : 0xffffff, alpha: 0.34 + pulse * 0.42 });
+  }
+
+  if (pulse > 0.82) {
+    const flash = (pulse - 0.82) / 0.18;
+    glow.rect(-hw, coreY - 1, hw * 2, 2).fill({ color: 0xffffff, alpha: flash * 0.5 });
+    glow.rect(-1, innerTop + 3, 2, ph - 6).fill({ color: 0xffffff, alpha: flash * 0.45 });
+  }
+}
 
 function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: number, isExit: boolean): void {
   if (portalAnims.has(chunkY)) return;
@@ -3709,14 +3873,7 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
   const container = new Container();
   const bodyGfx   = new Graphics();
   const glowGfx   = new Graphics();
-  const archSprite = hasAsset("portalArch") ? makeSprite("portalArch") : null;
-  if (archSprite) {
-    archSprite.anchor.set(0.5, 1);
-    archSprite.y = 2;
-    container.addChild(glowGfx, archSprite);
-  } else {
-    container.addChild(bodyGfx, glowGfx);
-  }
+  container.addChild(glowGfx, bodyGfx);
 
   const wx = tileX * TILE_SIZE + (tileW * TILE_SIZE) / 2;
   const wy = tileY * TILE_SIZE;
@@ -3724,91 +3881,36 @@ function spawnPortalAt(chunkY: number, tileX: number, tileY: number, tileW: numb
   container.y = wy;
   portalLayer.addChild(container);
 
-  const hw = Math.round((tileW * TILE_SIZE) * 0.40);  // portal half-width
-  const ph = isExit ? 32 : 22;  // portal arch height
-
-  if (archSprite) {
-    const desiredH = ph + 12;
-    const scale = desiredH / 64;
-    archSprite.scale.set(scale * SCENE_ASSET_SCALE);
-  } else {
-    // Static body — ancient stone arch
-    // Left pillar
-    bodyGfx.rect(-hw - 5, -ph, 5, ph).fill(PAL.stoneDark);
-    bodyGfx.rect(-hw - 4, -ph - 1, 4, 3).fill(PAL.stoneWorn); // cap stone
-    bodyGfx.rect(-hw - 5, -ph, 1, ph).fill({ color: PAL.stoneLight, alpha: 0.12 }); // pillar highlight
-    // Moss on left pillar
-    bodyGfx.rect(-hw - 5, -ph + 6, 3, 2).fill(PAL.mossGreen);
-    bodyGfx.rect(-hw - 4, -ph + 14, 4, 2).fill(PAL.mossBright);
-
-    // Right pillar
-    bodyGfx.rect(hw, -ph, 5, ph).fill(PAL.stoneDark);
-    bodyGfx.rect(hw, -ph - 1, 4, 3).fill(PAL.stoneWorn);
-    bodyGfx.rect(hw + 4, -ph, 1, ph).fill({ color: PAL.stoneShadow, alpha: 0.18 });
-    bodyGfx.rect(hw + 1, -ph + 8, 3, 2).fill(PAL.mossGreen);
-
-    // Lintel (top crossbar)
-    bodyGfx.rect(-hw - 5, -ph - 4, hw * 2 + 10, 5).fill(PAL.stoneDark);
-    bodyGfx.rect(-hw - 4, -ph - 5, hw * 2 + 8, 2).fill(PAL.stoneWorn);
-    // Rune glow on lintel
-    bodyGfx.rect(-3, -ph - 4, 6, 3).fill({ color: PAL.runeGlow, alpha: 0.5 });
-    if (isExit) {
-      bodyGfx.rect(-8, -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
-      bodyGfx.rect(4,  -ph - 4, 4, 3).fill({ color: PAL.runeGlow, alpha: 0.3 });
-    }
-
-    // Hanging vines from lintel
-    for (let v = 0; v < 3; v++) {
-      const vx = -hw + 4 + v * Math.round(hw * 0.7);
-      const vlen = 5 + v * 3;
-      bodyGfx.rect(vx, -ph + 1, 1, vlen).fill(PAL.mossGreen);
-      bodyGfx.rect(vx - 1, -ph + vlen - 2, 3, 1).fill(PAL.canopyMid);
-    }
-  }
-
-  portalAnims.set(chunkY, { container, bodyGfx, glowGfx, archSprite, worldX: wx, worldY: wy, tileW, isExit });
+  portalAnims.set(chunkY, { container, bodyGfx, glowGfx, worldX: wx, worldY: wy, tileW, isExit, lastParticleMs: 0 });
 }
 
 function updatePortals(tSec: number): void {
   for (const a of portalAnims.values()) {
-    const g     = a.glowGfx;
     const hw    = Math.round((a.tileW * TILE_SIZE) * 0.40);
     const ph    = a.isExit ? 32 : 22;
-    const pulse = Math.sin(tSec * (a.isExit ? 3.5 : 2.5)) * 0.5 + 0.5;
     const col   = a.isExit ? PAL.portalBlue : PAL.uiHighlight;
+    drawProceduralPortalArch(a.bodyGfx, a.glowGfx, hw, ph, a.isExit, tSec);
 
-    g.clear();
-
-    // Glow fill inside arch
-    const gAlpha = (a.isExit ? 0.22 : 0.14) + pulse * (a.isExit ? 0.14 : 0.08);
-    g.rect(-hw + 1, -ph + 1, hw * 2 - 2, ph - 2).fill({ color: col, alpha: gAlpha });
-
-    // Inner bright column
-    const bw = a.isExit ? 6 : 4;
-    g.rect(-Math.floor(bw / 2), -ph + 2, bw, ph - 4)
-      .fill({ color: col, alpha: 0.18 + pulse * 0.22 });
-
-    // Horizontal scan lines (magical energy)
-    for (let r = 0; r < (a.isExit ? 6 : 4); r++) {
-      const ry = -ph + 4 + r * Math.round((ph - 6) / (a.isExit ? 6 : 4));
-      const scanOffset = Math.sin(tSec * 2.2 + r * 1.1) * (hw * 0.3);
-      g.rect(Math.round(scanOffset) - 5, ry, 10, 1)
-        .fill({ color: col, alpha: 0.28 + pulse * 0.15 });
-    }
-
-    // Orbiting rune dots
-    const orbs = a.isExit ? 5 : 3;
-    for (let o = 0; o < orbs; o++) {
-      const angle = tSec * (a.isExit ? 1.8 : 1.2) + (o * Math.PI * 2) / orbs;
-      const r = (hw * 0.55) + pulse * 2;
-      const ox = Math.round(Math.cos(angle) * r);
-      const oy = Math.round(Math.sin(angle) * r * 0.55 - ph * 0.5);
-      g.rect(ox - 1, oy - 1, 2, 2).fill({ color: col, alpha: 0.7 + pulse * 0.3 });
-    }
-
-    // Bright center flash on exit portal
-    if (a.isExit && pulse > 0.85) {
-      g.rect(-2, -Math.round(ph * 0.55), 4, 4).fill({ color: 0xffffff, alpha: (pulse - 0.85) * 5 });
+    if (elapsedMs - a.lastParticleMs > (a.isExit ? 80 : 130)) {
+      a.lastParticleMs = elapsedMs;
+      for (let i = 0; i < (a.isExit ? 3 : 2); i++) {
+        const n = midMountainNoise(Math.round(tSec * 10), a.worldX + i * 17, a.worldY, a.isExit ? 211 : 131);
+        const angle = ((n % 628) / 100) + tSec * 0.35;
+        const radius = hw * 0.42 + (n % 12);
+        const sx = a.worldX + Math.cos(angle) * radius;
+        const sy = a.worldY - ph * 0.55 + Math.sin(angle) * radius * 0.68;
+        const speed = 18 + (n % 28);
+        spawnPart(
+          sx,
+          sy,
+          Math.cos(angle) * speed,
+          Math.sin(angle) * speed - 12,
+          0.45 + (n % 20) / 100,
+          n % 4 === 0 ? 0xffffff : col,
+          n % 5 === 0 ? 3 : 2,
+          -10
+        );
+      }
     }
   }
 }

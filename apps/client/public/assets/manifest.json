@@ -2,7 +2,7 @@
   "generatedBy": "tools/generate-separated-assets.py",
   "rule": "Every gameplay asset is exported as an individual transparent PNG; no sprite atlases or tilemap sheets are generated.",
   "style": "2D pixel art, nearest-neighbor, transparent backgrounds for gameplay sprites.",
-  "assetCount": 811,
+  "assetCount": 810,
   "folders": {
     "environment/backgrounds": [
       "environment/backgrounds/cloud.png",
@@ -168,8 +168,7 @@
       "environment/effects/collectible_ring_green_1.png",
       "environment/effects/collectible_sparkle_1.png",
       "environment/effects/fog_strip_1.png",
-      "environment/effects/jump_pad_1.png",
-      "environment/effects/portal_arch_1.png"
+      "environment/effects/jump_pad_1.png"
     ],
     "environment/enemies": [
       "environment/enemies/archer_1.png",
@@ -1654,11 +1653,6 @@
       "png": "/assets/environment/effects/jump_pad_1.png",
       "width": 32,
       "height": 32
-    },
-    "environment/effects/portal_arch_1.png": {
-      "png": "/assets/environment/effects/portal_arch_1.png",
-      "width": 64,
-      "height": 64
     },
     "environment/enemies/archer_1.png": {
       "png": "/assets/environment/enemies/archer_1.png",
