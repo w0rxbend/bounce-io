@@ -75,7 +75,9 @@ function isJumpPadSpawn(value: unknown): value is JumpPadSpawn {
     isInteger(value.x) &&
     isInteger(value.y) &&
     isFiniteNumber(value.multiplier) &&
-    (value.multiplier as number) > 0;
+    (value.multiplier as number) > 0 &&
+    (value.launchX === undefined || isFiniteNumber(value.launchX)) &&
+    (value.launchY === undefined || isFiniteNumber(value.launchY));
 }
 
 function isWindZoneSpawn(value: unknown): value is WindZoneSpawn {
@@ -85,6 +87,7 @@ function isWindZoneSpawn(value: unknown): value is WindZoneSpawn {
     isInteger(value.y) &&
     isInteger(value.width) &&
     isInteger(value.height) &&
+    (value.axis === undefined || value.axis === "horizontal" || value.axis === "vertical") &&
     (value.direction === -1 || value.direction === 1) &&
     isFiniteNumber(value.strength) &&
     (value.width as number) > 0 &&

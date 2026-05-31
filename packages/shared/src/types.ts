@@ -25,6 +25,8 @@ export interface PlatformSpan {
   x: number;
   y: number;
   width: number;
+  route?: RouteKind;
+  biomeId?: WorldBiomeId;
 }
 
 export interface RelicSpawn {
@@ -45,11 +47,60 @@ export type EnemyKind =
   | "iceGolem"
   | "windSpirit";
 
+export type WorldBiomeId =
+  | "floating-garden"
+  | "ancient-ruins"
+  | "crystal-heights"
+  | "mechanical-skyworks"
+  | "storm-islands"
+  | "celestial-sanctuary"
+  | "sky-canyons"
+  | "ember-peaks"
+  | "void-expanse"
+  | "arcane-nexus"
+  | "frozen-heights"
+  | "celestial-rift";
+
+export type RouteKind = "safe" | "risk" | "relic" | "recovery" | "hidden";
+
+export interface BiomeMetadata {
+  id: WorldBiomeId;
+  name: string;
+  index: number;
+  cycle: number;
+  localChunkY: number;
+  startChunkY: number;
+  endChunkY: number;
+  lengthChunks: number;
+  difficulty: number;
+  routeProfile: string;
+  hazardProfile: string;
+  windProfile: string;
+}
+
+export type PlacementPurpose =
+  | "main_route"
+  | "shortcut"
+  | "relic_detour"
+  | "recovery"
+  | "pressure"
+  | "telegraph";
+
+export interface PlacementMetadata {
+  biomeId: WorldBiomeId;
+  route: RouteKind;
+  purpose: PlacementPurpose;
+  difficulty: number;
+  danger: number;
+  readable: boolean;
+}
+
 export interface EnemySpawn {
   id: EntityId;
   kind: EnemyKind;
   x: number;
   y: number;
+  placement?: PlacementMetadata;
 }
 
 export interface JumpPadSpawn {
@@ -57,6 +108,9 @@ export interface JumpPadSpawn {
   x: number;
   y: number;
   multiplier: number;
+  launchX?: number;
+  launchY?: number;
+  placement?: PlacementMetadata;
 }
 
 export interface TriggerBox {
@@ -91,11 +145,15 @@ export interface LandmarkSpawn {
 
 export interface RouteBranch {
   id: string;
-  kind: "safe" | "risk" | "relic" | "hidden" | string;
+  kind: RouteKind | string;
   label: string;
   hidden: boolean;
   reward: number;
   nodes: Vec2[];
+  biomeId?: WorldBiomeId;
+  difficulty?: number;
+  checkpointSafe?: boolean;
+  recommended?: boolean;
 }
 
 export interface WindZoneSpawn {
@@ -104,8 +162,10 @@ export interface WindZoneSpawn {
   y: number;
   width: number;
   height: number;
+  axis?: "horizontal" | "vertical";
   direction: -1 | 1;
   strength: number;
+  placement?: PlacementMetadata;
 }
 
 export type CollectibleKind =
@@ -137,6 +197,19 @@ export type HazardKind =
   | "crumblingPlatform"
   | "lightningRune";
 
+export interface HazardSpawn {
+  id: EntityId;
+  kind: HazardKind;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  route: RouteKind;
+  biomeId: WorldBiomeId;
+  danger: number;
+  telegraph: "open_tile" | "edge_warning" | "wind_line" | "rune_glow";
+}
+
 export interface GeneratedChunk {
   seed: number;
   chunkY: number;
@@ -146,6 +219,7 @@ export interface GeneratedChunk {
   regionId?: string;
   regionIndex?: number;
   regionName?: string;
+  biome?: BiomeMetadata;
   checkpoint?: boolean;
   tiles: TileKind[];
   platforms: PlatformSpan[];
@@ -154,6 +228,7 @@ export interface GeneratedChunk {
   portal?: PortalSpawn;
   landmarks?: LandmarkSpawn[];
   routes?: RouteBranch[];
+  hazards?: HazardSpawn[];
   relics: RelicSpawn[];
   enemies: EnemySpawn[];
   jumpPads: JumpPadSpawn[];
@@ -174,6 +249,11 @@ export interface EnemyState {
   platformY: number;
   attackCooldown: number;
   hurtCooldown: number;
+  behavior?: "patrol" | "alert" | "chase" | "windup" | "attack" | "recover";
+  attackWindup?: number;
+  attackActive?: number;
+  attackHasHit?: boolean;
+  targetId?: PlayerId;
 }
 
 export type KickPhase = "idle" | "windup" | "active" | "recovery";
