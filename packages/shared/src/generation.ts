@@ -346,8 +346,10 @@ function placeJumpPadOnPlatform(
     placement: placement(biome, platform.route ?? "safe", purpose, purpose === "shortcut" ? biome.difficulty * 0.6 : 0.2)
   };
   if (target) {
-    pad.launchX = target.x + Math.floor(target.width / 2);
-    pad.launchY = target.y;
+    const launchCenterX = platform.x + Math.floor(platform.width / 2);
+    const targetCenterX = target.x + Math.floor(target.width / 2);
+    pad.launchX = clamp((targetCenterX - launchCenterX) / 10, -0.65, 0.65);
+    pad.launchY = -1;
   }
   return pad;
 }

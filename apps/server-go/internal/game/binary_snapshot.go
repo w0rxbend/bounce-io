@@ -8,9 +8,9 @@ import (
 
 const (
 	binarySnapshotMessageType = 1
-	binaryEntityPlayer       = 1
-	binaryEntityEnemyBase    = 16
-	binaryEntityCollectible  = 64
+	binaryEntityPlayer        = 1
+	binaryEntityEnemyBase     = 16
+	binaryEntityCollectible   = 64
 
 	binaryFlagGrounded = 1 << 10
 	binaryFlagFacing   = 1 << 11
@@ -92,7 +92,7 @@ func binaryEntitiesFromSnapshot(players []PlayerEntityFrame, enemies []EnemyStat
 			vx:         enemy.Velocity.X,
 			vy:         enemy.Velocity.Y,
 			rotation:   int16(enemy.Facing),
-			flags:      packHealth(enemy.Health, enemy.MaxHealth),
+			flags:      enemyFlags(enemy),
 		})
 	}
 	for _, collectible := range collectibles {
@@ -135,6 +135,22 @@ func playerFlags(player PlayerEntityFrame) uint16 {
 	case "active":
 		flags |= binaryFlagActive
 	case "recovery":
+		flags |= binaryFlagRecovery
+	}
+	return flags
+}
+
+func enemyFlags(enemy EnemyState) uint16 {
+	flags := packHealth(enemy.Health, enemy.MaxHealth)
+	if enemy.Facing >= 0 {
+		flags |= binaryFlagFacing
+	}
+	switch enemy.Behavior {
+	case "windup":
+		flags |= binaryFlagWindup
+	case "attack":
+		flags |= binaryFlagActive
+	case "recover":
 		flags |= binaryFlagRecovery
 	}
 	return flags

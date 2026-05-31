@@ -129,6 +129,11 @@ const BINARY_SNAPSHOT_MESSAGE_TYPE = 1;
 const BINARY_ENTITY_PLAYER = 1;
 const BINARY_ENTITY_ENEMY_BASE = 16;
 const BINARY_ENTITY_COLLECTIBLE = 64;
+const BINARY_FLAG_GROUNDED = 1 << 10;
+const BINARY_FLAG_FACING = 1 << 11;
+const BINARY_FLAG_WINDUP = 1 << 12;
+const BINARY_FLAG_ACTIVE = 1 << 13;
+const BINARY_FLAG_RECOVERY = 1 << 14;
 const binaryEntityIds = new Map<number, string>();
 
 const enemyKindByBinaryCode: Record<number, EnemyKind> = {
@@ -9615,9 +9620,9 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
         y,
         vx,
         vy,
-        f: rotation >= 0 ? 1 : -1,
-        g: (flags & (1 << 10)) !== 0,
-        k: (flags & (1 << 13)) !== 0 ? "active" : (flags & (1 << 12)) !== 0 ? "windup" : (flags & (1 << 14)) !== 0 ? "recovery" : "idle",
+        f: (flags & BINARY_FLAG_FACING) !== 0 ? 1 : -1,
+        g: (flags & BINARY_FLAG_GROUNDED) !== 0,
+        k: (flags & BINARY_FLAG_ACTIVE) !== 0 ? "active" : (flags & BINARY_FLAG_WINDUP) !== 0 ? "windup" : (flags & BINARY_FLAG_RECOVERY) !== 0 ? "recovery" : "idle",
         h: health || existing?.health || PLAYER_MAX_HEALTH,
         c: existing?.coins ?? 0,
         mh: maxHealth || existing?.maxHealth || PLAYER_MAX_HEALTH,
@@ -9629,12 +9634,19 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
     } else if (entityType >= BINARY_ENTITY_ENEMY_BASE && entityType < BINARY_ENTITY_COLLECTIBLE) {
       const existing = enemyEntries.get(id)?.state;
       const kind = enemyKindByBinaryCode[entityType - BINARY_ENTITY_ENEMY_BASE] ?? existing?.kind ?? "skeleton";
+      const behavior = (flags & BINARY_FLAG_ACTIVE) !== 0
+        ? "attack"
+        : (flags & BINARY_FLAG_WINDUP) !== 0
+          ? "windup"
+          : (flags & BINARY_FLAG_RECOVERY) !== 0
+            ? "recover"
+            : "patrol";
       enemies.push({
         id,
         kind,
         position: { x, y },
         velocity: { x: vx, y: vy },
-        facing: rotation >= 0 ? 1 : -1,
+        facing: (flags & BINARY_FLAG_FACING) !== 0 ? 1 : -1,
         health: health || existing?.health || maxHealth || 1,
         maxHealth: maxHealth || existing?.maxHealth || Math.max(1, health),
         chunkY: existing?.chunkY ?? Math.max(0, Math.floor(-y / (CHUNK_HEIGHT_TILES * TILE_SIZE))),
@@ -9643,6 +9655,10 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
         platformY: existing?.platformY ?? y + 24,
         attackCooldown: existing?.attackCooldown ?? 0,
         hurtCooldown: existing?.hurtCooldown ?? 0,
+        behavior,
+        attackWindup: behavior === "windup" ? existing?.attackWindup ?? 0 : 0,
+        attackActive: behavior === "attack" || behavior === "recover" ? existing?.attackActive ?? 0 : 0,
+        attackHasHit: behavior === "attack" ? existing?.attackHasHit ?? false : false,
       });
     } else if (entityType === BINARY_ENTITY_COLLECTIBLE) {
       const existing = dynamicCollectibles.get(id);

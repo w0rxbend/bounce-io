@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { COYOTE_TIME_SECONDS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
+import { generateVerticalChunk } from "../../packages/shared/src/generation.js";
 import { applyCollectible, applyDamage, applyHazardHit, applyJumpPad, applyPlayerInteractions, applyWindZones, createPlayerState, rectsOverlap, respawnPlayerState, stepEnemyBehavior, stepPlayer } from "../../packages/shared/src/physics.js";
 import type { EnemyState, GeneratedChunk, JumpPadSpawn, TileMap } from "../../packages/shared/src/types.js";
 
@@ -369,6 +370,27 @@ test("jump pads launch falling players and reset traversal timers", () => {
   assert.equal(player.fallStartY, null);
   assert.equal(player.extraJumpsUsed, 0);
   assert.equal(player.velocity.y, -JUMP_SPEED * 2.25);
+});
+
+test("generated assisted jump pads use bounded launch vectors", () => {
+  const chunk = generateVerticalChunk({ seed: 0, chunkY: 1 });
+  const pad = chunk.jumpPads.find((candidate) => candidate.placement?.purpose === "recovery");
+  assert.ok(pad, "expected seed 0 chunk 1 to generate an assisted recovery jump pad");
+  assert.ok((pad.launchY ?? -1) < 0, "generated jump pads must launch upward");
+  assert.ok(Math.abs(pad.launchX ?? 0) <= 0.65, "horizontal launch must be a velocity scale, not a target tile coordinate");
+
+  const player = createPlayerState(
+    "p1",
+    pad.x * TILE_SIZE + 1,
+    (chunk.worldTileY + pad.y) * TILE_SIZE - PLAYER_HEIGHT
+  );
+  player.velocity.y = 70;
+
+  const triggered = applyJumpPad(player, pad, chunk.worldTileY);
+
+  assert.equal(triggered, true);
+  assert.ok(player.velocity.y < 0, "generated jump pad should never launch downward");
+  assert.ok(Math.abs(player.velocity.x) < MAX_RUN_SPEED * 3, "generated jump pad horizontal boost should stay bounded");
 });
 
 test("local enemies patrol, detect same-platform players, and do not passively hit", () => {
