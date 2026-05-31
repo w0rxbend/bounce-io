@@ -244,9 +244,19 @@ func applyWorldWindZones(seed uint32, player *PlayerState, dt float64) {
 			if !rectsOverlap(bounds, zoneRect) {
 				continue
 			}
-			target := float64(zone.Direction) * math.Min(MaxRunSpeed*1.55, zone.Strength*0.55)
-			player.Velocity.X = moveTowardFloat(player.Velocity.X, target, zone.Strength*3.4*dt)
-			player.Velocity.X = math.Max(-MaxRunSpeed*1.55, math.Min(MaxRunSpeed*1.55, player.Velocity.X))
+			if zone.Axis == "vertical" {
+				maxVertical := MaxFallSpeed * 0.72
+				target := float64(zone.Direction) * math.Min(maxVertical, zone.Strength*0.48)
+				player.Velocity.Y = moveTowardFloat(player.Velocity.Y, target, zone.Strength*2.6*dt)
+				player.Velocity.Y = math.Max(-maxVertical, math.Min(maxVertical, player.Velocity.Y))
+				if zone.Direction < 0 {
+					player.FallStartY = nil
+				}
+			} else {
+				target := float64(zone.Direction) * math.Min(MaxRunSpeed*1.55, zone.Strength*0.55)
+				player.Velocity.X = moveTowardFloat(player.Velocity.X, target, zone.Strength*3.4*dt)
+				player.Velocity.X = math.Max(-MaxRunSpeed*1.55, math.Min(MaxRunSpeed*1.55, player.Velocity.X))
+			}
 		}
 	}
 }
@@ -584,6 +594,12 @@ var worldRegionProfiles = []worldRegionProfile{
 	{ID: "mechanical-skyworks", Name: "Mechanical Skyworks", Landmark: "crashed airship", PortalStyle: "sky-beacon", EnemyKind: "goblin", LengthChunks: 4, SafeWidth: 8, ContestWidth: 12, CollectibleAdd: 2},
 	{ID: "storm-islands", Name: "Storm Islands", Landmark: "storm generator", PortalStyle: "storm-ring", EnemyKind: "yeti", LengthChunks: 5, SafeWidth: 4, ContestWidth: 8, CollectibleAdd: 3},
 	{ID: "celestial-sanctuary", Name: "Celestial Sanctuary", Landmark: "celestial shrine", PortalStyle: "celestial-shrine", EnemyKind: "iceGolem", LengthChunks: 5, SafeWidth: 6, ContestWidth: 10, CollectibleAdd: 2},
+	{ID: "sky-canyons", Name: "Sky Canyons", Landmark: "floating canyon gate", PortalStyle: "wind-tunnel-gate", EnemyKind: "windSpirit", LengthChunks: 5, SafeWidth: 5, ContestWidth: 9, CollectibleAdd: 3},
+	{ID: "ember-peaks", Name: "Ember Peaks", Landmark: "ember vent", PortalStyle: "ember-ring", EnemyKind: "goblinChief", LengthChunks: 5, SafeWidth: 5, ContestWidth: 8, CollectibleAdd: 4},
+	{ID: "void-expanse", Name: "Void Expanse", Landmark: "void debris arch", PortalStyle: "void-gate", EnemyKind: "windSpirit", LengthChunks: 6, SafeWidth: 4, ContestWidth: 8, CollectibleAdd: 4},
+	{ID: "arcane-nexus", Name: "Arcane Nexus", Landmark: "arcane gatehouse", PortalStyle: "arcane-gateway", EnemyKind: "windSpirit", LengthChunks: 6, SafeWidth: 5, ContestWidth: 9, CollectibleAdd: 4},
+	{ID: "frozen-heights", Name: "Frozen Heights", Landmark: "frozen crown", PortalStyle: "frozen-arch", EnemyKind: "iceGolem", LengthChunks: 6, SafeWidth: 5, ContestWidth: 8, CollectibleAdd: 4},
+	{ID: "celestial-rift", Name: "Celestial Rift", Landmark: "rift shrine", PortalStyle: "rift-shrine", EnemyKind: "yeti", LengthChunks: 7, SafeWidth: 4, ContestWidth: 8, CollectibleAdd: 5},
 }
 
 type RegionPlan struct {
@@ -741,8 +757,9 @@ type routeSpec struct {
 func buildRouteSpecs(profile worldRegionProfile) []routeSpec {
 	return []routeSpec{
 		{ID: "safe", Kind: "safe", Label: "safe long route", Offset: 0, Width: profile.SafeWidth, Reward: 1},
-		{ID: "risk", Kind: "risk", Label: "risky shortcut", Offset: -8, Width: max(3, profile.SafeWidth-3), Reward: 3},
-		{ID: "relic", Kind: "relic", Label: "relic detour", Offset: 8, Width: max(4, profile.SafeWidth-2), Reward: 4},
+		{ID: "risk", Kind: "risk", Label: "risky shortcut", Offset: -5, Width: max(3, profile.SafeWidth-3), Reward: 3},
+		{ID: "relic", Kind: "relic", Label: "relic detour", Offset: 6, Width: max(4, profile.SafeWidth-2), Reward: 4},
+		{ID: "recovery", Kind: "recovery", Label: "recovery route", Offset: -6, Width: max(5, profile.SafeWidth), Reward: 0},
 	}
 }
 
@@ -751,6 +768,8 @@ func routeRowsForSpec(spec routeSpec) []int {
 	case "risk":
 		return []int{10, 4}
 	case "relic":
+		return []int{13, 7}
+	case "recovery":
 		return []int{13, 7}
 	default:
 		return []int{13, 10, 7, 4, 1}
@@ -765,6 +784,12 @@ func routeCenterForPlan(seed uint32, profile worldRegionProfile, regionIndex, lo
 		"mechanical-skyworks": 15,
 		"storm-islands":       10,
 		"celestial-sanctuary": 12,
+		"sky-canyons":         12,
+		"ember-peaks":         10,
+		"void-expanse":        13,
+		"arcane-nexus":        12,
+		"frozen-heights":      9,
+		"celestial-rift":      12,
 	}
 	center := scaleDesignX(baseByProfile[profile.ID] + spec.Offset)
 	switch profile.ID {
@@ -780,6 +805,18 @@ func routeCenterForPlan(seed uint32, profile worldRegionProfile, regionIndex, lo
 		center += scaleDesignOffset(alternatingOffset(local+layer, 4))
 	case "celestial-sanctuary":
 		center += scaleDesignOffset([]int{-5, -2, 3, 5, 0}[layer%5])
+	case "sky-canyons":
+		center += scaleDesignOffset([]int{-6, 4, -4, 5, 0}[layer%5])
+	case "ember-peaks":
+		center += scaleDesignOffset([]int{-3, 3, -2, 4, 0}[layer%5])
+	case "void-expanse":
+		center += scaleDesignOffset([]int{-7, 6, -5, 7, 0}[layer%5])
+	case "arcane-nexus":
+		center += scaleDesignOffset([]int{4, -4, 6, -6, 0}[layer%5])
+	case "frozen-heights":
+		center += scaleDesignOffset([]int{-5, -3, 2, 5, 0}[layer%5])
+	case "celestial-rift":
+		center += scaleDesignOffset([]int{-7, 7, -4, 6, 0}[layer%5])
 	}
 	center += deterministicSigned(seed, regionIndex*37+local*11, layer+len(spec.ID), 2)
 	return clampInt(center, 3, ChunkWidthTiles-4)
@@ -997,6 +1034,8 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 		X:          platform.Span.X + platform.Span.Width/2,
 		Y:          platform.Span.Y - 1,
 		Multiplier: LevelDesign.JumpPadMultiplier,
+		LaunchX:    0.35,
+		LaunchY:    -1,
 	}}
 }
 
@@ -1076,12 +1115,17 @@ func windZonesForChunk(seed uint32, chunkY int, platforms []plannedPlatform) []W
 			direction = -1
 		}
 		strength := 480.0 + float64(min(260, chunkY*18))
+		axis := "horizontal"
+		if chunkY >= 18 && roll%3 == 0 {
+			axis = "vertical"
+		}
 		zones = append(zones, WindZoneSpawn{
 			ID:        "wind:" + itoa(chunkY) + ":" + itoa(len(zones)),
 			X:         x,
 			Y:         y,
 			Width:     width,
 			Height:    height,
+			Axis:      axis,
 			Direction: direction,
 			Strength:  strength,
 		})
@@ -1209,6 +1253,7 @@ func EnemyStateFromSpawn(chunk GeneratedChunk, spawn EnemySpawn) EnemyState {
 		PlatformY:      platformY,
 		AttackCooldown: 0.35,
 		HurtCooldown:   0,
+		Behavior:       "patrol",
 	}
 }
 
@@ -1273,7 +1318,14 @@ func ApplyJumpPads(seed uint32, player PlayerState) (PlayerState, bool, JumpPadS
 			if !nearX || !nearY {
 				continue
 			}
-			player.Velocity.Y = -JumpSpeed * math.Max(1, pad.Multiplier)
+			launchY := pad.LaunchY
+			if launchY == 0 {
+				launchY = -1
+			}
+			player.Velocity.Y = JumpSpeed * launchY * math.Max(1, pad.Multiplier)
+			if pad.LaunchX != 0 {
+				player.Velocity.X += pad.LaunchX * JumpSpeed * math.Max(1, pad.Multiplier) * 0.42
+			}
 			player.Grounded = false
 			player.CoyoteTimer = 0
 			player.JumpBufferTimer = 0

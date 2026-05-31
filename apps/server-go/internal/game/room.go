@@ -6,13 +6,39 @@ import (
 	"log/slog"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
 )
 
-const roomCommandDrainLimit = 128
+const (
+	roomCommandDrainLimit = 128
+
+	pvpPairHitCooldownSeconds     = 0.42
+	pvpStunWindowSeconds          = 1.35
+	pvpStunDiminishPerChainHit    = 0.35
+	pvpKnockbackDiminishPerHit    = 0.22
+	pvpAntiStunChainHits          = 3
+	pvpAntiStunInvulnerable       = 0.48
+	pvpRespawnProtectionSeconds   = 1.50
+	pvpKillCreditSeconds          = 4.0
+	pvpKillXP                     = 30
+	pvpKillCoins                  = 1
+	relicContestRadiusPadding     = 16.0
+	relicContestHoldSeconds       = 0.45
+	relicContestEventCooldownSecs = 0.75
+	enemyPatrolSpeed              = 24.0
+	enemyChaseSpeed               = 62.0
+	enemyDetectionRange           = 132.0
+	enemyPlatformTolerance        = 10.0
+	enemyAttackRange              = 18.0
+	enemyAttackWindupSeconds      = 0.34
+	enemyAttackActiveSeconds      = 0.12
+	enemyAttackRecoverySeconds    = 0.32
+	enemyAttackCooldownSeconds    = 0.72
+)
 
 type RoomConfig struct {
 	ID               string
@@ -52,6 +78,9 @@ type roomState struct {
 	enemies           map[string]EnemyState
 	collectibles      map[string]CollectibleState
 	jumpPadCooldowns  map[string]uint64
+	pvpHitCooldowns   map[string]uint64
+	pvpCombat         map[string]*pvpCombatState
+	relicClaims       map[string]relicClaimState
 	pendingEvents     []MatchEvent
 	metrics           RoomMetrics
 	lastTickWallClock time.Time
@@ -76,6 +105,21 @@ type scopedSnapshot struct {
 	players          int
 	enemies          int
 	collectibles     int
+}
+
+type pvpCombatState struct {
+	lastAttackerID string
+	lastDamageTick uint64
+	lastHitTick    uint64
+	chainHits      int
+}
+
+type relicClaimState struct {
+	playerID           string
+	sinceTick          uint64
+	lastSeenTick       uint64
+	lastEventTick      uint64
+	lastContenderCount int
 }
 
 type session struct {
@@ -531,6 +575,9 @@ func (r *Room) loop() {
 		enemies:           map[string]EnemyState{},
 		collectibles:      map[string]CollectibleState{},
 		jumpPadCooldowns:  map[string]uint64{},
+		pvpHitCooldowns:   map[string]uint64{},
+		pvpCombat:         map[string]*pvpCombatState{},
+		relicClaims:       map[string]relicClaimState{},
 		pendingEvents:     make([]MatchEvent, 0, 32),
 		lastTickWallClock: time.Now(),
 	}
@@ -600,6 +647,57 @@ func (s *roomState) markJumpPadTriggered(playerID, padID string) {
 		cooldownTicks = 1
 	}
 	s.jumpPadCooldowns[s.jumpPadCooldownKey(playerID, padID)] = s.tick + cooldownTicks
+}
+
+func (s *roomState) effectiveTickRate() int {
+	if s.room != nil && s.room.cfg.TickRate > 0 {
+		return s.room.cfg.TickRate
+	}
+	return DefaultTickRate
+}
+
+func (s *roomState) secondsToTicks(seconds float64) uint64 {
+	if seconds <= 0 {
+		return 0
+	}
+	return max(uint64(1), uint64(math.Ceil(seconds*float64(s.effectiveTickRate()))))
+}
+
+func pvpHitCooldownKey(attackerID, targetID string) string {
+	return attackerID + "\x00" + targetID
+}
+
+func (s *roomState) ensurePvPState() {
+	if s.pvpHitCooldowns == nil {
+		s.pvpHitCooldowns = map[string]uint64{}
+	}
+	if s.pvpCombat == nil {
+		s.pvpCombat = map[string]*pvpCombatState{}
+	}
+}
+
+func (s *roomState) combatState(playerID string) *pvpCombatState {
+	s.ensurePvPState()
+	state := s.pvpCombat[playerID]
+	if state == nil {
+		state = &pvpCombatState{}
+		s.pvpCombat[playerID] = state
+	}
+	return state
+}
+
+func (s *roomState) clearCombatState(playerID string) {
+	if s.pvpCombat != nil {
+		delete(s.pvpCombat, playerID)
+	}
+	if s.pvpHitCooldowns == nil {
+		return
+	}
+	for key := range s.pvpHitCooldowns {
+		if strings.HasPrefix(key, playerID+"\x00") || strings.HasSuffix(key, "\x00"+playerID) {
+			delete(s.pvpHitCooldowns, key)
+		}
+	}
 }
 
 func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
@@ -1072,7 +1170,14 @@ func (s *roomState) checkRelicCollection(sess *session) {
 			if math.Hypot(px-worldX, py-worldY) > math.Max(PickupRadius, player.PickupRadius) {
 				continue
 			}
+			contested, ok := s.canCollectRelic(sess, relic, worldX, worldY, chunk)
+			if !ok {
+				continue
+			}
 			s.collectedRelics[relic.ID] = struct{}{}
+			if s.relicClaims != nil {
+				delete(s.relicClaims, relic.ID)
+			}
 			pickupType := collectibleKindForRelicID(relic.ID)
 			beforeLevel := player.Level
 			applyCollectible(player, pickupType)
@@ -1089,8 +1194,104 @@ func (s *roomState) checkRelicCollection(sess *session) {
 				"pickupType": pickupType,
 				"xpGranted":  XPCollectibleValue,
 				"level":      player.Level,
+				"contested":  contested,
+				"hotspot":    relicHotspotKind(relic.ID),
+				"regionId":   chunk.RegionID,
+				"chunkY":     chunk.ChunkY,
 			})
 		}
+	}
+}
+
+func (s *roomState) canCollectRelic(sess *session, relic RelicSpawn, worldX, worldY float64, chunk GeneratedChunk) (bool, bool) {
+	contenders := s.relicContenders(sess, worldX, worldY)
+	if len(contenders) <= 1 {
+		if s.relicClaims != nil {
+			delete(s.relicClaims, relic.ID)
+		}
+		return false, true
+	}
+	if s.relicClaims == nil {
+		s.relicClaims = map[string]relicClaimState{}
+	}
+	ownerID := contenders[0].playerID
+	claim := s.relicClaims[relic.ID]
+	if claim.playerID != ownerID {
+		claim = relicClaimState{playerID: ownerID, sinceTick: s.tick}
+	}
+	claim.lastSeenTick = s.tick
+	claim.lastContenderCount = len(contenders)
+	shouldEmit := claim.lastEventTick == 0 && claim.sinceTick == s.tick
+	if !shouldEmit && s.tick > claim.lastEventTick {
+		shouldEmit = s.tick-claim.lastEventTick >= s.secondsToTicks(relicContestEventCooldownSecs)
+	}
+	if shouldEmit {
+		claim.lastEventTick = s.tick
+		s.pendingEvents = append(s.pendingEvents, MatchEvent{
+			"type":       "RELIC_CONTESTED",
+			"relicId":    relic.ID,
+			"playerId":   ownerID,
+			"contenders": len(contenders),
+			"x":          worldX,
+			"y":          worldY,
+			"hotspot":    relicHotspotKind(relic.ID),
+			"regionId":   chunk.RegionID,
+			"chunkY":     chunk.ChunkY,
+		})
+	}
+	s.relicClaims[relic.ID] = claim
+	heldLongEnough := s.tick-claim.sinceTick >= s.secondsToTicks(relicContestHoldSeconds)
+	return true, sess.playerID == ownerID && heldLongEnough
+}
+
+type relicContender struct {
+	playerID string
+	distance float64
+}
+
+func (s *roomState) relicContenders(sess *session, worldX, worldY float64) []relicContender {
+	seen := map[string]struct{}{}
+	out := make([]relicContender, 0, len(s.sessions)+1)
+	add := func(candidate *session) {
+		if candidate == nil || candidate.player.Health <= 0 {
+			return
+		}
+		if _, ok := seen[candidate.playerID]; ok {
+			return
+		}
+		seen[candidate.playerID] = struct{}{}
+		px := candidate.player.Position.X + float64(PlayerWidth)/2
+		py := candidate.player.Position.Y + float64(PlayerHeight)/2
+		distance := math.Hypot(px-worldX, py-worldY)
+		radius := math.Max(PickupRadius, candidate.player.PickupRadius) + relicContestRadiusPadding
+		if distance <= radius {
+			out = append(out, relicContender{playerID: candidate.playerID, distance: distance})
+		}
+	}
+	add(sess)
+	for _, candidate := range s.sessions {
+		if candidate == sess || !candidate.connected {
+			continue
+		}
+		add(candidate)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].distance == out[j].distance {
+			return out[i].playerID < out[j].playerID
+		}
+		return out[i].distance < out[j].distance
+	})
+	return out
+}
+
+func relicHotspotKind(id string) string {
+	switch {
+	case strings.HasPrefix(id, "riskRelic:"):
+		return "risk"
+	case strings.HasPrefix(id, "relic:"):
+		return "relic"
+	default:
+		return "reward"
 	}
 }
 
@@ -1261,23 +1462,20 @@ func (s *roomState) simulateEnemies(dt float64) {
 
 		enemy.AttackCooldown = math.Max(0, enemy.AttackCooldown-dt)
 		enemy.HurtCooldown = math.Max(0, enemy.HurtCooldown-dt)
-		enemy.Position.X += enemy.Velocity.X * dt
-		if enemy.Position.X <= enemy.PatrolMinX {
-			enemy.Position.X = enemy.PatrolMinX
-			enemy.Velocity.X = math.Abs(enemy.Velocity.X)
-			enemy.Facing = 1
-		} else if enemy.Position.X >= enemy.PatrolMaxX {
-			enemy.Position.X = enemy.PatrolMaxX
-			enemy.Velocity.X = -math.Abs(enemy.Velocity.X)
-			enemy.Facing = -1
-		}
-		enemy.Position.Y = enemy.PlatformY - 24
+
+		target := closestEnemyTarget(enemy, activePlayers)
+		enemyHitPlayer := (*session)(nil)
+		enemy = stepServerEnemyBehavior(enemy, target, dt)
 
 		for _, sess := range activePlayers {
 			if playerKickHitsEnemy(sess.player, enemy) {
 				damage := max(1, sess.player.Damage)
 				enemy.Health = max(0, enemy.Health-damage)
 				enemy.HurtCooldown = 0.28
+				enemy.Behavior = "recover"
+				enemy.AttackWindup = 0
+				enemy.AttackActive = 0
+				enemy.AttackHasHit = false
 				enemy.Velocity.X = float64(sess.player.Facing) * 22
 				s.maybeTriggerShockwave(sess, enemy)
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{
@@ -1319,19 +1517,186 @@ func (s *roomState) simulateEnemies(dt float64) {
 				}
 			}
 
-			if enemy.AttackCooldown <= 0 && enemyTouchesPlayer(enemy, sess.player) {
-				dir := 1.0
-				if sess.player.Position.X+float64(PlayerWidth)/2 < enemy.Position.X+11 {
-					dir = -1
-				}
-				applyDamage(&sess.player, enemyDamageForChunk(enemy.ChunkY), dir*125, -70, HitStunSeconds)
-				enemy.AttackCooldown = 0.9
+			if enemyHitPlayer == nil && !enemy.AttackHasHit && sess.player.Invulnerable <= 0 && enemy.Behavior == "attack" && enemyActiveAttackHitsPlayer(enemy, sess.player) {
+				enemyHitPlayer = sess
 			}
+		}
+
+		if enemyHitPlayer != nil {
+			dir := 1.0
+			if enemyHitPlayer.player.Position.X+float64(PlayerWidth)/2 < enemy.Position.X+11 {
+				dir = -1
+			}
+			applyDamage(&enemyHitPlayer.player, enemyDamageForChunk(enemy.ChunkY), dir*125, -70, HitStunSeconds)
+			enemy.AttackHasHit = true
+			enemy.AttackCooldown = enemyAttackCooldownSeconds
+			s.pendingEvents = append(s.pendingEvents, MatchEvent{
+				"type":     "ENEMY_ATTACK",
+				"playerId": enemyHitPlayer.playerID,
+				"enemyId":  enemy.ID,
+				"x":        enemy.Position.X + 11,
+				"y":        enemy.Position.Y + 12,
+			})
 		}
 
 		s.enemies[id] = enemy
 	nextEnemy:
 	}
+}
+
+func closestEnemyTarget(enemy EnemyState, players []*session) *session {
+	var best *session
+	bestDistance := math.MaxFloat64
+	for _, sess := range players {
+		if !playerOnEnemyPlatformNetwork(sess.player, enemy) {
+			continue
+		}
+		playerCenterX := sess.player.Position.X + float64(PlayerWidth)/2
+		enemyCenterX := enemy.Position.X + 11
+		distance := math.Abs(playerCenterX - enemyCenterX)
+		if distance > enemyDetectionRange || distance >= bestDistance {
+			continue
+		}
+		best = sess
+		bestDistance = distance
+	}
+	return best
+}
+
+func playerOnEnemyPlatformNetwork(player PlayerState, enemy EnemyState) bool {
+	playerFeetY := player.Position.Y + float64(PlayerHeight)
+	playerCenterX := player.Position.X + float64(PlayerWidth)/2
+	minX := math.Min(enemy.PatrolMinX, enemy.PatrolMaxX)
+	maxX := math.Max(enemy.PatrolMinX, enemy.PatrolMaxX) + 22
+	return math.Abs(playerFeetY-enemy.PlatformY) <= enemyPlatformTolerance &&
+		playerCenterX >= minX-enemyDetectionRange*0.35 &&
+		playerCenterX <= maxX+enemyDetectionRange*0.35
+}
+
+func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) EnemyState {
+	if enemy.Behavior == "" {
+		enemy.Behavior = "patrol"
+	}
+	targetDir := enemy.Facing
+	targetDistanceX := math.MaxFloat64
+	if target != nil {
+		playerCenterX := target.player.Position.X + float64(PlayerWidth)/2
+		enemyCenterX := enemy.Position.X + 11
+		targetDir = 1
+		if playerCenterX < enemyCenterX {
+			targetDir = -1
+		}
+		targetDistanceX = math.Abs(playerCenterX - enemyCenterX)
+	}
+	canReachTarget := target != nil && targetDistanceX <= enemyAttackRange+float64(PlayerWidth+22)/2
+
+	switch enemy.Behavior {
+	case "windup":
+		enemy.Velocity.X = 0
+		if target != nil {
+			enemy.Facing = targetDir
+		}
+		enemy.AttackWindup += dt
+		if enemy.AttackWindup >= enemyAttackWindupSeconds {
+			enemy.Behavior = "attack"
+			enemy.AttackWindup = 0
+			enemy.AttackActive = 0
+			enemy.AttackHasHit = false
+		}
+	case "attack":
+		enemy.Velocity.X = 0
+		enemy.AttackActive += dt
+		if enemy.AttackActive >= enemyAttackActiveSeconds {
+			enemy.Behavior = "recover"
+			enemy.AttackActive = 0
+		}
+	case "recover":
+		enemy.Velocity.X = 0
+		enemy.AttackActive += dt
+		if enemy.AttackActive >= enemyAttackRecoverySeconds {
+			enemy.Behavior = "patrol"
+			enemy.AttackActive = 0
+			enemy.AttackCooldown = enemyAttackCooldownSeconds
+			enemy.AttackHasHit = false
+			enemy.TargetID = ""
+		}
+	default:
+		if target != nil {
+			enemy.TargetID = target.playerID
+			enemy.Facing = targetDir
+			if canReachTarget && enemy.AttackCooldown <= 0 {
+				enemy.Behavior = "windup"
+				enemy.AttackWindup = 0
+				enemy.AttackActive = 0
+				enemy.AttackHasHit = false
+				enemy.Velocity.X = 0
+			} else {
+				enemy.Behavior = "chase"
+				enemy.Velocity.X = float64(targetDir) * enemySpeed(enemy.Kind, true)
+			}
+		} else {
+			enemy.Behavior = "patrol"
+			enemy.TargetID = ""
+			patrolDir := enemy.Facing
+			if enemy.Velocity.X < 0 {
+				patrolDir = -1
+			}
+			enemy.Facing = patrolDir
+			enemy.Velocity.X = float64(patrolDir) * enemySpeed(enemy.Kind, false)
+		}
+	}
+
+	enemy.Position.X += enemy.Velocity.X * dt
+	if enemy.Position.X <= enemy.PatrolMinX {
+		enemy.Position.X = enemy.PatrolMinX
+		if enemy.Behavior == "patrol" {
+			enemy.Velocity.X = math.Abs(enemy.Velocity.X)
+			enemy.Facing = 1
+		} else {
+			enemy.Velocity.X = 0
+		}
+	} else if enemy.Position.X >= enemy.PatrolMaxX {
+		enemy.Position.X = enemy.PatrolMaxX
+		if enemy.Behavior == "patrol" {
+			enemy.Velocity.X = -math.Abs(enemy.Velocity.X)
+			enemy.Facing = -1
+		} else {
+			enemy.Velocity.X = 0
+		}
+	}
+	enemy.Position.Y = enemy.PlatformY - 24
+	return enemy
+}
+
+func enemySpeed(kind string, chasing bool) float64 {
+	speed := enemyPatrolSpeed
+	if chasing {
+		speed = enemyChaseSpeed
+	}
+	switch kind {
+	case "goblinScout", "iceBat", "windSpirit":
+		return speed * 1.12
+	case "goblinChief", "skeletonArmored", "yeti", "iceGolem":
+		return speed * 0.82
+	default:
+		return speed
+	}
+}
+
+func enemyActiveAttackHitsPlayer(enemy EnemyState, player PlayerState) bool {
+	return rectsOverlap(playerBounds{
+		x:      enemyAttackX(enemy),
+		y:      enemy.Position.Y + 2,
+		width:  enemyAttackRange,
+		height: 20,
+	}, playerRect(player))
+}
+
+func enemyAttackX(enemy EnemyState) float64 {
+	if enemy.Facing > 0 {
+		return enemy.Position.X + 20
+	}
+	return enemy.Position.X - enemyAttackRange + 2
 }
 
 func (s *roomState) maybeTriggerShockwave(sess *session, source EnemyState) {
@@ -1385,6 +1750,7 @@ func (s *roomState) handleDeaths() {
 			continue
 		}
 		s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_DIED", "playerId": sess.playerID})
+		s.awardPvPKillCredit(sess)
 		s.respawn(sess)
 		s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RESPAWNED", "playerId": sess.playerID})
 	}
@@ -1402,11 +1768,38 @@ func (s *roomState) respawn(sess *session) {
 	sess.player.KickTimer = 0
 	sess.player.KickCooldown = 0
 	sess.player.KickInvulnerable = 0
-	sess.player.Invulnerable = 1.25
+	sess.player.Invulnerable = math.Max(sess.player.Invulnerable, pvpRespawnProtectionSeconds)
 	sess.player.StunTimer = 0
 	sess.player.Health = sess.player.MaxHealth
 	sess.player.FallStartY = nil
 	sess.player.CheckpointChunkY = checkpoint
+	s.clearCombatState(sess.playerID)
+}
+
+func (s *roomState) awardPvPKillCredit(victim *session) {
+	if victim == nil {
+		return
+	}
+	state := s.combatState(victim.playerID)
+	if state.lastAttackerID == "" || s.tick-state.lastDamageTick > s.secondsToTicks(pvpKillCreditSeconds) {
+		return
+	}
+	attacker := s.sessions[state.lastAttackerID]
+	if attacker == nil || !attacker.connected || attacker.player.Health <= 0 || attacker.playerID == victim.playerID {
+		return
+	}
+	beforeLevel := attacker.player.Level
+	xpGranted := addPlayerXP(&attacker.player, int(math.Round(float64(pvpKillXP)*attacker.player.KillXPMultiplier)))
+	s.queueLevelUpChoices(attacker, beforeLevel)
+	attacker.player.Coins += pvpKillCoins
+	s.emitPlayerStats(attacker)
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{
+		"type":      "PLAYER_KILLED",
+		"playerId":  attacker.playerID,
+		"targetId":  victim.playerID,
+		"xpGranted": xpGranted,
+		"coins":     pvpKillCoins,
+	})
 }
 
 func (s *roomState) makeEnemyDrops(enemy EnemyState) []CollectibleState {
@@ -1451,16 +1844,99 @@ func (s *roomState) applyPlayerInteractions(dt float64) {
 		for j := i + 1; j < len(active); j++ {
 			b := active[j]
 			s.applyPassivePush(&a.player, &b.player, dt)
-			if a.player.KickPhase == "active" && b.player.KickInvulnerable <= 0 && inKickRange(a.player, b.player) {
-				applyKickHit(&a.player, &b.player)
-				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_KICK_HIT", "playerId": a.playerID, "targetId": b.playerID})
+			if a.player.KickPhase == "active" && inKickRange(a.player, b.player) {
+				s.applyPvPKickHit(a, b)
 			}
-			if b.player.KickPhase == "active" && a.player.KickInvulnerable <= 0 && inKickRange(b.player, a.player) {
-				applyKickHit(&b.player, &a.player)
-				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_KICK_HIT", "playerId": b.playerID, "targetId": a.playerID})
+			if b.player.KickPhase == "active" && inKickRange(b.player, a.player) {
+				s.applyPvPKickHit(b, a)
 			}
 		}
 	}
+}
+
+func (s *roomState) applyPvPKickHit(attacker, target *session) bool {
+	if attacker == nil || target == nil || attacker.playerID == target.playerID {
+		return false
+	}
+	if attacker.player.Health <= 0 || target.player.Health <= 0 {
+		return false
+	}
+	if attacker.player.Invulnerable > 0 || target.player.Invulnerable > 0 || target.player.KickInvulnerable > 0 {
+		return false
+	}
+	s.ensurePvPState()
+	key := pvpHitCooldownKey(attacker.playerID, target.playerID)
+	if s.pvpHitCooldowns[key] > s.tick {
+		return false
+	}
+
+	stunMultiplier, knockbackMultiplier, chainHits := s.pvpHitMultipliers(target.playerID)
+	force := KickForceAir
+	if attacker.player.Grounded {
+		force = KickForceGround
+	}
+	dir := 1.0
+	if attacker.player.Facing < 0 {
+		dir = -1
+	}
+	knockbackY := 0.0
+	if target.player.Velocity.Y > -60 {
+		knockbackY = -60 * knockbackMultiplier
+	}
+
+	beforeHealth := target.player.Health
+	beforeShield := target.player.Shield
+	applyDamage(&target.player, max(1, attacker.player.Damage), dir*force*knockbackMultiplier, knockbackY, HitStunSeconds*stunMultiplier)
+	if chainHits >= pvpAntiStunChainHits {
+		target.player.StunTimer = math.Min(target.player.StunTimer, HitStunSeconds*0.25)
+		target.player.KickInvulnerable = math.Max(target.player.KickInvulnerable, pvpAntiStunInvulnerable)
+		target.player.Invulnerable = math.Max(target.player.Invulnerable, pvpAntiStunInvulnerable)
+	} else {
+		target.player.KickInvulnerable = math.Max(target.player.KickInvulnerable, KickHitInvulnerableSeconds)
+	}
+	attacker.player.ShockwaveCounter++
+	s.pvpHitCooldowns[key] = s.tick + s.secondsToTicks(pvpPairHitCooldownSeconds)
+	s.recordPvPHit(attacker.playerID, target.playerID, chainHits)
+
+	damageDone := max(0, beforeHealth-target.player.Health)
+	shieldDamage := math.Max(0, beforeShield-target.player.Shield)
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{
+		"type":             "PLAYER_KICK_HIT",
+		"playerId":         attacker.playerID,
+		"targetId":         target.playerID,
+		"damage":           damageDone,
+		"shieldDamage":     shieldDamage,
+		"chainHits":        chainHits,
+		"stunMultiplier":   stunMultiplier,
+		"knockMultiplier":  knockbackMultiplier,
+		"antiStunApplied":  chainHits >= pvpAntiStunChainHits,
+		"targetHealth":     target.player.Health,
+		"targetInvulnSecs": target.player.Invulnerable,
+	})
+	return true
+}
+
+func (s *roomState) pvpHitMultipliers(targetID string) (float64, float64, int) {
+	state := s.combatState(targetID)
+	chainHits := 1
+	if state.chainHits > 0 && s.tick-state.lastHitTick <= s.secondsToTicks(pvpStunWindowSeconds) {
+		chainHits = state.chainHits + 1
+	}
+	repeatedHits := max(0, chainHits-1)
+	stunMultiplier := math.Max(0.20, 1-float64(repeatedHits)*pvpStunDiminishPerChainHit)
+	if chainHits >= pvpAntiStunChainHits {
+		stunMultiplier = 0
+	}
+	knockbackMultiplier := math.Max(0.50, 1-float64(repeatedHits)*pvpKnockbackDiminishPerHit)
+	return stunMultiplier, knockbackMultiplier, chainHits
+}
+
+func (s *roomState) recordPvPHit(attackerID, targetID string, chainHits int) {
+	state := s.combatState(targetID)
+	state.lastAttackerID = attackerID
+	state.lastDamageTick = s.tick
+	state.lastHitTick = s.tick
+	state.chainHits = chainHits
 }
 
 func (s *roomState) applyPassivePush(a, b *PlayerState, dt float64) {

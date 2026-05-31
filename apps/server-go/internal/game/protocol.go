@@ -298,6 +298,11 @@ type EnemyState struct {
 	PlatformY      float64 `json:"platformY"`
 	AttackCooldown float64 `json:"attackCooldown"`
 	HurtCooldown   float64 `json:"hurtCooldown"`
+	Behavior       string  `json:"behavior,omitempty"`
+	AttackWindup   float64 `json:"attackWindup,omitempty"`
+	AttackActive   float64 `json:"attackActive,omitempty"`
+	AttackHasHit   bool    `json:"attackHasHit,omitempty"`
+	TargetID       string  `json:"targetId,omitempty"`
 }
 
 type CollectibleState struct {
@@ -464,6 +469,8 @@ type JumpPadSpawn struct {
 	X          int     `json:"x"`
 	Y          int     `json:"y"`
 	Multiplier float64 `json:"multiplier"`
+	LaunchX    float64 `json:"launchX,omitempty"`
+	LaunchY    float64 `json:"launchY,omitempty"`
 }
 
 type WindZoneSpawn struct {
@@ -472,6 +479,7 @@ type WindZoneSpawn struct {
 	Y         int     `json:"y"`
 	Width     int     `json:"width"`
 	Height    int     `json:"height"`
+	Axis      string  `json:"axis,omitempty"`
 	Direction int     `json:"direction"`
 	Strength  float64 `json:"strength"`
 }

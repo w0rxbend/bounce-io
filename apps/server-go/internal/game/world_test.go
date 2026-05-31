@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math"
 	"reflect"
 	"testing"
 )
@@ -36,15 +37,19 @@ func TestFarOptionalPlatformsHaveJumpPads(t *testing.T) {
 	}
 }
 
-func TestRegionGenerationCreatesLongPortalIntervals(t *testing.T) {
+func TestRegionGenerationCreatesProgressivePortalIntervals(t *testing.T) {
 	for regionIndex := 0; regionIndex < len(worldRegionProfiles); regionIndex++ {
 		start := RegionStartChunkY(regionIndex)
 		if !IsCheckpointChunk(start) {
 			t.Fatalf("region %d start chunk %d should be checkpoint", regionIndex, start)
 		}
 		distance := RegionLengthForIndex(regionIndex)
-		if distance < 3 || distance > 5 {
-			t.Fatalf("region %d checkpoint distance should be 3x-5x old chunks, got %d", regionIndex, distance)
+		maxDistance := 5
+		if regionIndex >= 8 {
+			maxDistance = 7
+		}
+		if distance < 3 || distance > maxDistance {
+			t.Fatalf("region %d checkpoint distance should stay in progressive bounds 3-%d chunks, got %d", regionIndex, maxDistance, distance)
 		}
 		for chunkY := start + 1; chunkY < start+distance; chunkY++ {
 			if IsCheckpointChunk(chunkY) {
@@ -168,6 +173,61 @@ func TestRegionsProvideDistinctMacroProfiles(t *testing.T) {
 	}
 }
 
+func TestRegionRoutesProvideSafeRiskRelicAndRecoveryOpportunities(t *testing.T) {
+	seed := HashString("demo")
+	for regionIndex := 0; regionIndex < len(worldRegionProfiles)*2; regionIndex++ {
+		plan := BuildRegionPlan(seed, regionIndex)
+		routeKinds := map[string]RouteBranch{}
+		for _, route := range plan.RouteBranches {
+			routeKinds[route.Kind] = route
+		}
+
+		safeRoute, hasSafe := routeKinds["safe"]
+		riskRoute, hasRisk := routeKinds["risk"]
+		relicRoute, hasRelic := routeKinds["relic"]
+		if !hasSafe || !hasRisk || !hasRelic {
+			t.Fatalf("region %d missing route opportunities: %#v", regionIndex, plan.RouteBranches)
+		}
+		if !(safeRoute.Reward < riskRoute.Reward && safeRoute.Reward < relicRoute.Reward) {
+			t.Fatalf("region %d safe route should trade lower reward for safety: safe=%d risk=%d relic=%d", regionIndex, safeRoute.Reward, riskRoute.Reward, relicRoute.Reward)
+		}
+		if plan.Portal.ID == "" || !plan.Portal.Checkpoint {
+			t.Fatalf("region %d missing checkpoint/recovery portal: %#v", regionIndex, plan.Portal)
+		}
+
+		for chunkY := plan.StartChunkY; chunkY <= plan.EndChunkY; chunkY++ {
+			chunk := GenerateChunk(seed, chunkY)
+			if len(chunk.Routes) < 2 {
+				t.Fatalf("region %d chunk %d should expose multiple route choices, got %#v", regionIndex, chunkY, chunk.Routes)
+			}
+			if len(chunk.Relics) == 0 {
+				t.Fatalf("region %d chunk %d should include optional relic/recovery rewards", regionIndex, chunkY)
+			}
+			if !chunkHasRouteKind(chunk, "safe") {
+				t.Fatalf("region %d chunk %d missing safe route anchor", regionIndex, chunkY)
+			}
+		}
+	}
+}
+
+func TestBiomeProfilesIncreaseTraversalComplexity(t *testing.T) {
+	seed := HashString("demo")
+	starter := regionComplexityScore(seed, 0)
+	crystal := regionComplexityScore(seed, 2)
+	storm := regionComplexityScore(seed, 4)
+	celestial := regionComplexityScore(seed, 5)
+
+	if crystal <= starter {
+		t.Fatalf("crystal biome should be more complex than starter biome: starter=%d crystal=%d", starter, crystal)
+	}
+	if storm <= starter {
+		t.Fatalf("storm biome should be more complex than starter biome: starter=%d storm=%d", starter, storm)
+	}
+	if celestial <= starter {
+		t.Fatalf("celestial biome should be more complex than starter biome: starter=%d celestial=%d", starter, celestial)
+	}
+}
+
 func TestEveryRegionHasEntryAndExitPortal(t *testing.T) {
 	for regionIndex := 0; regionIndex < len(worldRegionProfiles)*2; regionIndex++ {
 		plan := BuildRegionPlan(HashString("demo"), regionIndex)
@@ -178,6 +238,35 @@ func TestEveryRegionHasEntryAndExitPortal(t *testing.T) {
 		if exitChunk.Portal == nil || !exitChunk.Portal.Checkpoint {
 			t.Fatalf("region %d exit chunk %d should contain next portal", regionIndex, plan.ExitChunkY)
 		}
+	}
+}
+
+func TestHazardsStayOffMandatorySafeRoutePlatforms(t *testing.T) {
+	seed := HashString("demo")
+	checkedHazards := 0
+	for chunkY := 0; chunkY < 60; chunkY++ {
+		chunk := GenerateChunk(seed, chunkY)
+		for y := 0; y < chunk.Height; y++ {
+			for x := 0; x < chunk.Width; x++ {
+				if chunk.Tiles[y*chunk.Width+x] != "hazard" {
+					continue
+				}
+				checkedHazards++
+				platform, ok := platformBelowTile(chunk, x, y)
+				if !ok {
+					t.Fatalf("chunk %d hazard at %d,%d is not attached to a platform", chunkY, x, y)
+				}
+				if platform == chunk.Entry || platform == chunk.Exit {
+					t.Fatalf("chunk %d hazard at %d,%d blocks entry/exit platform %+v", chunkY, x, y, platform)
+				}
+				if routeNodeTouchesPlatform(chunk, "safe", platform) {
+					t.Fatalf("chunk %d hazard at %d,%d sits on safe route platform %+v", chunkY, x, y, platform)
+				}
+			}
+		}
+	}
+	if checkedHazards == 0 {
+		t.Fatalf("expected seed to generate hazards for mandatory-path validation")
 	}
 }
 
@@ -297,6 +386,99 @@ func TestKickHitDamagesTargetAndEmitsEvent(t *testing.T) {
 	}
 }
 
+func TestKickInvulnerabilityPreventsRepeatedPvPDamage(t *testing.T) {
+	state := &roomState{pendingEvents: []MatchEvent{}}
+	a := &session{
+		playerID:  "a",
+		player:    CreatePlayerState("a", 100, 100),
+		connected: true,
+	}
+	b := &session{
+		playerID:  "b",
+		player:    CreatePlayerState("b", 115, 100),
+		connected: true,
+	}
+	a.player.KickPhase = "active"
+	a.player.Grounded = true
+	state.sessions = map[string]*session{"a": a, "b": b}
+
+	state.applyPlayerInteractions(PhysicsStepSeconds)
+	healthAfterFirstHit := b.player.Health
+	eventCountAfterFirstHit := len(state.pendingEvents)
+	stunAfterFirstHit := b.player.StunTimer
+
+	state.applyPlayerInteractions(PhysicsStepSeconds)
+
+	if b.player.Health != healthAfterFirstHit {
+		t.Fatalf("target took repeated kick damage while protected: before=%d after=%d", healthAfterFirstHit, b.player.Health)
+	}
+	if len(state.pendingEvents) != eventCountAfterFirstHit {
+		t.Fatalf("expected no repeated PLAYER_KICK_HIT event, got %#v", state.pendingEvents)
+	}
+	if b.player.KickInvulnerable <= 0 || b.player.KickInvulnerable > KickHitInvulnerableSeconds {
+		t.Fatalf("expected kick invulnerability window, got %.3f", b.player.KickInvulnerable)
+	}
+	if stunAfterFirstHit <= 0 || stunAfterFirstHit > HitStunSeconds {
+		t.Fatalf("expected bounded stun from kick, got %.3f", stunAfterFirstHit)
+	}
+}
+
+func TestEnemyTelegraphedAttackUsesCooldownAndPlayerInvulnerability(t *testing.T) {
+	state := &roomState{
+		pendingEvents: []MatchEvent{},
+		sessions: map[string]*session{
+			"p1": {
+				playerID:  "p1",
+				connected: true,
+				player:    CreatePlayerState("p1", 100, 100),
+			},
+		},
+		enemies: map[string]EnemyState{
+			"enemy": {
+				ID:             "enemy",
+				Kind:           "goblin",
+				Position:       Vec2{X: 104, Y: 100},
+				Velocity:       Vec2{},
+				Health:         3,
+				MaxHealth:      3,
+				ChunkY:         12,
+				PatrolMinX:     90,
+				PatrolMaxX:     140,
+				PlatformY:      124,
+				AttackCooldown: 0,
+			},
+		},
+	}
+
+	player := &state.sessions["p1"].player
+	startHealth := player.Health
+	state.simulateEnemies(PhysicsStepSeconds)
+	if player.Health != startHealth {
+		t.Fatalf("enemy should not damage before telegraphed attack becomes active: before=%d after=%d", startHealth, player.Health)
+	}
+	if got := state.enemies["enemy"].Behavior; got != "windup" {
+		t.Fatalf("enemy should enter windup before damage, got %q", got)
+	}
+
+	for elapsed := 0.0; elapsed <= enemyAttackWindupSeconds; elapsed += PhysicsStepSeconds {
+		state.simulateEnemies(PhysicsStepSeconds)
+	}
+	healthAfterFirstHit := player.Health
+	stunAfterFirstHit := player.StunTimer
+
+	state.simulateEnemies(PhysicsStepSeconds)
+
+	if healthAfterFirstHit >= player.MaxHealth {
+		t.Fatalf("expected active telegraphed attack to damage player, health=%d/%d", healthAfterFirstHit, player.MaxHealth)
+	}
+	if player.Health != healthAfterFirstHit {
+		t.Fatalf("enemy active attack should not chain damage every frame: before=%d after=%d", healthAfterFirstHit, player.Health)
+	}
+	if stunAfterFirstHit <= 0 || player.Invulnerable <= 0 {
+		t.Fatalf("expected bounded stun and invulnerability after enemy hit: stun=%.3f invuln=%.3f", stunAfterFirstHit, player.Invulnerable)
+	}
+}
+
 func TestDeathRespawnEmitsClientCompatibleEvents(t *testing.T) {
 	seed := HashString("demo")
 	state := &roomState{
@@ -369,6 +551,57 @@ func TestFatalFallRespawnsAtCheckpoint(t *testing.T) {
 	if player.Position.X != respawnX || player.Position.Y != respawnY {
 		t.Fatalf("expected respawn at checkpoint %.1f %.1f, got %.1f %.1f", respawnX, respawnY, player.Position.X, player.Position.Y)
 	}
+}
+
+func chunkHasRouteKind(chunk GeneratedChunk, kind string) bool {
+	for _, route := range chunk.Routes {
+		if route.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func regionComplexityScore(seed uint32, regionIndex int) int {
+	start := RegionStartChunkY(regionIndex)
+	end := start + RegionLengthForIndex(regionIndex)
+	score := 0
+	for chunkY := start; chunkY < end; chunkY++ {
+		chunk := GenerateChunk(seed, chunkY)
+		hazards := 0
+		for _, tile := range chunk.Tiles {
+			if tile == "hazard" {
+				hazards++
+			}
+		}
+		score += hazards*2 + len(chunk.Enemies)*2 + len(chunk.WindZones)*3 + len(chunk.JumpPads) + worldRegionProfiles[positiveMod(regionIndex, len(worldRegionProfiles))].CollectibleAdd
+	}
+	return score
+}
+
+func platformBelowTile(chunk GeneratedChunk, x, y int) (PlatformSpan, bool) {
+	for _, platform := range chunk.Platforms {
+		if platform.Y == y+1 && x >= platform.X && x < platform.X+platform.Width {
+			return platform, true
+		}
+	}
+	return PlatformSpan{}, false
+}
+
+func routeNodeTouchesPlatform(chunk GeneratedChunk, routeKind string, platform PlatformSpan) bool {
+	for _, route := range chunk.Routes {
+		if route.Kind != routeKind {
+			continue
+		}
+		for _, node := range route.Nodes {
+			nodeTileX := int(math.Floor(node.X / float64(TileSize)))
+			nodeTileY := int(math.Floor(node.Y/float64(TileSize))) - chunk.WorldTileY
+			if nodeTileY == platform.Y && nodeTileX >= platform.X && nodeTileX < platform.X+platform.Width {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasReachableLowerPlatform(target PlatformSpan, platforms []PlatformSpan) bool {
