@@ -1,12 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COYOTE_TIME_SECONDS, FATAL_FALL_DISTANCE_PX, JUMP_BUFFER_SECONDS, JUMP_SPEED, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, TILE_SIZE } from "../../packages/shared/src/constants.js";
-import { applyCollectible, applyHazardHit, applyPlayerInteractions, createPlayerState, rectsOverlap, stepPlayer } from "../../packages/shared/src/physics.js";
-import type { TileMap } from "../../packages/shared/src/types.js";
+import { COYOTE_TIME_SECONDS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
+import { applyCollectible, applyDamage, applyHazardHit, applyJumpPad, applyPlayerInteractions, applyWindZones, createPlayerState, rectsOverlap, respawnPlayerState, stepEnemyBehavior, stepPlayer } from "../../packages/shared/src/physics.js";
+import type { EnemyState, GeneratedChunk, JumpPadSpawn, TileMap } from "../../packages/shared/src/types.js";
 
 const floorMap: TileMap = {
   isSolid: (_x, y) => y >= 4
 };
+
+function testEnemy(overrides: Partial<EnemyState> = {}): EnemyState {
+  return {
+    id: "e1",
+    kind: "skeleton",
+    position: { x: 72, y: 40 },
+    velocity: { x: 24, y: 0 },
+    facing: 1,
+    health: 3,
+    maxHealth: 3,
+    chunkY: 0,
+    patrolMinX: 48,
+    patrolMaxX: 128,
+    platformY: 64,
+    attackCooldown: 0,
+    hurtCooldown: 0,
+    behavior: "patrol",
+    attackWindup: 0,
+    attackActive: 0,
+    attackHasHit: false,
+    ...overrides
+  };
+}
 
 test("player falls onto solid tiles and becomes grounded", () => {
   let player = createPlayerState("p1", 2 * TILE_SIZE, 2 * TILE_SIZE);
@@ -214,6 +237,41 @@ test("kick interaction reports authoritative hit event once target becomes invul
   assert.equal(target.health, PLAYER_MAX_HEALTH - kicker.damage);
 });
 
+test("kick invulnerability prevents repeated PvP hits during one active window", () => {
+  const kicker = createPlayerState("p1", 20, 20);
+  const target = createPlayerState("p2", 38, 20);
+  kicker.kickPhase = "active";
+  kicker.grounded = true;
+  kicker.facing = 1;
+
+  const players = [kicker, target];
+  const firstEvents = applyPlayerInteractions(players, 1 / 60);
+  const healthAfterFirstHit = target.health;
+  const stunAfterFirstHit = target.stunTimer;
+
+  const secondEvents = applyPlayerInteractions(players, 1 / 60);
+
+  assert.deepEqual(firstEvents, [{ type: "PLAYER_KICK_HIT", playerId: "p1", targetId: "p2" }]);
+  assert.deepEqual(secondEvents, []);
+  assert.equal(target.health, healthAfterFirstHit, "target should not take repeated kick damage while protected");
+  assert.ok(target.kickInvulnerable > 0 && target.kickInvulnerable <= KICK_HIT_INVULNERABLE_SECONDS);
+  assert.ok(stunAfterFirstHit > 0 && stunAfterFirstHit <= HIT_STUN_SECONDS);
+});
+
+test("respawn invulnerability blocks immediate PvP damage", () => {
+  const player = createPlayerState("p1", 20, 20);
+  player.health = 1;
+
+  respawnPlayerState(player, 100, 200, 3);
+  applyDamage(player, 3, 120, -60, HIT_STUN_SECONDS);
+
+  assert.equal(player.health, PLAYER_MAX_HEALTH);
+  assert.equal(player.position.x, 100);
+  assert.equal(player.position.y, 200);
+  assert.equal(player.checkpointChunkY, 3);
+  assert.ok(player.invulnerable <= RESPAWN_INVULNERABILITY_SECONDS && player.invulnerable > 0);
+});
+
 test("fatal fall over 12m kills the player", () => {
   const emptyMap: TileMap = { isSolid: () => false };
   let player = createPlayerState("p1", 20, 0);
@@ -231,6 +289,21 @@ test("fatal fall over 12m kills the player", () => {
   assert.ok(player.position.y > FATAL_FALL_DISTANCE_PX);
 });
 
+test("hazard invulnerability prevents repeated local PvE damage bursts", () => {
+  const player = createPlayerState("p1", 20, 20);
+  applyHazardHit(player, "lightningRune", 1);
+  const healthAfterFirstHit = player.health;
+  const stunAfterFirstHit = player.stunTimer;
+  const velocityAfterFirstHit = { ...player.velocity };
+
+  applyHazardHit(player, "lightningRune", 1);
+
+  assert.equal(player.health, healthAfterFirstHit);
+  assert.deepEqual(player.velocity, velocityAfterFirstHit);
+  assert.equal(player.stunTimer, stunAfterFirstHit);
+  assert.ok(player.invulnerable > 0, "hazard hit should grant temporary protection");
+});
+
 test("hazards damage and push players while violet crystals improve jump stats", () => {
   const player = createPlayerState("p1", 20, 20);
   applyHazardHit(player, "spikeTrap", 1);
@@ -244,6 +317,98 @@ test("hazards damage and push players while violet crystals improve jump stats",
   applyCollectible(player, "purpleCrystal");
   assert.ok(player.jumpPower > jumpBefore);
   assert.equal(player.movementSpeed, movementBefore);
+});
+
+test("wind zones push local PvE traversal without exceeding movement cap", () => {
+  const windChunk: GeneratedChunk = {
+    seed: 8675309,
+    chunkY: 8,
+    width: 36,
+    height: 18,
+    worldTileY: -8 * 18,
+    tiles: [],
+    platforms: [],
+    entry: { x: 16, y: 16, width: 4 },
+    exit: { x: 16, y: 1, width: 4 },
+    routes: [],
+    relics: [],
+    enemies: [],
+    jumpPads: [],
+    windZones: [{ id: "wind:test", x: 8, y: 8, width: 5, height: 4, direction: 1, strength: 620 }]
+  };
+  const zone = windChunk.windZones[0]!;
+  const player = createPlayerState(
+    "p1",
+    zone.x * TILE_SIZE + TILE_SIZE / 2,
+    (windChunk.worldTileY + zone.y) * TILE_SIZE + TILE_SIZE / 2
+  );
+
+  const pushed = applyWindZones(player, [windChunk], 1 / 30, 3.25);
+
+  assert.equal(pushed, true);
+  assert.equal(Math.sign(player.velocity.x), zone.direction);
+  assert.ok(Math.abs(player.velocity.x) <= MAX_RUN_SPEED * 1.45);
+});
+
+test("jump pads launch falling players and reset traversal timers", () => {
+  const player = createPlayerState("p1", 3 * TILE_SIZE + 1, 3 * TILE_SIZE - PLAYER_HEIGHT);
+  player.velocity.y = 70;
+  player.grounded = true;
+  player.coyoteTimer = COYOTE_TIME_SECONDS;
+  player.jumpBufferTimer = JUMP_BUFFER_SECONDS;
+  player.fallStartY = 0;
+  player.extraJumpsUsed = 1;
+
+  const pad: JumpPadSpawn = { id: "pad:test", x: 3, y: 3, multiplier: 2.25 };
+  const triggered = applyJumpPad(player, pad, 0);
+
+  assert.equal(triggered, true);
+  assert.equal(player.grounded, false);
+  assert.equal(player.coyoteTimer, 0);
+  assert.equal(player.jumpBufferTimer, 0);
+  assert.equal(player.fallStartY, null);
+  assert.equal(player.extraJumpsUsed, 0);
+  assert.equal(player.velocity.y, -JUMP_SPEED * 2.25);
+});
+
+test("local enemies patrol, detect same-platform players, and do not passively hit", () => {
+  const player = createPlayerState("p1", 96, 64 - PLAYER_HEIGHT);
+  player.grounded = true;
+  const distantPlayer = createPlayerState("p2", 220, 8);
+  const enemy = testEnemy({ position: { x: 48.5, y: 40 }, velocity: { x: -24, y: 0 } });
+
+  const edgeStep = stepEnemyBehavior(enemy, distantPlayer, 1);
+  assert.equal(edgeStep.enemy.position.x, enemy.patrolMinX);
+  assert.equal(edgeStep.enemy.facing, 1);
+  assert.equal(edgeStep.hitPlayer, false);
+
+  const chaseStep = stepEnemyBehavior(testEnemy({ position: { x: 48, y: 40 }, attackCooldown: 1 }), player, 1 / 60);
+  assert.equal(chaseStep.enemy.behavior, "chase");
+  assert.ok(chaseStep.enemy.velocity.x > 0);
+  assert.equal(chaseStep.hitPlayer, false);
+});
+
+test("local enemies damage only during active telegraphed attacks", () => {
+  const player = createPlayerState("p1", 86, 64 - PLAYER_HEIGHT);
+  player.grounded = true;
+  let enemy = testEnemy({ position: { x: 72, y: 40 }, velocity: { x: 0, y: 0 } });
+
+  let step = stepEnemyBehavior(enemy, player, 1 / 60);
+  assert.equal(step.enemy.behavior, "windup");
+  assert.equal(step.hitPlayer, false);
+
+  for (let t = 0; t < ENEMY_ATTACK_WINDUP_SECONDS; t += 1 / 60) {
+    step = stepEnemyBehavior(step.enemy, player, 1 / 60);
+  }
+  assert.equal(step.enemy.behavior, "attack");
+  assert.equal(step.hitPlayer, false);
+
+  step = stepEnemyBehavior(step.enemy, player, 1 / 60);
+  assert.equal(step.enemy.behavior, "attack");
+  assert.equal(step.hitPlayer, true);
+
+  step = stepEnemyBehavior(step.enemy, player, 1 / 60);
+  assert.equal(step.hitPlayer, false, "an active swing should hit at most once");
 });
 
 test("jump and attack collectibles use small diminishing gains while hearts heal exactly one", () => {

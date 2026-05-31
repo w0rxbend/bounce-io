@@ -2,6 +2,17 @@ import {
   AIR_ACCELERATION,
   AIR_PUSH_FACTOR,
   COYOTE_TIME_SECONDS,
+  ENEMY_ATTACK_ACTIVE_SECONDS,
+  ENEMY_ATTACK_COOLDOWN_SECONDS,
+  ENEMY_ATTACK_RANGE_PX,
+  ENEMY_ATTACK_RECOVERY_SECONDS,
+  ENEMY_ATTACK_WINDUP_SECONDS,
+  ENEMY_CHASE_SPEED,
+  ENEMY_DETECTION_RANGE_PX,
+  ENEMY_HEIGHT,
+  ENEMY_PATROL_SPEED,
+  ENEMY_PLATFORM_TOLERANCE_PX,
+  ENEMY_WIDTH,
   FATAL_FALL_DISTANCE_PX,
   GAME_REWARD_CONFIG,
   GRAVITY,
@@ -38,12 +49,17 @@ import {
   TILE_SIZE
 } from "./constants.js";
 import { ensurePlayerSkillState, recalculateSkillDerivedStats, skillStacks, SKILL_BALANCE } from "./skills.js";
-import type { CollectibleKind, CollisionHit, GeneratedChunk, HazardKind, KickPhase, PlayerId, PlayerInput, PlayerState, Rect, StepResult, TileMap } from "./types.js";
+import type { CollectibleKind, CollisionHit, EnemyState, GeneratedChunk, HazardKind, JumpPadSpawn, KickPhase, PlayerId, PlayerInput, PlayerState, Rect, StepResult, TileMap } from "./types.js";
 
 export interface PlayerInteractionEvent {
   type: "PLAYER_KICK_HIT";
   playerId: PlayerId;
   targetId: PlayerId;
+}
+
+export interface EnemyStepResult {
+  enemy: EnemyState;
+  hitPlayer: boolean;
 }
 
 export function createPlayerState(id: string, x: number, y: number): PlayerState {
@@ -107,6 +123,15 @@ export function playerRect(player: PlayerState): Rect {
     y: player.position.y,
     width: PLAYER_WIDTH,
     height: PLAYER_HEIGHT
+  };
+}
+
+export function enemyRect(enemy: EnemyState): Rect {
+  return {
+    x: enemy.position.x,
+    y: enemy.position.y,
+    width: ENEMY_WIDTH,
+    height: ENEMY_HEIGHT
   };
 }
 
@@ -393,14 +418,188 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
       if (!rectsOverlap(bounds, zoneRect)) continue;
 
       const gust = windGustMultiplier(windZoneSeed(chunk, zone), timeSeconds, bounds);
-      const targetVelocity = zone.direction * Math.min(MAX_RUN_SPEED * 1.45, zone.strength * 0.55 * gust);
-      player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * (2.2 + gust * 3.0) * dt);
-      player.velocity.x = clamp(player.velocity.x, -MAX_RUN_SPEED * 1.45, MAX_RUN_SPEED * 1.45);
+      if (zone.axis === "vertical") {
+        const maxVertical = MAX_FALL_SPEED * 0.72;
+        const targetVelocity = zone.direction * Math.min(maxVertical, zone.strength * 0.48 * gust);
+        player.velocity.y = moveToward(player.velocity.y, targetVelocity, zone.strength * (1.7 + gust * 2.2) * dt);
+        player.velocity.y = clamp(player.velocity.y, -maxVertical, maxVertical);
+        if (zone.direction < 0) player.fallStartY = null;
+      } else {
+        const targetVelocity = zone.direction * Math.min(MAX_RUN_SPEED * 1.45, zone.strength * 0.55 * gust);
+        player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * (2.2 + gust * 3.0) * dt);
+        player.velocity.x = clamp(player.velocity.x, -MAX_RUN_SPEED * 1.45, MAX_RUN_SPEED * 1.45);
+      }
       pushed = true;
     }
   }
 
   return pushed;
+}
+
+function enemyMovementSpeed(kind: EnemyState["kind"], chasing: boolean): number {
+  const chase = chasing ? ENEMY_CHASE_SPEED : ENEMY_PATROL_SPEED;
+  switch (kind) {
+    case "goblinScout":
+    case "iceBat":
+    case "windSpirit":
+      return chase * 1.12;
+    case "goblinChief":
+    case "skeletonArmored":
+    case "yeti":
+    case "iceGolem":
+      return chase * 0.82;
+    default:
+      return chase;
+  }
+}
+
+export function isPlayerOnEnemyPlatformNetwork(player: PlayerState, enemy: EnemyState): boolean {
+  const playerFeetY = player.position.y + PLAYER_HEIGHT;
+  const playerCenterX = player.position.x + PLAYER_WIDTH / 2;
+  const minX = Math.min(enemy.patrolMinX, enemy.patrolMaxX);
+  const maxX = Math.max(enemy.patrolMinX, enemy.patrolMaxX) + ENEMY_WIDTH;
+  return Math.abs(playerFeetY - enemy.platformY) <= ENEMY_PLATFORM_TOLERANCE_PX &&
+    playerCenterX >= minX - ENEMY_DETECTION_RANGE_PX * 0.35 &&
+    playerCenterX <= maxX + ENEMY_DETECTION_RANGE_PX * 0.35;
+}
+
+function enemyAttackRect(enemy: EnemyState): Rect {
+  return {
+    x: enemy.facing > 0 ? enemy.position.x + ENEMY_WIDTH - 2 : enemy.position.x - ENEMY_ATTACK_RANGE_PX + 2,
+    y: enemy.position.y + 2,
+    width: ENEMY_ATTACK_RANGE_PX,
+    height: ENEMY_HEIGHT - 4
+  };
+}
+
+export function stepEnemyBehavior(enemy: EnemyState, player: PlayerState, deltaSeconds: number): EnemyStepResult {
+  const dt = Math.min(Math.max(deltaSeconds, 0), MAX_DELTA_SECONDS);
+  const next: EnemyState = {
+    ...enemy,
+    position: { ...enemy.position },
+    velocity: { ...enemy.velocity },
+    attackCooldown: Math.max(0, enemy.attackCooldown - dt),
+    hurtCooldown: Math.max(0, enemy.hurtCooldown - dt),
+    behavior: enemy.behavior ?? "patrol",
+    attackWindup: enemy.attackWindup ?? 0,
+    attackActive: enemy.attackActive ?? 0,
+    attackHasHit: enemy.attackHasHit ?? false
+  };
+  let hitPlayer = false;
+
+  if (next.health <= 0 || player.health <= 0) {
+    next.velocity.x = 0;
+    return { enemy: next, hitPlayer };
+  }
+
+  const playerCenterX = player.position.x + PLAYER_WIDTH / 2;
+  const enemyCenterX = next.position.x + ENEMY_WIDTH / 2;
+  const targetDir: -1 | 1 = playerCenterX >= enemyCenterX ? 1 : -1;
+  const samePlatformNetwork = isPlayerOnEnemyPlatformNetwork(player, next);
+  const targetDistanceX = Math.abs(playerCenterX - enemyCenterX);
+  const canSeePlayer = samePlatformNetwork && targetDistanceX <= ENEMY_DETECTION_RANGE_PX;
+  const canReachPlayer = samePlatformNetwork &&
+    targetDistanceX <= ENEMY_ATTACK_RANGE_PX + (PLAYER_WIDTH + ENEMY_WIDTH) / 2;
+
+  if (next.behavior === "windup") {
+    next.velocity.x = 0;
+    if (canSeePlayer) next.facing = targetDir;
+    next.attackWindup = (next.attackWindup ?? 0) + dt;
+    if (next.attackWindup >= ENEMY_ATTACK_WINDUP_SECONDS) {
+      next.behavior = "attack";
+      next.attackWindup = 0;
+      next.attackActive = 0;
+      next.attackHasHit = false;
+    }
+  } else if (next.behavior === "attack") {
+    next.velocity.x = 0;
+    next.attackActive = (next.attackActive ?? 0) + dt;
+    if (!next.attackHasHit && rectsOverlap(enemyAttackRect(next), playerRect(player))) {
+      hitPlayer = true;
+      next.attackHasHit = true;
+    }
+    if (next.attackActive >= ENEMY_ATTACK_ACTIVE_SECONDS) {
+      next.behavior = "recover";
+      next.attackActive = 0;
+    }
+  } else if (next.behavior === "recover") {
+    next.velocity.x = 0;
+    next.attackActive = (next.attackActive ?? 0) + dt;
+    if (next.attackActive >= ENEMY_ATTACK_RECOVERY_SECONDS) {
+      next.behavior = "patrol";
+      next.attackActive = 0;
+      next.attackCooldown = ENEMY_ATTACK_COOLDOWN_SECONDS;
+      next.attackHasHit = false;
+      delete next.targetId;
+    }
+  } else if (canSeePlayer) {
+    next.targetId = player.id;
+    next.facing = targetDir;
+    if (canReachPlayer && next.attackCooldown <= 0) {
+      next.behavior = "windup";
+      next.attackWindup = 0;
+      next.attackActive = 0;
+      next.attackHasHit = false;
+      next.velocity.x = 0;
+    } else {
+      next.behavior = "chase";
+      next.velocity.x = targetDir * enemyMovementSpeed(next.kind, true);
+    }
+  } else {
+    next.behavior = "patrol";
+    delete next.targetId;
+    const patrolDir: -1 | 1 = next.velocity.x < 0 || next.facing < 0 ? -1 : 1;
+    next.facing = patrolDir;
+    next.velocity.x = patrolDir * enemyMovementSpeed(next.kind, false);
+  }
+
+  next.position.x += next.velocity.x * dt;
+  const minX = Math.min(next.patrolMinX, next.patrolMaxX);
+  const maxX = Math.max(next.patrolMinX, next.patrolMaxX);
+  if (next.position.x <= minX) {
+    next.position.x = minX;
+    if (next.behavior === "patrol") {
+      next.facing = 1;
+      next.velocity.x = Math.abs(next.velocity.x);
+    } else {
+      next.velocity.x = 0;
+    }
+  } else if (next.position.x >= maxX) {
+    next.position.x = maxX;
+    if (next.behavior === "patrol") {
+      next.facing = -1;
+      next.velocity.x = -Math.abs(next.velocity.x);
+    } else {
+      next.velocity.x = 0;
+    }
+  }
+  next.position.y = next.platformY - ENEMY_HEIGHT;
+
+  return { enemy: next, hitPlayer };
+}
+
+export function applyJumpPad(player: PlayerState, pad: JumpPadSpawn, worldTileY: number): boolean {
+  if (player.health <= 0 || player.velocity.y < 0) return false;
+  const playerCenterX = player.position.x + PLAYER_WIDTH / 2;
+  const playerBottom = player.position.y + PLAYER_HEIGHT;
+  const padCenterX = pad.x * TILE_SIZE + TILE_SIZE / 2;
+  const padCenterY = (worldTileY + pad.y) * TILE_SIZE + TILE_SIZE / 2;
+  const nearX = Math.abs(playerCenterX - padCenterX) <= TILE_SIZE * 0.85;
+  const nearY = playerBottom >= padCenterY - TILE_SIZE * 0.9 && playerBottom <= padCenterY + TILE_SIZE * 0.9;
+  if (!nearX || !nearY) return false;
+
+  const launchY = Number.isFinite(pad.launchY) ? pad.launchY! : -1;
+  const launchX = Number.isFinite(pad.launchX) ? pad.launchX! : 0;
+  player.velocity.y = JUMP_SPEED * launchY * Math.max(1, pad.multiplier);
+  if (launchX !== 0) {
+    player.velocity.x += launchX * JUMP_SPEED * Math.max(1, pad.multiplier) * 0.42;
+  }
+  player.grounded = false;
+  player.coyoteTimer = 0;
+  player.jumpBufferTimer = 0;
+  player.fallStartY = null;
+  player.extraJumpsUsed = 0;
+  return true;
 }
 
 export function applyCollectible(player: PlayerState, kind: CollectibleKind, xpValue: number = GAME_REWARD_CONFIG.xpCollectibleValue): number {

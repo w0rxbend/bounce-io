@@ -72,6 +72,19 @@ export const KICK_FORCE_GROUND = 260;           // px/s impulse, both grounded
 export const KICK_FORCE_AIR = 160;              // px/s impulse, airborne kicker/target
 export const KICK_HIT_INVULNERABLE_SECONDS = 0.35;
 
+// Local PvE enemies
+export const ENEMY_WIDTH = 22;
+export const ENEMY_HEIGHT = 24;
+export const ENEMY_PATROL_SPEED = 24;
+export const ENEMY_CHASE_SPEED = 62;
+export const ENEMY_DETECTION_RANGE_PX = 132;
+export const ENEMY_PLATFORM_TOLERANCE_PX = 10;
+export const ENEMY_ATTACK_RANGE_PX = 18;
+export const ENEMY_ATTACK_WINDUP_SECONDS = 0.34;
+export const ENEMY_ATTACK_ACTIVE_SECONDS = 0.12;
+export const ENEMY_ATTACK_RECOVERY_SECONDS = 0.32;
+export const ENEMY_ATTACK_COOLDOWN_SECONDS = 0.72;
+
 // Respawn & match
 export const RESPAWN_INVULNERABILITY_SECONDS = 1.25;
 export const RECONCILIATION_TOLERANCE_PX = 6;

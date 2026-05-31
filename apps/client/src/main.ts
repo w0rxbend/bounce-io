@@ -3,9 +3,10 @@ import {
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   CHECKPOINT_PORTAL_WIDTH_TILES,
+  ENEMY_ATTACK_RANGE_PX,
+  ENEMY_HEIGHT,
   GAME_REWARD_CONFIG,
   GAME_VERSION,
-  JUMP_SPEED,
   KICK_ACTIVE_SECONDS,
   KICK_COOLDOWN_SECONDS,
   KICK_RECOVERY_SECONDS,
@@ -23,6 +24,7 @@ import {
   addPlayerXp,
   applyCollectible,
   applyDamage,
+  applyJumpPad,
   applyWindZones,
   collectibleKindForRelicId,
   createMultiChunkTileMap,
@@ -30,6 +32,7 @@ import {
   generateVerticalChunk,
   isPlayerDead,
   respawnPlayerState,
+  stepEnemyBehavior,
   stepPlayer,
   xpRequiredForLevel,
   applySkillToPlayer,
@@ -760,9 +763,9 @@ function shouldSkipManifestAsset(relPath: string): boolean {
   return /^platform_[a-z]+_(top|body|bottom|outer)_(left|inner|right)\.png$/.test(relPath.split("/").pop() ?? "");
 }
 
-const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit"] as const;
+const BIOME_IDS = ["pineValley", "cloudRidge", "snowfallCliffs", "frozenSpires", "celestialSummit", "skyCanyons", "emberPeaks", "voidExpanse", "arcaneNexus", "frozenHeights", "celestialRift"] as const;
 type BiomeId = typeof BIOME_IDS[number];
-const REGION_LENGTH_CHUNKS = [4, 4, 5, 4, 5, 5] as const;
+const REGION_LENGTH_CHUNKS = [4, 4, 5, 4, 5, 5, 5, 5, 6, 6, 6, 7] as const;
 
 function regionStartChunkY(regionIndex: number): number {
   let chunkY = 0;
@@ -776,11 +779,8 @@ function isCheckpointChunk(chunkY: number, chunk?: GeneratedChunk): boolean {
 }
 
 function biomeForChunkY(chunkY: number): BiomeId {
-  if (chunkY >= 16) return "celestialSummit";
-  if (chunkY >= 12) return "frozenSpires";
-  if (chunkY >= 8) return "snowfallCliffs";
-  if (chunkY >= 4) return "cloudRidge";
-  return "pineValley";
+  const region = Math.max(0, Math.min(BIOME_IDS.length - 1, regionIndexForChunkY(chunkY)));
+  return BIOME_IDS[region]!;
 }
 
 function biomeDisplayName(biome: BiomeId): string {
@@ -788,7 +788,13 @@ function biomeDisplayName(biome: BiomeId): string {
   if (biome === "cloudRidge") return "ANCIENT RUINS";
   if (biome === "snowfallCliffs") return "CRYSTAL HEIGHTS";
   if (biome === "frozenSpires") return "MECHANICAL SKYWORKS";
-  return "CELESTIAL SANCTUARY";
+  if (biome === "celestialSummit") return "CELESTIAL SANCTUARY";
+  if (biome === "skyCanyons") return "SKY CANYONS";
+  if (biome === "emberPeaks") return "EMBER PEAKS";
+  if (biome === "voidExpanse") return "VOID EXPANSE";
+  if (biome === "arcaneNexus") return "ARCANE NEXUS";
+  if (biome === "frozenHeights") return "FROZEN HEIGHTS";
+  return "CELESTIAL RIFT";
 }
 
 function regionIndexForChunkY(chunkY: number): number {
@@ -802,14 +808,21 @@ function regionIndexForChunkY(chunkY: number): number {
 }
 
 function regionDisplayNameForChunkY(chunkY: number): string {
-  return [
+  const names = [
     "FLOATING GARDEN",
     "ANCIENT RUINS",
     "CRYSTAL HEIGHTS",
     "MECHANICAL SKYWORKS",
     "STORM ISLANDS",
     "CELESTIAL SANCTUARY",
-  ][regionIndexForChunkY(chunkY)]!;
+    "SKY CANYONS",
+    "EMBER PEAKS",
+    "VOID EXPANSE",
+    "ARCANE NEXUS",
+    "FROZEN HEIGHTS",
+    "CELESTIAL RIFT",
+  ];
+  return names[Math.max(0, Math.min(names.length - 1, regionIndexForChunkY(chunkY)))]!;
 }
 
 function altitude01(chunkY: number, start: number, end: number): number {
@@ -2577,6 +2590,7 @@ for (const layer of [
 ]) {
   disableDisplayEvents(layer);
 }
+hudLayer.eventMode = "passive";
 enemyLayer.sortableChildren = true;
 effectLayer.addChild(effectParticleLayer);
 worldDebugLayer.addChild(worldDebugGfx);
@@ -4888,6 +4902,12 @@ function shouldPlaceProceduralTree(biome: BiomeId, seed: number): boolean {
     snowfallCliffs: 89,
     frozenSpires: 109,
     celestialSummit: 131,
+    skyCanyons: 149,
+    emberPeaks: 173,
+    voidExpanse: 211,
+    arcaneNexus: 157,
+    frozenHeights: 101,
+    celestialRift: 193,
   };
   return seed % frequency[biome] === 0;
 }
@@ -5388,6 +5408,12 @@ function decorateChunk(chunk: GeneratedChunk): void {
           snowfallCliffs: ["fallingIciclesCluster", "fallingIcicle", "iceSpikes", "crystalSpikesBlue"],
           frozenSpires: ["fallingIciclesCluster", "iceSpikes", "spikeBoulder", "magicArcBlue"],
           celestialSummit: ["lightningHazard", "lightningBlue", "summitSpikes", "runeTrapGold"],
+          skyCanyons: ["stoneSpikes", "spikeBall", "magicArcBlue", "windBurst"],
+          emberPeaks: ["spikeMachine", "rollingBoulder", "runeTrapGold", "magicArcPurple"],
+          voidExpanse: ["spikeBall", "spikeBoulder", "lightningPurple", "summitSpikes"],
+          arcaneNexus: ["magicArcPurple", "magicArcBlue", "runeTrapGold", "lightningBlue"],
+          frozenHeights: ["fallingIciclesCluster", "fallingIcicle", "iceSpikes", "magicArcBlue"],
+          celestialRift: ["lightningHazard", "lightningBlue", "magicArcPurple", "runeTrapGold"],
         };
         const hazardChoices = [...hazardChoicesByBiome[biome], ...folderAssetKeys("environment/hazards")];
         let hazardKey = hazardChoices[seed % hazardChoices.length]!;
@@ -5937,12 +5963,7 @@ function applyLocalJumpPads(player: PlayerState): boolean {
       const nearY = playerBottom >= padY - TILE_SIZE * 0.9 && playerBottom <= padY + TILE_SIZE * 0.9;
       if (!nearX || !nearY) continue;
       localJumpPadCooldowns.set(cooldownKey, elapsedMs + JUMP_PAD_COOLDOWN_MS);
-      player.velocity.y = -JUMP_SPEED * Math.max(1, pad.multiplier);
-      player.grounded = false;
-      player.coyoteTimer = 0;
-      player.jumpBufferTimer = 0;
-      player.fallStartY = null;
-      return true;
+      return applyJumpPad(player, pad, chunk.worldTileY);
     }
   }
   return false;
@@ -6898,9 +6919,16 @@ function updateEnemyEntries(enemies: EnemyState[], tSec: number): void {
     entry.sprite.y = Math.round(enemy.position.y + 25 + bob);
     entry.sprite.scale.x = Math.abs(entry.sprite.scale.x) * enemy.facing;
     entry.sprite.alpha = enemy.hurtCooldown > 0 ? 0.68 + Math.sin(tSec * 42) * 0.24 : 0.96;
-    entry.sprite.tint = enemy.hurtCooldown > 0 ? 0xffc7c7 : 0xffffff;
+    entry.sprite.tint = enemy.hurtCooldown > 0 ? 0xffc7c7 : enemy.behavior === "windup" ? 0xffdf9a : 0xffffff;
 
     entry.hp.clear();
+    if (enemy.behavior === "windup" || enemy.behavior === "attack") {
+      const x = enemy.facing > 0 ? enemy.position.x + 20 : enemy.position.x - ENEMY_ATTACK_RANGE_PX + 2;
+      const y = enemy.position.y + 5;
+      entry.hp.rect(Math.round(x), Math.round(y), ENEMY_ATTACK_RANGE_PX, 14)
+        .fill({ color: PAL.hazardRed, alpha: enemy.behavior === "attack" ? 0.26 : 0.12 })
+        .stroke({ color: PAL.coinGlow, alpha: enemy.behavior === "attack" ? 0.72 : 0.44, width: 1 });
+    }
     if (enemy.health < enemy.maxHealth) {
       const w = 20;
       const x = Math.round(enemy.position.x + 1);
@@ -6942,7 +6970,7 @@ function enemyStateFromLocalSpawn(chunk: GeneratedChunk, spawn: GeneratedChunk["
   return {
     id: spawn.id,
     kind: spawn.kind,
-    position: { x: spawn.x * TILE_SIZE - 10, y: platformY - 24 },
+    position: { x: spawn.x * TILE_SIZE - 10, y: platformY - ENEMY_HEIGHT },
     velocity: { x: facing * 22, y: 0 },
     facing,
     health: maxHealth,
@@ -6953,6 +6981,10 @@ function enemyStateFromLocalSpawn(chunk: GeneratedChunk, spawn: GeneratedChunk["
     platformY,
     attackCooldown: 0.35,
     hurtCooldown: 0,
+    behavior: "patrol",
+    attackWindup: 0,
+    attackActive: 0,
+    attackHasHit: false,
   };
 }
 
@@ -7209,26 +7241,20 @@ function simulateLocalEnemies(dt: number, tSec: number): void {
   if (!localPlayer || selectedMode !== "local") return;
   syncLocalEnemies();
   for (const [id, entry] of [...enemyEntries.entries()]) {
-    const enemy = entry.state;
+    let enemy = entry.state;
     if (enemy.health <= 0) continue;
-    enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dt);
-    enemy.hurtCooldown = Math.max(0, enemy.hurtCooldown - dt);
-    enemy.position.x += enemy.velocity.x * dt;
-    if (enemy.position.x <= enemy.patrolMinX) {
-      enemy.position.x = enemy.patrolMinX;
-      enemy.velocity.x = Math.abs(enemy.velocity.x);
-      enemy.facing = 1;
-    } else if (enemy.position.x >= enemy.patrolMaxX) {
-      enemy.position.x = enemy.patrolMaxX;
-      enemy.velocity.x = -Math.abs(enemy.velocity.x);
-      enemy.facing = -1;
-    }
-    enemy.position.y = enemy.platformY - 24;
+    const stepped = stepEnemyBehavior(enemy, localPlayer, dt);
+    enemy = stepped.enemy;
+    entry.state = enemy;
 
     if (localPlayerKickHitsEnemy(localPlayer, enemy)) {
       const damage = Math.max(1, Math.round(localPlayer.damage));
       enemy.health = Math.max(0, enemy.health - damage);
       enemy.hurtCooldown = 0.28;
+      enemy.behavior = "recover";
+      enemy.attackWindup = 0;
+      enemy.attackActive = 0;
+      enemy.attackHasHit = false;
       enemy.velocity.x = localPlayer.facing * 22;
       localEnemyLastHitBy.set(enemy.id, localPlayerId ?? "local");
       damageFeedback(enemy.position.x + 11, enemy.position.y + 12, damage);
@@ -7248,14 +7274,13 @@ function simulateLocalEnemies(dt: number, tSec: number): void {
       }
     }
 
-    if (enemy.attackCooldown <= 0 && enemyTouchesLocalPlayer(enemy, localPlayer)) {
+    if (stepped.hitPlayer) {
       const dir = localPlayer.position.x + PLAYER_WIDTH / 2 < enemy.position.x + 11 ? -1 : 1;
       const beforeHealth = localPlayer.health;
       applyDamage(localPlayer, localEnemyDamageForPlayerLevel(localPlayer.level), dir * 125, -70, 0.16);
       if (localPlayer.health < beforeHealth) {
         damageFeedback(localPlayer.position.x + PLAYER_WIDTH / 2, localPlayer.position.y + PLAYER_HEIGHT * 0.45, beforeHealth - localPlayer.health);
       }
-      enemy.attackCooldown = 0.9;
     }
   }
   updateEnemyEntries([...enemyEntries.values()].map((entry) => entry.state), tSec);
@@ -7504,6 +7529,12 @@ const SKILL_RARITY_COLORS: Record<SkillCard["rarity"], { border: number; glow: n
   epic: { border: 0xd49cff, glow: 0xffda69, fill: 0x20142e },
 };
 
+const SKILL_RARITY_PIPS: Record<SkillCard["rarity"], number> = {
+  common: 1,
+  rare: 2,
+  epic: 3,
+};
+
 function skillCategoryColor(category: SkillCard["category"]): number {
   if (category === "attack") return PAL.hazardRed;
   if (category === "defense") return PAL.mossBright;
@@ -7515,6 +7546,30 @@ function skillCardShortDescription(card: SkillCard): string {
   return card.description.length > 38 ? `${card.description.slice(0, 35)}...` : card.description;
 }
 
+function skillCardTooltipText(card: SkillCard): string {
+  const nextStack = Math.min(card.maxStacks, card.currentStacks + 1);
+  return `${card.description} Stack ${card.currentStacks} to ${nextStack}/${card.maxStacks}. ${card.rarity.toUpperCase()} ${card.category.toUpperCase()}.`;
+}
+
+interface SkillCardView {
+  root: Container;
+  bg: Graphics;
+  icon: Graphics;
+  stateGfx: Graphics;
+  texts: Text[];
+  card: SkillCard;
+  index: number;
+  hover: boolean;
+  focus: boolean;
+  pressed: boolean;
+  selected: boolean;
+  baseX: number;
+  baseY: number;
+  width: number;
+  height: number;
+  selectedAtMs: number;
+}
+
 class SkillCardModal {
   readonly container = new Container();
   private readonly shade = new Graphics();
@@ -7523,17 +7578,25 @@ class SkillCardModal {
     text: "LEVEL UP",
     style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 22, fontWeight: "900", stroke: { color: PAL.uiInk, width: 3 } },
   });
-  private readonly cards: Array<{ root: Container; bg: Graphics; icon: Graphics; texts: Text[]; card: SkillCard; hover: boolean; focus: boolean; pressed: boolean; selected: boolean; baseY: number }> = [];
+  private readonly tooltipBg = new Graphics();
+  private readonly tooltipText = new Text({
+    text: "",
+    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 10, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 }, wordWrap: true, wordWrapWidth: 260, lineHeight: 13 },
+  });
+  private readonly cards: SkillCardView[] = [];
   private offer: SkillCardOffer | null = null;
   private onSelect: ((offer: SkillCardOffer, card: SkillCard) => void) | null = null;
   private focusedIndex = 0;
   private selectedCardId: string | null = null;
   private closeAtMs = 0;
+  private screenWidth = 1;
+  private screenHeight = 1;
 
   constructor() {
     this.container.visible = false;
+    this.container.eventMode = "passive";
     this.container.zIndex = 10_000;
-    this.container.addChild(this.shade, this.panel, this.title);
+    this.container.addChild(this.shade, this.panel, this.title, this.tooltipBg, this.tooltipText);
   }
 
   get active(): boolean {
@@ -7548,8 +7611,9 @@ class SkillCardModal {
     this.selectedCardId = null;
     this.closeAtMs = 0;
     this.container.visible = true;
-    for (const card of offer.cards) this.cards.push(this.createCard(card));
+    offer.cards.forEach((card, index) => this.cards.push(this.createCard(card, index)));
     for (const item of this.cards) this.container.addChild(item.root);
+    this.container.addChild(this.tooltipBg, this.tooltipText);
     this.layout(pixi.screen.width, pixi.screen.height);
     this.redrawCards();
   }
@@ -7566,16 +7630,10 @@ class SkillCardModal {
   handleKeyDown(e: KeyboardEvent): boolean {
     if (!this.offer || this.selectedCardId) return false;
     if (e.code === "ArrowLeft" || e.code === "KeyA") {
-      this.focusedIndex = (this.focusedIndex + this.cards.length - 1) % this.cards.length;
-      this.redrawCards();
-      e.preventDefault();
-      return true;
+      return this.moveFocus(-1, e);
     }
     if (e.code === "ArrowRight" || e.code === "KeyD") {
-      this.focusedIndex = (this.focusedIndex + 1) % this.cards.length;
-      this.redrawCards();
-      e.preventDefault();
-      return true;
+      return this.moveFocus(1, e);
     }
     if (e.code === "Digit1" || e.code === "Numpad1") return this.pickIndex(0, e);
     if (e.code === "Digit2" || e.code === "Numpad2") return this.pickIndex(1, e);
@@ -7593,14 +7651,21 @@ class SkillCardModal {
     }
     for (let i = 0; i < this.cards.length; i += 1) {
       const item = this.cards[i]!;
-      const pulse = item.selected ? 1 + Math.sin(nowMs * 0.035) * 0.04 : item.pressed ? 0.96 : item.hover || item.focus ? 1.035 : 1;
+      const selectedProgress = item.selected ? Math.min(1, Math.max(0, (nowMs - item.selectedAtMs) / 260)) : 0;
+      const selectedPulse = item.selected ? Math.sin(selectedProgress * Math.PI) * 0.11 + Math.sin(nowMs * 0.035) * 0.025 : 0;
+      const pulse = item.selected ? 1.045 + selectedPulse : item.pressed ? 0.96 : item.hover || item.focus ? 1.035 : 1;
+      const bob = item.focus && !item.selected ? Math.sin(nowMs * 0.008 + i) * 2 : 0;
       item.root.scale.set(pulse);
-      item.root.y = Math.round(item.baseY + (item.focus && !item.selected ? Math.sin(nowMs * 0.008 + i) * 2 : 0));
+      item.root.x = Math.round(item.baseX + item.width * (1 - pulse) / 2);
+      item.root.y = Math.round(item.baseY + item.height * (1 - pulse) / 2 + bob);
+      item.root.alpha = this.selectedCardId && !item.selected ? 0.48 : item.hover || item.focus || item.selected ? 1 : 0.94;
     }
   }
 
   layout(screenWidth: number, screenHeight: number): void {
     if (!this.container.visible) return;
+    this.screenWidth = screenWidth;
+    this.screenHeight = screenHeight;
     this.shade.clear();
     this.shade.rect(0, 0, screenWidth, screenHeight).fill({ color: 0x020403, alpha: selectedMode === "local" ? 0.72 : 0.54 });
     const panelW = Math.min(screenWidth - 22, 650);
@@ -7623,10 +7688,14 @@ class SkillCardModal {
       const item = this.cards[i]!;
       item.root.x = startX + i * (cardW + gap);
       item.root.y = y;
+      item.baseX = item.root.x;
       item.baseY = y;
+      item.width = cardW;
+      item.height = cardH;
       item.root.hitArea = new Rectangle(0, 0, cardW, cardH);
       this.drawCard(item, cardW, cardH);
     }
+    this.drawTooltip();
   }
 
   private pickIndex(index: number, e?: KeyboardEvent): boolean {
@@ -7634,6 +7703,8 @@ class SkillCardModal {
     if (!this.offer || !item || this.selectedCardId) return false;
     e?.preventDefault();
     item.selected = true;
+    item.pressed = false;
+    item.selectedAtMs = performance.now();
     this.selectedCardId = item.card.id;
     this.redrawCards();
     this.onSelect?.(this.offer, item.card);
@@ -7641,24 +7712,38 @@ class SkillCardModal {
     return true;
   }
 
-  private createCard(card: SkillCard) {
+  private moveFocus(delta: -1 | 1, e?: KeyboardEvent): boolean {
+    if (!this.offer || this.selectedCardId || this.cards.length === 0) return false;
+    this.focusedIndex = (this.focusedIndex + this.cards.length + delta) % this.cards.length;
+    this.redrawCards();
+    e?.preventDefault();
+    return true;
+  }
+
+  private createCard(card: SkillCard, index: number): SkillCardView {
     const root = new Container();
     const bg = new Graphics();
     const icon = new Graphics();
+    const stateGfx = new Graphics();
     const texts = [
       new Text({ text: card.icon, style: { fill: 0xffffff, fontFamily: "monospace", fontSize: 10, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
       new Text({ text: card.name, style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 13, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 }, wordWrap: true, wordWrapWidth: 140 } }),
       new Text({ text: skillCardShortDescription(card), style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: 9, fontWeight: "700", stroke: { color: PAL.uiInk, width: 2 }, wordWrap: true, wordWrapWidth: 140, lineHeight: 12 } }),
-      new Text({ text: `${card.category.toUpperCase()}  ${card.rarity.toUpperCase()}`, style: { fill: skillCategoryColor(card.category), fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
-      new Text({ text: `STACK ${card.currentStacks}/${card.maxStacks}`, style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
+      new Text({ text: `${card.rarity.toUpperCase()} R${SKILL_RARITY_PIPS[card.rarity]}  ${card.category.toUpperCase()}`, style: { fill: skillCategoryColor(card.category), fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
+      new Text({ text: `STACK ${card.currentStacks} > ${Math.min(card.maxStacks, card.currentStacks + 1)}/${card.maxStacks}`, style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
+      new Text({ text: `${index + 1}`, style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
     ];
-    root.addChild(bg, icon, ...texts);
+    stateGfx.zIndex = 20;
+    root.sortableChildren = true;
+    root.addChild(bg, icon, ...texts, stateGfx);
     root.eventMode = "static";
     root.cursor = "pointer";
-    const item = { root, bg, icon, texts, card, hover: false, focus: false, pressed: false, selected: false, baseY: 0 };
+    root.label = `skill-card-${card.id}`;
+    const item: SkillCardView = { root, bg, icon, stateGfx, texts, card, index, hover: false, focus: false, pressed: false, selected: false, baseX: 0, baseY: 0, width: 178, height: 226, selectedAtMs: 0 };
     root.on("pointerover", () => {
+      if (this.selectedCardId) return;
       item.hover = true;
-      this.focusedIndex = this.cards.indexOf(item);
+      this.focusedIndex = item.index;
       this.redrawCards();
     });
     root.on("pointerout", () => {
@@ -7667,7 +7752,12 @@ class SkillCardModal {
       this.redrawCards();
     });
     root.on("pointerdown", () => {
+      if (this.selectedCardId) return;
       item.pressed = true;
+      this.redrawCards();
+    });
+    root.on("pointerup", () => {
+      item.pressed = false;
       this.redrawCards();
     });
     root.on("pointerupoutside", () => {
@@ -7676,7 +7766,7 @@ class SkillCardModal {
     });
     root.on("pointertap", (event) => {
       event.stopPropagation();
-      this.pickIndex(this.cards.indexOf(item));
+      this.pickIndex(item.index);
     });
     return item;
   }
@@ -7689,9 +7779,38 @@ class SkillCardModal {
       const height = Math.max(1, item.root.hitArea instanceof Rectangle ? item.root.hitArea.height : 226);
       this.drawCard(item, width, height);
     }
+    this.drawTooltip();
   }
 
-  private drawCard(item: SkillCardModal["cards"][number], w: number, h: number): void {
+  private drawTooltip(): void {
+    const item = this.cards.find((card) => card.hover) ?? this.cards[this.focusedIndex];
+    if (!this.offer || !item || this.selectedCardId) {
+      this.tooltipBg.visible = false;
+      this.tooltipText.visible = false;
+      return;
+    }
+    const rarity = SKILL_RARITY_COLORS[item.card.rarity];
+    const tooltipW = Math.min(Math.max(238, item.width + 42), this.screenWidth - 24);
+    const tooltipH = 42;
+    const x = Math.max(12, Math.min(this.screenWidth - tooltipW - 12, item.baseX + item.width / 2 - tooltipW / 2));
+    const belowY = item.baseY + item.height + 8;
+    const y = belowY + tooltipH <= this.screenHeight - 8 ? belowY : Math.max(8, item.baseY - tooltipH - 8);
+    this.tooltipBg.visible = true;
+    this.tooltipText.visible = true;
+    this.tooltipBg.clear();
+    this.tooltipBg.rect(x + 3, y + 4, tooltipW, tooltipH).fill({ color: 0x000000, alpha: 0.52 });
+    this.tooltipBg.rect(x, y, tooltipW, tooltipH).fill({ color: 0x101c14, alpha: 0.97 });
+    this.tooltipBg.rect(x, y, tooltipW, 3).fill(rarity.border);
+    this.tooltipBg.rect(x, y + tooltipH - 3, tooltipW, 3).fill(rarity.border);
+    this.tooltipBg.rect(x, y, 3, tooltipH).fill(rarity.border);
+    this.tooltipBg.rect(x + tooltipW - 3, y, 3, tooltipH).fill(rarity.border);
+    this.tooltipText.text = skillCardTooltipText(item.card);
+    this.tooltipText.style.wordWrapWidth = tooltipW - 18;
+    this.tooltipText.x = x + 9;
+    this.tooltipText.y = y + 8;
+  }
+
+  private drawCard(item: SkillCardView, w: number, h: number): void {
     const rarity = SKILL_RARITY_COLORS[item.card.rarity];
     const active = item.hover || item.focus || item.selected;
     item.bg.clear();
@@ -7702,9 +7821,21 @@ class SkillCardModal {
     item.bg.rect(0, h - 4, w, 4).fill(rarity.border);
     item.bg.rect(0, 0, 4, h).fill(rarity.border);
     item.bg.rect(w - 4, 0, 4, h).fill(rarity.border);
+    for (let i = 0; i < SKILL_RARITY_PIPS[item.card.rarity]; i += 1) {
+      item.bg.rect(w - 18 - i * 10, 12, 6, 10).fill(i === 0 ? rarity.glow : rarity.border);
+    }
     if (active) {
       item.bg.rect(6, 6, w - 12, h - 12).stroke({ color: item.selected ? rarity.glow : PAL.portalGlow, alpha: item.selected ? 0.95 : 0.72, width: item.selected ? 3 : 2 });
       item.bg.rect(10, 10, w - 20, h - 20).stroke({ color: rarity.glow, alpha: 0.28, width: 1 });
+    }
+    item.stateGfx.clear();
+    if (item.selected) {
+      item.stateGfx.rect(w - 31, h - 31, 20, 20).fill(PAL.uiInk);
+      item.stateGfx.rect(w - 27, h - 27, 12, 12).fill(rarity.glow);
+      item.stateGfx.rect(w - 24, h - 22, 3, 5).fill(PAL.uiInk);
+      item.stateGfx.rect(w - 21, h - 19, 7, 3).fill(PAL.uiInk);
+    } else if (item.pressed) {
+      item.stateGfx.rect(7, 7, w - 14, h - 14).fill({ color: 0x000000, alpha: 0.2 });
     }
     item.icon.clear();
     const iconColor = skillCategoryColor(item.card.category);
@@ -7712,7 +7843,7 @@ class SkillCardModal {
     item.icon.circle(30, 30, 14).stroke({ color: iconColor, alpha: 0.95, width: 2 });
     item.icon.rect(22, 28, 16, 4).fill(iconColor);
     item.icon.rect(28, 22, 4, 16).fill(iconColor);
-    const [iconText, name, desc, meta, stack] = item.texts;
+    const [iconText, name, desc, meta, stack, hotkey] = item.texts;
     iconText.x = 15;
     iconText.y = 26;
     name.x = 14;
@@ -7725,6 +7856,8 @@ class SkillCardModal {
     meta.y = h - 54;
     stack.x = 14;
     stack.y = h - 30;
+    hotkey.x = w - 54;
+    hotkey.y = 13;
   }
 
   private destroyCards(): void {
