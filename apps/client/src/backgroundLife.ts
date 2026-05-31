@@ -92,6 +92,9 @@ export class BackgroundLifeSystem {
   private adaptiveScale = 1;
   private lowFpsMs = 0;
   private stableFpsMs = 0;
+  private cameraAnchored = false;
+  private lastCameraX = 0;
+  private lastCameraY = 0;
   private birdCount = 0;
   private monsterCount = 0;
   private planeCount = 0;
@@ -103,7 +106,7 @@ export class BackgroundLifeSystem {
     this.layer = layer;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.layer.sortableChildren = false;
-    this.layer.cullable = true;
+    this.layer.cullable = false;
     this.createTextures();
   }
 
@@ -115,12 +118,22 @@ export class BackgroundLifeSystem {
     if (!this.config.enabled) {
       this.releaseAll();
       this.layer.visible = false;
+      this.cameraAnchored = false;
       return;
     }
 
     this.layer.visible = true;
-    this.layer.x = Math.round(-cameraX * this.config.parallaxFactor);
-    this.layer.y = Math.round(-cameraY * this.config.parallaxFactor);
+    this.layer.position.set(0, 0);
+    let parallaxX = 0;
+    let parallaxY = 0;
+    if (this.cameraAnchored) {
+      parallaxX = -(cameraX - this.lastCameraX) * this.config.parallaxFactor;
+      parallaxY = -(cameraY - this.lastCameraY) * this.config.parallaxFactor;
+    } else {
+      this.cameraAnchored = true;
+    }
+    this.lastCameraX = cameraX;
+    this.lastCameraY = cameraY;
 
     this.updateAdaptiveScale(deltaMS);
     this.updateCurrentCaps();
@@ -141,7 +154,8 @@ export class BackgroundLifeSystem {
     for (let i = this.active.length - 1; i >= 0; i--) {
       const entity = this.active[i]!;
       entity.lifeMs += deltaMS;
-      entity.x += entity.speedX * dt;
+      entity.x += entity.speedX * dt + parallaxX;
+      entity.baseY += parallaxY;
       entity.phase += entity.bobSpeed * dt;
 
       const bobY = Math.sin(entity.phase) * entity.bobAmplitude;
@@ -150,8 +164,8 @@ export class BackgroundLifeSystem {
 
       this.updateTextureFrame(entity);
 
-      const visualX = entity.sprite.x + this.layer.x;
-      const visualY = entity.sprite.y + this.layer.y;
+      const visualX = entity.sprite.x;
+      const visualY = entity.sprite.y;
       const offscreen =
         visualX < -CULL_MARGIN ||
         visualX > viewportWidth + CULL_MARGIN ||
@@ -164,6 +178,10 @@ export class BackgroundLifeSystem {
       }
 
       if (offscreen) this.releaseEntity(i);
+    }
+
+    if (this.active.length === 0 && viewportWidth > 0 && viewportHeight > 0) {
+      this.seedInitialView(this.caps, viewportWidth, viewportHeight);
     }
   }
 
@@ -207,7 +225,7 @@ export class BackgroundLifeSystem {
     sprite.anchor.set(0.5);
     sprite.roundPixels = true;
     sprite.eventMode = "none";
-    sprite.cullable = true;
+    sprite.cullable = false;
     return {
       sprite,
       kind: "bird",
@@ -366,8 +384,6 @@ export class BackgroundLifeSystem {
     inView: boolean,
   ): void {
     const direction = Math.random() < 0.5 ? -1 : 1;
-    const layerX = this.layer.x;
-    const layerY = this.layer.y;
     const spawnX = inView
       ? Math.random() * viewportWidth
       : direction > 0
@@ -379,8 +395,8 @@ export class BackgroundLifeSystem {
 
     entity.kind = kind;
     entity.variant = 0;
-    entity.x = Math.round(spawnX - layerX);
-    entity.baseY = Math.round(altitude - layerY);
+    entity.x = Math.round(spawnX);
+    entity.baseY = Math.round(altitude);
     entity.speedX = direction * (speedBase + Math.random() * speedVariance);
     entity.bobAmplitude = kind === "bird" ? 2 + Math.random() * 3 : 4 + Math.random() * 6;
     entity.bobSpeed = kind === "plane" ? 0.8 + Math.random() * 0.7 : 1.4 + Math.random() * 1.2;
@@ -395,8 +411,8 @@ export class BackgroundLifeSystem {
     if (this.smokeCount >= caps.smoke) return;
     if (entity.variant !== 0) return;
     if (entity.lifeMs - entity.lastSmokeMs < 520) return;
-    const visualX = entity.sprite.x + this.layer.x;
-    const visualY = entity.sprite.y + this.layer.y;
+    const visualX = entity.sprite.x;
+    const visualY = entity.sprite.y;
     if (visualX < 0 || visualX > viewportWidth || visualY < 0 || visualY > viewportHeight) return;
 
     entity.lastSmokeMs = entity.lifeMs;
