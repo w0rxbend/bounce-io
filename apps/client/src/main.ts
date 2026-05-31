@@ -40,6 +40,7 @@ import {
 import { isServerMessage } from "@skybound/shared";
 import type { CollectibleKind, CollectibleState, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
+import { MenuSplashBackground } from "./MenuSplashBackground";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -1033,6 +1034,14 @@ function characterAnimationTexture(characterId: CharacterId, name: CharacterAnim
   return animation.textures[frame] ?? null;
 }
 
+function characterAnimationTextureAtProgress(characterId: CharacterId, name: CharacterAnimationName, progress: number): Texture | null {
+  const rig = characterRigs[characterId] ?? characterRigs.character1;
+  const animation = rig?.animations[name];
+  if (!animation || animation.textures.length === 0) return null;
+  const frame = Math.min(animation.textures.length - 1, Math.floor(clamp01(progress) * animation.textures.length));
+  return animation.textures[frame] ?? null;
+}
+
 function characterForRemote(colorIndex: number): CharacterId {
   return CHARACTER_IDS[colorIndex % CHARACTER_IDS.length]!;
 }
@@ -1040,12 +1049,20 @@ function characterForRemote(colorIndex: number): CharacterId {
 function playerAnimationTexture(s: PlayerState, elapsed: number, characterId: CharacterId = "character1"): Texture | null {
   if (!hasCharacterAnimationAssets(characterId)) return null;
   if (s.kickPhase === "active") {
-    return characterAnimationTexture(characterId, "hit", elapsed) ??
-      characterAnimationTexture(characterId, "shoot_fire", elapsed) ??
-      characterAnimationTexture(characterId, "kick_push", elapsed);
+    const hitProgress = KICK_ACTIVE_SECONDS > 0 ? s.kickTimer / KICK_ACTIVE_SECONDS : 1;
+    return characterAnimationTextureAtProgress(characterId, "hit", hitProgress) ??
+      characterAnimationTextureAtProgress(characterId, "shoot_fire", hitProgress) ??
+      characterAnimationTextureAtProgress(characterId, "kick_push", hitProgress);
   }
-  if (s.kickPhase === "windup") return characterAnimationTexture(characterId, "punch", elapsed) ?? characterAnimationTexture(characterId, "kick_push", elapsed);
-  if (s.kickPhase !== "idle") return characterAnimationTexture(characterId, "kick_push", elapsed);
+  if (s.kickPhase === "windup") {
+    const windupProgress = KICK_WINDUP_SECONDS > 0 ? s.kickTimer / KICK_WINDUP_SECONDS : 1;
+    return characterAnimationTextureAtProgress(characterId, "punch", windupProgress) ??
+      characterAnimationTextureAtProgress(characterId, "kick_push", windupProgress);
+  }
+  if (s.kickPhase !== "idle") {
+    const recoveryProgress = KICK_RECOVERY_SECONDS > 0 ? s.kickTimer / KICK_RECOVERY_SECONDS : 1;
+    return characterAnimationTextureAtProgress(characterId, "kick_push", recoveryProgress);
+  }
   if (s.invulnerable > 0) return characterAnimationTexture(characterId, "taking_damage", elapsed) ?? characterAnimationTexture(characterId, "hit_death_special", elapsed) ?? characterAnimationTexture(characterId, "idle", elapsed);
   if (!s.grounded) return characterAnimationTexture(characterId, "jump_fall", elapsed);
 
@@ -2438,7 +2455,9 @@ const effectParticleLayer = new ParticleContainer<PixiParticle>({
 const worldDebugLayer = new Container();
 const worldDebugGfx = new Graphics();
 const hudLayer    = new Container({ isRenderGroup: true });
+const menuSplashLayer = new Container({ isRenderGroup: true });
 const menuLayer   = new Container({ isRenderGroup: true });
+menuSplashLayer.eventMode = "none";
 menuLayer.eventMode = "passive";
 
 for (const layer of [
@@ -2457,6 +2476,7 @@ for (const layer of [
   effectParticleLayer,
   worldDebugLayer,
   hudLayer,
+  menuSplashLayer,
 ]) {
   disableDisplayEvents(layer);
 }
@@ -2465,7 +2485,7 @@ effectLayer.addChild(effectParticleLayer);
 worldDebugLayer.addChild(worldDebugGfx);
 worldDebugLayer.visible = false;
 worldLayer.addChild(backDecorationLayer, midMountainCrumbleParticleLayer, chunkLayer, decorationLayer, portalLayer, relicLayer, enemyLayer, remoteLayer, localLayer, effectLayer, worldDebugLayer);
-pixi.stage.addChild(skyLayer, worldLayer, hudLayer, menuLayer);
+pixi.stage.addChild(skyLayer, worldLayer, menuSplashLayer, hudLayer, menuLayer);
 
 const screenFlashGfx = new Graphics();
 hudLayer.addChild(screenFlashGfx);
@@ -2648,6 +2668,7 @@ let focusedMenuIndex = -1;
 let pendingFocusId: string | null = null;
 let menuActivationLockedUntil = 0;
 let nicknameCaretGfx: Graphics | null = null;
+let menuSplashBackground: MenuSplashBackground<CharacterId> | null = null;
 
 function normalizeCharacterId(value: unknown): CharacterId {
   return CHARACTER_IDS.includes(value as CharacterId) ? value as CharacterId : "character1";
@@ -2663,6 +2684,35 @@ function destroyMenu(): void {
   console.info("[BounceIO] Menu destroyed");
 }
 
+function ensureMenuSplashBackground(): void {
+  if (menuSplashBackground?.destroyed) menuSplashBackground = null;
+  if (!menuSplashBackground) {
+    menuSplashBackground = new MenuSplashBackground<CharacterId>({
+      skinIds: CHARACTER_IDS,
+      selectedSkinId: currentSkinId,
+      makeActorSprite: makeCharacterSprite,
+      getActorTexture: (skinId, state, elapsed) => {
+        if (state === "hit") return characterAnimationTexture(skinId, "hit", elapsed) ?? characterAnimationTexture(skinId, "punch", elapsed);
+        if (state === "jump") return characterAnimationTexture(skinId, "jump_fall", elapsed);
+        if (state === "run") return characterAnimationTexture(skinId, "run", elapsed);
+        return characterAnimationTexture(skinId, "idle", elapsed);
+      },
+    });
+    menuSplashLayer.addChild(menuSplashBackground);
+  }
+  menuSplashLayer.visible = true;
+  menuSplashBackground.layout(pixi.screen.width, pixi.screen.height);
+  menuSplashBackground.setSelectedSkinId(currentSkinId());
+}
+
+function destroyMenuSplashBackground(): void {
+  if (!menuSplashBackground) return;
+  menuSplashBackground.destroy({ children: true });
+  menuSplashBackground = null;
+  menuSplashLayer.removeChildren();
+  menuSplashLayer.visible = false;
+}
+
 function setAppState(next: AppState): void {
   appState = next;
   menuDirty = true;
@@ -2670,13 +2720,16 @@ function setAppState(next: AppState): void {
   nicknameInput.style.display = "none";
   if (next !== "game" && !menuLayer.parent) pixi.stage.addChild(menuLayer);
   menuLayer.visible = next !== "game";
+  menuSplashLayer.visible = next !== "game";
   skyLayer.visible = next === "game";
   worldLayer.visible = next === "game";
   hudLayer.visible = next === "game";
   if (next !== "game") {
+    ensureMenuSplashBackground();
     destroyGameHud();
   }
   if (next === "game") {
+    destroyMenuSplashBackground();
     destroyMenu();
   }
 }
@@ -2684,6 +2737,7 @@ function setAppState(next: AppState): void {
 function setSelectedSkin(skinId: CharacterId): void {
   selectedSkinId = skinId;
   localStorage.setItem("bounceSkinId", skinId);
+  menuSplashBackground?.setSelectedSkinId(skinId);
   menuDirty = true;
   console.info("[BounceIO] Skin selected", selectedSkinId);
 }
@@ -7910,23 +7964,11 @@ function drawSmallPlayIcon(g: Graphics, x: number, y: number, color: number): vo
 }
 
 function drawMenuBackdrop(g: Graphics, w: number, h: number): void {
-  g.rect(0, 0, w, h).fill(0x0b1420);
-  g.rect(0, 0, w, Math.round(h * 0.45)).fill({ color: 0x4f7fa6, alpha: 0.85 });
-  g.rect(0, Math.round(h * 0.45), w, h).fill({ color: 0x142319, alpha: 0.94 });
-  for (let i = 0; i < 16; i++) {
-    const x = Math.round((i * 173) % Math.max(1, w));
-    const y = Math.round(h * 0.16 + ((i * 67) % Math.max(1, h * 0.25)));
-    drawBgIsland(g, x - 28, y, 56 + (i % 5) * 12, 8 + (i % 3) * 3, i % 2 === 0 ? 0x304068 : 0x28385a);
-  }
-  for (let i = 0; i < 24; i++) {
-    const x = Math.round((i * 97) % Math.max(1, w));
-    const y = Math.round(30 + ((i * 43) % Math.max(1, h * 0.35)));
-    drawPixelCloud(g, x, y, 36 + (i % 4) * 18, PAL.cloudBright, PAL.cloudShadow, 0.16 + (i % 3) * 0.05);
-  }
-  drawMenuIsland(g, Math.round(w * 0.5 - 190), Math.round(h * 0.56), 380, 96);
-  g.rect(Math.round(w * 0.5 - 18), Math.round(h * 0.56 - 68), 36, 68).fill({ color: 0x1b3325, alpha: 0.72 });
-  g.rect(Math.round(w * 0.5 - 50), Math.round(h * 0.56 - 72), 100, 16).fill({ color: MENU_COLORS.moss, alpha: 0.82 });
-  g.rect(Math.round(w * 0.5 - 36), Math.round(h * 0.56 - 82), 72, 12).fill({ color: MENU_COLORS.grass, alpha: 0.8 });
+  g.rect(0, 0, w, h).fill({ color: 0x06100a, alpha: 0.18 });
+  g.rect(0, 0, w, Math.round(h * 0.34)).fill({ color: 0x4f7fa6, alpha: 0.08 });
+  g.rect(0, Math.round(h * 0.55), w, Math.ceil(h * 0.45)).fill({ color: 0x06100a, alpha: 0.24 });
+  g.rect(0, 0, w, 12).fill({ color: 0x020403, alpha: 0.28 });
+  g.rect(0, h - 18, w, 18).fill({ color: 0x020403, alpha: 0.34 });
 }
 
 function clearMenuFocusables(): void {
@@ -8574,8 +8616,9 @@ function renderMenu(): void {
   syncNicknameInput();
 }
 
-function updateMenu(tSec: number): void {
+function updateMenu(tSec: number, dtMs: number): void {
   renderMenu();
+  menuSplashBackground?.update(dtMs, tSec);
   if (connectingDotsText) connectingDotsText.text = ".".repeat((Math.floor(tSec * 2) % 3) + 1);
   updateMenuDecorations(tSec);
 }
@@ -9423,6 +9466,7 @@ nicknameInput.addEventListener("keydown", (e) => {
 });
 window.addEventListener("resize", () => {
   menuDirty = true;
+  menuSplashBackground?.layout(pixi.screen.width, pixi.screen.height);
   lastHudLayoutKey = "";
   playerStatsHud?.reset();
   if (appState === "game") cameraSnap = true;
@@ -9443,7 +9487,7 @@ pixi.ticker.add((ticker) => {
   elapsedMs += dtMs;
   const tSec  = elapsedMs / 1000;
   if (appState !== "game") {
-    updateMenu(tSec);
+    updateMenu(tSec, dtMs);
     currentFrameUpdateEndMs = performance.now();
     return;
   }

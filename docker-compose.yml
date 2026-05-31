@@ -1,6 +1,6 @@
 services:
   backend:
-    image: bounce-io-backend:latest
+    image: worxbend/bounce-io-backend:latest
     build:
       context: .
       dockerfile: apps/server-go/Dockerfile
@@ -14,7 +14,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: bounce-io-frontend:latest
+    image: worxbend/bounce-io-frontend:latest
     build:
       context: .
       dockerfile: apps/client/Dockerfile

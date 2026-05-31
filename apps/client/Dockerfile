@@ -5,7 +5,6 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY apps/client/package.json ./apps/client/package.json
-COPY apps/server/package.json ./apps/server/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
 RUN npm ci
