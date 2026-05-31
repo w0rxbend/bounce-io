@@ -8395,7 +8395,13 @@ function updateInspectionOverlay(): void {
   const stats = collectInspectionStats();
   drawInspectionVisualOverlay(stats);
   inspectionHudGfx.clear();
-  drawHudPanel(inspectionHudGfx, 6, 6, 430, 306);
+  const inspectionPanelW = Math.min(430, Math.max(300, pixi.screen.width - 12));
+  const inspectionPanelH = Math.min(306, Math.max(128, pixi.screen.height - 12));
+  const inspectionPanelX = 6;
+  const inspectionPanelY = Math.max(6, pixi.screen.height - inspectionPanelH - 6);
+  drawHudPanel(inspectionHudGfx, inspectionPanelX, inspectionPanelY, inspectionPanelW, inspectionPanelH);
+  inspectionText.x = inspectionPanelX + 6;
+  inspectionText.y = inspectionPanelY + 6;
 
   const serverRoom = activeServerRoomDiagnostics();
   const serverClient = activeServerClientDiagnostics(serverRoom);
