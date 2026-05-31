@@ -28,6 +28,10 @@
   image-rendering: pixelated;
 }
 
+:root.spectator-mode {
+  background: transparent;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -36,6 +40,10 @@ body {
   overflow: hidden;
   background:
     linear-gradient(180deg, #8fc4df 0%, #4d7fa3 34%, #19314a 62%, var(--night) 100%);
+}
+
+body.spectator-mode {
+  background: transparent;
 }
 
 button, input { font: inherit; }
@@ -47,6 +55,10 @@ input:focus-visible {
 }
 
 #app { height: 100vh; }
+
+#app.spectator-mode {
+  background: transparent;
+}
 
 /* ── Shell layout ── */
 
@@ -60,12 +72,24 @@ input:focus-visible {
     var(--night);
 }
 
+.spectator-mode .shell {
+  background: transparent;
+}
+
 .game-wrap {
   position: relative;
   overflow: hidden;
   height: 100vh;
   background: #18305a;
   user-select: none;
+}
+
+.game-wrap.spectator-mode {
+  background: transparent;
+}
+
+.game-wrap.spectator-error-mode {
+  display: none;
 }
 
 .nickname-input {
@@ -92,6 +116,24 @@ canvas {
   touch-action: none;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+.spectator-mode canvas {
+  background: transparent;
+}
+
+.spectator-error {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 20;
+  max-width: min(440px, calc(100vw - 32px));
+  color: #efe8c9;
+  background: rgba(7, 16, 20, 0.72);
+  border: 2px solid rgba(91, 212, 221, 0.8);
+  padding: 10px 12px;
+  font: 900 13px "Courier New", "Lucida Console", monospace;
+  letter-spacing: 0;
 }
 
 /* ── Legacy sidebar styles retained for old snapshots; gameplay no longer mounts it. ── */

@@ -52,6 +52,8 @@ export type ClientMessage =
       name: string;
       skinId?: string;
       token?: SessionToken;
+      binarySnapshots?: boolean;
+      spectator?: boolean;
     }
   | {
       type: "input";
@@ -100,6 +102,8 @@ export type ServerMessage =
       matchPhase: RoomPhase;
       seed: number;
       name: string;
+      roomId?: string;
+      spectator?: boolean;
     }
   | {
       type: "resumed";

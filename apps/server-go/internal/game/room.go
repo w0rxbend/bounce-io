@@ -129,6 +129,7 @@ type session struct {
 	name                string
 	skinID              string
 	player              PlayerState
+	spectator           bool
 	connected           bool
 	disconnectedAt      time.Time
 	inputQueue          []PlayerInput
@@ -154,6 +155,7 @@ type joinCommand struct {
 	skinID          string
 	token           string
 	binarySnapshots bool
+	spectator       bool
 	reply           chan joinReply
 }
 
@@ -177,18 +179,40 @@ func (cmd joinCommand) apply(s *roomState) {
 					existing.binaryVisible = map[uint32]struct{}{}
 				}
 				cmd.client.SetSession(s.room, existing.playerID, existing.token, existing.name)
-				_ = cmd.client.EnqueueJSON(map[string]any{
-					"type":        "resumed",
-					"playerId":    existing.playerID,
-					"serverTime":  unixMillis(now),
-					"matchPhase":  s.phase,
-					"playerState": existing.player,
-				})
-				if existing.currentSkillOffer != nil {
-					_ = cmd.client.EnqueueJSON(SkillCardOfferMessage{Type: "skill_card_offer", Offer: *existing.currentSkillOffer})
+				if existing.spectator {
+					_ = cmd.client.EnqueueJSON(WelcomeMessage{
+						Type:         "welcome",
+						PlayerID:     existing.playerID,
+						SessionToken: existing.token,
+						ServerTime:   unixMillis(now),
+						TickRate:     s.room.cfg.TickRate,
+						MatchPhase:   s.phase,
+						Seed:         s.room.seed,
+						Name:         existing.name,
+						RoomID:       s.room.cfg.ID,
+						Spectator:    true,
+					})
+					_ = cmd.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, 0)})
+					for _, other := range s.sessions {
+						if other.playerID == existing.playerID || !other.connected || other.spectator {
+							continue
+						}
+						_ = cmd.client.EnqueueJSON(PlayerJoinedMessage{Type: "playerJoined", Player: other.player, Name: other.name})
+					}
+				} else {
+					_ = cmd.client.EnqueueJSON(map[string]any{
+						"type":        "resumed",
+						"playerId":    existing.playerID,
+						"serverTime":  unixMillis(now),
+						"matchPhase":  s.phase,
+						"playerState": existing.player,
+					})
+					if existing.currentSkillOffer != nil {
+						_ = cmd.client.EnqueueJSON(SkillCardOfferMessage{Type: "skill_card_offer", Offer: *existing.currentSkillOffer})
+					}
+					s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RECONNECTED", "playerId": existing.playerID})
 				}
 				_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
-				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RECONNECTED", "playerId": existing.playerID})
 				cmd.reply <- joinReply{playerID: existing.playerID, token: existing.token}
 				return
 			}
@@ -199,7 +223,7 @@ func (cmd joinCommand) apply(s *roomState) {
 		}
 	}
 
-	if activeSessions(s) >= s.room.cfg.MaxPlayers {
+	if !cmd.spectator && activeSessions(s) >= s.room.cfg.MaxPlayers {
 		cmd.reply <- joinReply{err: "ROOM_FULL"}
 		return
 	}
@@ -208,9 +232,15 @@ func (cmd joinCommand) apply(s *roomState) {
 	token := newID()
 	name := sanitizeName(cmd.name)
 	skinID := sanitizeSkinID(cmd.skinID)
-	spawnX, spawnY := SpawnPosition(s.room.seed, 0)
-	player := CreatePlayerState(playerID, spawnX, spawnY)
-	player.SkinID = skinID
+	if cmd.spectator {
+		name = "Spectator"
+	}
+	player := PlayerState{}
+	if !cmd.spectator {
+		spawnX, spawnY := SpawnPosition(s.room.seed, 0)
+		player = CreatePlayerState(playerID, spawnX, spawnY)
+		player.SkinID = skinID
+	}
 	sess := &session{
 		client:           cmd.client,
 		playerID:         playerID,
@@ -218,6 +248,7 @@ func (cmd joinCommand) apply(s *roomState) {
 		name:             name,
 		skinID:           skinID,
 		player:           player,
+		spectator:        cmd.spectator,
 		connected:        true,
 		inputQueue:       make([]PlayerInput, 0, s.room.cfg.MaxQueuedInputs),
 		lastReceivedSeq:  -1,
@@ -239,6 +270,8 @@ func (cmd joinCommand) apply(s *roomState) {
 		MatchPhase:   s.phase,
 		Seed:         s.room.seed,
 		Name:         name,
+		RoomID:       s.room.cfg.ID,
+		Spectator:    cmd.spectator,
 	})
 	_ = cmd.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, 0)})
 	_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
@@ -246,8 +279,16 @@ func (cmd joinCommand) apply(s *roomState) {
 		if existing.playerID == playerID || !existing.connected {
 			continue
 		}
-		_ = cmd.client.EnqueueJSON(PlayerJoinedMessage{Type: "playerJoined", Player: existing.player, Name: existing.name})
-		_ = existing.client.EnqueueJSON(PlayerJoinedMessage{Type: "playerJoined", Player: sess.player, Name: name})
+		if !existing.spectator {
+			_ = cmd.client.EnqueueJSON(PlayerJoinedMessage{Type: "playerJoined", Player: existing.player, Name: existing.name})
+		}
+		if !cmd.spectator {
+			_ = existing.client.EnqueueJSON(PlayerJoinedMessage{Type: "playerJoined", Player: sess.player, Name: name})
+		}
+	}
+	if cmd.spectator {
+		cmd.reply <- joinReply{playerID: playerID, token: token}
+		return
 	}
 	s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_JOINED", "playerId": playerID})
 	if s.phase == "waiting" {
@@ -269,7 +310,7 @@ type inputCommand struct {
 
 func (cmd inputCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
-	if sess == nil || !sess.connected {
+	if sess == nil || !sess.connected || sess.spectator {
 		return
 	}
 	if s.phase != "playing" {
@@ -340,7 +381,7 @@ type selectSkillCardCommand struct {
 
 func (cmd pickupCollectibleCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
-	if sess == nil || !sess.connected {
+	if sess == nil || !sess.connected || sess.spectator {
 		return
 	}
 	s.tryPickupCollectible(sess, cmd.collectibleID)
@@ -348,7 +389,7 @@ func (cmd pickupCollectibleCommand) apply(s *roomState) {
 
 func (cmd selectSkillCardCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
-	if sess == nil || !sess.connected || sess.currentSkillOffer == nil {
+	if sess == nil || !sess.connected || sess.spectator || sess.currentSkillOffer == nil {
 		return
 	}
 	if sess.currentSkillOffer.OfferID != cmd.offerID {
@@ -417,10 +458,14 @@ type metricsCommand struct {
 
 func (cmd metricsCommand) apply(s *roomState) {
 	clients := make([]ClientSnapshot, 0, len(s.sessions))
+	playerCount := 0
 	for _, sess := range s.sessions {
 		client := ClientMetrics{}
 		if sess.client != nil {
 			client = sess.client.Metrics()
+		}
+		if !sess.spectator {
+			playerCount++
 		}
 		clients = append(clients, ClientSnapshot{
 			PlayerID:         sess.playerID,
@@ -438,7 +483,7 @@ func (cmd metricsCommand) apply(s *roomState) {
 		Tick:          s.tick,
 		SnapshotSeq:   s.snapshotSeq,
 		ActiveClients: activeSessions(s),
-		Players:       len(s.sessions),
+		Players:       playerCount,
 		Seed:          s.room.seed,
 		Metrics:       s.metrics,
 		Clients:       clients,
@@ -477,9 +522,9 @@ func NewRoom(cfg RoomConfig, stats *ServerMetrics, log *slog.Logger) *Room {
 	return room
 }
 
-func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID string, binarySnapshots bool) joinReply {
+func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID string, binarySnapshots bool, spectator bool) joinReply {
 	reply := make(chan joinReply, 1)
-	cmd := joinCommand{client: client, name: name, skinID: skinID, token: token, binarySnapshots: binarySnapshots, reply: reply}
+	cmd := joinCommand{client: client, name: name, skinID: skinID, token: token, binarySnapshots: binarySnapshots, spectator: spectator, reply: reply}
 	select {
 	case r.commands <- cmd:
 	case <-ctxDone:
@@ -717,6 +762,9 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 	if s.phase == "countdown" && now.After(s.countdownEndsAt) {
 		s.phase = "playing"
 		for _, sess := range s.sessions {
+			if sess.spectator {
+				continue
+			}
 			sess.inputQueue = sess.inputQueue[:0]
 			sess.lastInput = IdleInput(sess.lastProcessedSeq)
 		}
@@ -726,7 +774,7 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 
 	if s.phase == "playing" {
 		for _, sess := range s.sessions {
-			if !sess.connected {
+			if !sess.connected || sess.spectator {
 				continue
 			}
 			s.ensureEnemiesAround(sess.player)
@@ -802,7 +850,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 	playerEntities := make(map[string]PlayerEntityFrame, len(s.sessions))
 	lastProcessed := make(map[string]int64, len(s.sessions))
 	for _, sess := range s.sessions {
-		if !sess.connected {
+		if !sess.connected || sess.spectator {
 			continue
 		}
 		playerEntities[sess.playerID] = PlayerEntityFrame{
@@ -930,8 +978,37 @@ func (s *roomState) sessionAOI(sess *session) chunkAOI {
 	if sess.hasViewportAOI {
 		return s.stabilizedAOI(sess, sess.viewportAOI)
 	}
-	center := ChunkYForWorldY(sess.player.Position.Y)
+	center := s.sessionCenterChunk(sess)
 	return s.stabilizedAOI(sess, chunkAOIForChunks(max(0, center-DefaultAOIChunksBehind), center+DefaultAOIChunksAhead))
+}
+
+func (s *roomState) sessionCenterChunk(sess *session) int {
+	_, y := s.sessionFocusPosition(sess)
+	return ChunkYForWorldY(y)
+}
+
+func (s *roomState) sessionFocusPosition(sess *session) (float64, float64) {
+	if sess != nil && !sess.spectator {
+		return sess.player.Position.X, sess.player.Position.Y
+	}
+	leader := s.leaderSession()
+	if leader != nil {
+		return leader.player.Position.X, leader.player.Position.Y
+	}
+	return SpawnPosition(s.room.seed, 0)
+}
+
+func (s *roomState) leaderSession() *session {
+	var best *session
+	for _, sess := range s.sessions {
+		if !sess.connected || sess.spectator || sess.player.Health <= 0 {
+			continue
+		}
+		if best == nil || sess.player.Position.Y < best.player.Position.Y {
+			best = sess
+		}
+	}
+	return best
 }
 
 func (s *roomState) stabilizedAOI(sess *session, requested chunkAOI) chunkAOI {
@@ -956,7 +1033,7 @@ func (s *roomState) stabilizedAOI(sess *session, requested chunkAOI) chunkAOI {
 }
 
 func (s *roomState) clampClientAOI(sess *session, requested chunkAOI) chunkAOI {
-	center := ChunkYForWorldY(sess.player.Position.Y)
+	center := s.sessionCenterChunk(sess)
 	minAllowed := max(0, center-MaxClientAOIChunksBehind)
 	maxAllowed := center + MaxClientAOIChunksAhead
 	if requested.right < requested.left {
@@ -989,14 +1066,15 @@ func (s *roomState) clampClientAOI(sess *session, requested chunkAOI) chunkAOI {
 		out.min = min(out.min, center)
 		out.max = max(out.max, center)
 	}
-	playerLeft := int(math.Floor(sess.player.Position.X))
-	playerRight := int(math.Ceil(sess.player.Position.X + PlayerWidth))
-	playerTop := int(math.Floor(sess.player.Position.Y))
-	playerBottom := int(math.Ceil(sess.player.Position.Y + PlayerHeight))
-	out.left = min(out.left, playerLeft)
-	out.right = max(out.right, playerRight)
-	out.top = min(out.top, playerTop)
-	out.bottom = max(out.bottom, playerBottom)
+	focusX, focusY := s.sessionFocusPosition(sess)
+	focusLeft := int(math.Floor(focusX))
+	focusRight := int(math.Ceil(focusX + PlayerWidth))
+	focusTop := int(math.Floor(focusY))
+	focusBottom := int(math.Ceil(focusY + PlayerHeight))
+	out.left = min(out.left, focusLeft)
+	out.right = max(out.right, focusRight)
+	out.top = min(out.top, focusTop)
+	out.bottom = max(out.bottom, focusBottom)
 	out.left = max(0, out.left)
 	out.right = min(ChunkWidthTiles*TileSize, out.right)
 	return out
@@ -1056,7 +1134,7 @@ func (s *roomState) chunkRequestAllowed(sess *session, chunkY int) bool {
 func (s *roomState) playerFramesForAOI(aoi chunkAOI, frames map[string]PlayerEntityFrame) []PlayerEntityFrame {
 	out := make([]PlayerEntityFrame, 0, len(frames))
 	for _, sess := range s.sessions {
-		if !sess.connected || !chunkInAOI(aoi, ChunkYForWorldY(sess.player.Position.Y)) ||
+		if !sess.connected || sess.spectator || !chunkInAOI(aoi, ChunkYForWorldY(sess.player.Position.Y)) ||
 			!rectIntersectsAOI(aoi, sess.player.Position.X, sess.player.Position.Y, PlayerWidth, PlayerHeight) {
 			continue
 		}
@@ -1253,7 +1331,7 @@ func (s *roomState) relicContenders(sess *session, worldX, worldY float64) []rel
 	seen := map[string]struct{}{}
 	out := make([]relicContender, 0, len(s.sessions)+1)
 	add := func(candidate *session) {
-		if candidate == nil || candidate.player.Health <= 0 {
+		if candidate == nil || candidate.spectator || candidate.player.Health <= 0 {
 			return
 		}
 		if _, ok := seen[candidate.playerID]; ok {
@@ -1270,7 +1348,7 @@ func (s *roomState) relicContenders(sess *session, worldX, worldY float64) []rel
 	}
 	add(sess)
 	for _, candidate := range s.sessions {
-		if candidate == sess || !candidate.connected {
+		if candidate == sess || !candidate.connected || candidate.spectator {
 			continue
 		}
 		add(candidate)
@@ -1449,7 +1527,7 @@ func (s *roomState) enemyList() []EnemyState {
 func (s *roomState) simulateEnemies(dt float64) {
 	activePlayers := make([]*session, 0, len(s.sessions))
 	for _, sess := range s.sessions {
-		if sess.connected && sess.player.Health > 0 {
+		if sess.connected && !sess.spectator && sess.player.Health > 0 {
 			activePlayers = append(activePlayers, sess)
 		}
 	}
@@ -1834,7 +1912,7 @@ func (s *roomState) makeEnemyDrops(enemy EnemyState) []CollectibleState {
 func (s *roomState) applyPlayerInteractions(dt float64) {
 	active := make([]*session, 0, len(s.sessions))
 	for _, sess := range s.sessions {
-		if sess.connected && sess.player.Health > 0 {
+		if sess.connected && !sess.spectator && sess.player.Health > 0 {
 			active = append(active, sess)
 		}
 	}
@@ -1969,7 +2047,7 @@ func (s *roomState) applyPassivePush(a, b *PlayerState, dt float64) {
 func activeSessions(s *roomState) int {
 	count := 0
 	for _, sess := range s.sessions {
-		if sess.connected {
+		if sess.connected && !sess.spectator {
 			count++
 		}
 	}

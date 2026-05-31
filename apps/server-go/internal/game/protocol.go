@@ -81,6 +81,7 @@ type ClientHello struct {
 	SkinID          string `json:"skinId,omitempty"`
 	Token           string `json:"token,omitempty"`
 	BinarySnapshots bool   `json:"binarySnapshots,omitempty"`
+	Spectator       bool   `json:"spectator,omitempty"`
 }
 
 type ClientJoin struct {
@@ -93,6 +94,7 @@ type ClientJoin struct {
 	ClientID        string `json:"clientId,omitempty"`
 	ClientTime      int64  `json:"clientTime,omitempty"`
 	BinarySnapshots bool   `json:"binarySnapshots,omitempty"`
+	Spectator       bool   `json:"spectator,omitempty"`
 }
 
 type ClientPing struct {
@@ -361,6 +363,8 @@ type WelcomeMessage struct {
 	MatchPhase   string `json:"matchPhase"`
 	Seed         uint32 `json:"seed"`
 	Name         string `json:"name"`
+	RoomID       string `json:"roomId,omitempty"`
+	Spectator    bool   `json:"spectator,omitempty"`
 }
 
 type SnapshotMessage struct {

@@ -383,10 +383,10 @@ func (s *Server) handleJoin(ctx context.Context, client *Client, data []byte, r 
 	}
 	roomID := r.URL.Query().Get("room")
 	if roomID == "" {
-		roomID = DefaultRoomID
+		roomID = s.defaultJoinRoomID()
 	}
 	room := s.getOrCreateRoom(roomID)
-	result := room.Join(ctx.Done(), client, join.Name, join.Token, join.SkinID, join.BinarySnapshots)
+	result := room.Join(ctx.Done(), client, join.Name, join.Token, join.SkinID, join.BinarySnapshots, join.Spectator)
 	if result.err != "" {
 		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: result.err, Message: "join failed"})
 		if result.err == "ROOM_FULL" || result.err == "ALREADY_CONNECTED" {
@@ -473,6 +473,17 @@ func (s *Server) handlePickupCollectible(client *Client, data []byte) {
 		return
 	}
 	room.PickupCollectible(playerID, msg.CollectibleID)
+}
+
+func (s *Server) defaultJoinRoomID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.rooms) == 1 {
+		for id := range s.rooms {
+			return id
+		}
+	}
+	return DefaultRoomID
 }
 
 func (s *Server) getOrCreateRoom(id string) *Room {

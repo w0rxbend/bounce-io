@@ -178,6 +178,12 @@ function queryBoolean(name: string, fallback: boolean): boolean {
   return fallback;
 }
 
+const initialUrlParams = new URLSearchParams(window.location.search);
+const initialSpectatorRequested =
+  initialUrlParams.get("spectator") === "1" ||
+  initialUrlParams.get("mode")?.toLowerCase() === "spectator";
+const initialSpectatorRoomId = initialUrlParams.get("room")?.trim() ?? "";
+
 // ── Network interpolation tuning ──────────────────────────────────────────────
 const INTERPOLATION_DELAY_MS = envNumber("VITE_INTERPOLATION_DELAY_MS", 100);
 const MIN_INTERP_DELAY_MS   = envNumber("VITE_MIN_INTERPOLATION_DELAY_MS", 50);
@@ -899,6 +905,19 @@ appRoot.innerHTML = `
 
 const gameWrap  = appRoot.querySelector<HTMLElement>(".game-wrap")!;
 const nicknameInput = appRoot.querySelector<HTMLInputElement>("#nickname-input")!;
+
+function setSpectatorDocumentMode(enabled: boolean): void {
+  document.documentElement.classList.toggle("spectator-mode", enabled);
+  document.body.classList.toggle("spectator-mode", enabled);
+  appRoot!.classList.toggle("spectator-mode", enabled);
+  gameWrap.classList.toggle("spectator-mode", enabled);
+}
+
+function showSpectatorError(message: string): void {
+  setSpectatorDocumentMode(true);
+  gameWrap.classList.add("spectator-error-mode");
+  appRoot!.insertAdjacentHTML("beforeend", `<div class="spectator-error" role="alert">${message}</div>`);
+}
 
 // ── PixiJS init ───────────────────────────────────────────────────────────────
 
@@ -2733,11 +2752,15 @@ let lastViewportInterestKey = "";
 
 type AppState = "mainMenu" | "modeSelect" | "skinSelect" | "onlineNickname" | "connecting" | "game";
 type GameMode = "local" | "online";
+type ClientMode = "local" | "online-player" | "online-spectator";
 
 let appState: AppState = "mainMenu";
 let selectedMode: GameMode | null = null;
+let clientMode: ClientMode = "local";
 let selectedSkinId: CharacterId | null = normalizeCharacterId(localStorage.getItem("bounceSkinId"));
 let nickname = localStorage.getItem("bounceNickname") ?? "";
+let currentRoomId = "demo";
+let spectatorSessionId: string | null = null;
 let menuDirty = true;
 let connectingMessage = "Connecting...";
 let menuErrorText = "";
@@ -2796,6 +2819,10 @@ function normalizeCharacterId(value: unknown): CharacterId {
   return CHARACTER_IDS.includes(value as CharacterId) ? value as CharacterId : "character1";
 }
 
+function isSpectatorMode(): boolean {
+  return clientMode === "online-spectator";
+}
+
 function destroyMenu(): void {
   menuButtonHitRegions.length = 0;
   clearMenuFocusables();
@@ -2840,14 +2867,19 @@ function setAppState(next: AppState): void {
   menuDirty = true;
   nicknameInputFrame = null;
   nicknameInput.style.display = "none";
-  if (next !== "game" && !menuLayer.parent) pixi.stage.addChild(menuLayer);
-  menuLayer.visible = next !== "game";
-  menuSplashLayer.visible = next !== "game";
-  skyLayer.visible = next === "game";
+  setSpectatorDocumentMode(isSpectatorMode());
+  const showMenu = next !== "game" && !isSpectatorMode();
+  if (showMenu && !menuLayer.parent) pixi.stage.addChild(menuLayer);
+  menuLayer.visible = showMenu;
+  menuSplashLayer.visible = showMenu;
+  skyLayer.visible = next === "game" && !isSpectatorMode();
   worldLayer.visible = next === "game";
   hudLayer.visible = next === "game";
+  backDecorationLayer.visible = !isSpectatorMode();
+  midMountainCrumbleParticleLayer.visible = !isSpectatorMode();
   if (next !== "game") {
-    ensureMenuSplashBackground();
+    if (showMenu) ensureMenuSplashBackground();
+    else destroyMenuSplashBackground();
     destroyGameHud();
   }
   if (next === "game") {
@@ -3209,9 +3241,26 @@ let jumpEdge = false, kickEdge = false;
 
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
-  if (skillCardModal.handleKeyDown(e)) return;
+  if (!isSpectatorMode() && skillCardModal.handleKeyDown(e)) return;
   if (appState !== "game") {
     handleMenuKeyDown(e);
+    return;
+  }
+  if (isSpectatorMode()) {
+    if (e.code === "F1") {
+      if (e.shiftKey) {
+        showWorldDebug = !showWorldDebug;
+        localStorage.setItem("skyboundworldDebug", showWorldDebug ? "1" : "0");
+      } else {
+        showDebug = !showDebug;
+        localStorage.setItem("skybounddebug", showDebug ? "1" : "0");
+      }
+      e.preventDefault();
+    } else if (e.code === "KeyI") {
+      showInspection = !showInspection;
+      localStorage.setItem("skyboundinspection", showInspection ? "1" : "0");
+      e.preventDefault();
+    }
     return;
   }
   held[e.code] = true;
@@ -3447,6 +3496,40 @@ function cameraZoom(): number {
   return Math.min(CAMERA_CONFIG.maxZoom, Math.max(CAMERA_CONFIG.minZoom, CAMERA_CONFIG.zoom));
 }
 
+function spectatorSpawnTarget(): { id: string | null; name: string; position: { x: number; y: number }; velocity: { x: number; y: number }; facing: -1 | 1 } {
+  const spawn = getSpawnPos();
+  return {
+    id: null,
+    name: "Waiting for players...",
+    position: { x: spawn.x, y: spawn.y },
+    velocity: { x: 0, y: 0 },
+    facing: 1,
+  };
+}
+
+function selectSpectatorTarget(): { id: string | null; name: string; position: { x: number; y: number }; velocity: { x: number; y: number }; facing: -1 | 1 } {
+  let best: { id: string; entry: RemoteEntry } | null = null;
+  for (const [id, entry] of remotePlayers) {
+    if (entry.current.health <= 0) continue;
+    if (!best || entry.renderPosition.y < best.entry.renderPosition.y) {
+      best = { id, entry };
+    }
+  }
+  if (!best) return spectatorSpawnTarget();
+  return {
+    id: best.id,
+    name: playerNames.get(best.id) ?? "Player",
+    position: best.entry.renderPosition,
+    velocity: best.entry.current.velocity,
+    facing: best.entry.current.facing,
+  };
+}
+
+function currentFocusPosition(): { x: number; y: number } | null {
+  if (isSpectatorMode()) return selectSpectatorTarget().position;
+  return localPlayer?.position ?? null;
+}
+
 function activeWorldBounds(margin = activeWorldMarginPx()): { left: number; right: number; top: number; bottom: number } {
   const scale = getScale();
   const visibleWorldWidth = pixi.screen.width / scale;
@@ -3460,7 +3543,8 @@ function activeWorldBounds(margin = activeWorldMarginPx()): { left: number; righ
 }
 
 function viewportInterestWindow(): { min: number; max: number; x1: number; y1: number; x2: number; y2: number; visibleWidth: number; visibleHeight: number; zoom: number } | null {
-  if (!localPlayer) return null;
+  const focus = currentFocusPosition();
+  if (!focus) return null;
   const scale = getScale();
   const visibleWidth = pixi.screen.width / scale;
   const visibleHeight = pixi.screen.height / scale;
@@ -3470,9 +3554,9 @@ function viewportInterestWindow(): { min: number; max: number; x1: number; y1: n
   const y1 = cameraY - margin;
   const y2 = cameraY + visibleHeight + margin;
   const window = chunkWindowFromVerticalRange(y1, y2);
-  const playerChunkY = chunkYForWorldY(localPlayer.position.y);
-  window.min = Math.min(window.min, playerChunkY);
-  window.max = Math.max(window.max, playerChunkY);
+  const focusChunkY = chunkYForWorldY(focus.y);
+  window.min = Math.min(window.min, focusChunkY);
+  window.max = Math.max(window.max, focusChunkY);
   return { ...window, x1, y1, x2, y2, visibleWidth, visibleHeight, zoom: cameraZoom() };
 }
 
@@ -3543,7 +3627,8 @@ function enqueueChunkRender(chunkY: number, immediate = false): void {
 
 function processChunkRenderQueue(): void {
   if (pendingChunkRenders.size === 0) return;
-  const centerChunkY = localPlayer ? chunkYForWorldY(localPlayer.position.y) : 0;
+  const focus = currentFocusPosition();
+  const centerChunkY = focus ? chunkYForWorldY(focus.y) : 0;
   const maxRenders = activePerformanceConfig().chunkRendersPerFrame;
   const budgetMs = activePerformanceConfig().chunkBudgetMs;
   const started = performance.now();
@@ -3584,10 +3669,11 @@ function pruneDistantChunkVisuals(): void {
 }
 
 function currentChunkWindow(): { min: number; max: number } | null {
-  if (!localPlayer) return null;
+  const focus = currentFocusPosition();
+  if (!focus) return null;
   const viewportWindow = viewportInterestWindow();
   if (viewportWindow) return { min: viewportWindow.min, max: viewportWindow.max };
-  const pChunkY = chunkYForWorldY(localPlayer.position.y);
+  const pChunkY = chunkYForWorldY(focus.y);
   return {
     min: Math.max(0, pChunkY - CHUNKS_PRELOAD_BEHIND),
     max: pChunkY + CHUNKS_PRELOAD_AHEAD,
@@ -3595,7 +3681,6 @@ function currentChunkWindow(): { min: number; max: number } | null {
 }
 
 function ensureChunksAhead(): void {
-  if (!localPlayer) return;
   const window = currentChunkWindow();
   if (!window) return;
   for (let cy = window.min; cy <= window.max; cy++) {
@@ -3715,6 +3800,7 @@ function resetGameSession(mode: GameMode): void {
   localVisualPosition = null;
   lastAuthoritativeLocalPlayer = null;
   localPlayerId = null;
+  spectatorSessionId = null;
   predBuf.length = 0;
   pendingSnapshots.length = 0;
   appliedEventIds.length = 0;
@@ -3806,12 +3892,16 @@ interface StartGameOptions {
   mode: GameMode;
   nickname?: string;
   skinId: CharacterId;
+  spectator?: boolean;
+  roomId?: string;
 }
 
 async function enterGameScene(options: {
   mode: "local" | "online";
   nickname?: string;
   skinId?: string;
+  spectator?: boolean;
+  roomId?: string;
 }): Promise<void> {
   if (gameStartInFlight) return;
   gameStartInFlight = true;
@@ -3820,6 +3910,8 @@ async function enterGameScene(options: {
     mode: options.mode,
     nickname: options.nickname,
     skinId: normalizeCharacterId(options.skinId ?? currentSkinId()),
+    spectator: options.spectator,
+    roomId: options.roomId,
   };
   console.info("[BounceIO] enterGameScene called", startOptions);
   try {
@@ -3835,6 +3927,8 @@ async function enterGameScene(options: {
 
 async function startGame(options: StartGameOptions): Promise<void> {
   selectedMode = options.mode;
+  clientMode = options.mode === "local" ? "local" : options.spectator ? "online-spectator" : "online-player";
+  currentRoomId = options.roomId?.trim() || (options.spectator ? "auto" : "demo");
   setSelectedSkin(options.skinId);
 
   if (options.mode === "local") {
@@ -3850,16 +3944,18 @@ async function startGame(options: StartGameOptions): Promise<void> {
   }
 
   const trimmedNickname = options.nickname?.trim() ?? "";
-  const nicknameError = validateNickname(trimmedNickname);
+  const nicknameError = options.spectator ? null : validateNickname(trimmedNickname);
   if (nicknameError) throw new Error(nicknameError);
 
-  nickname = trimmedNickname;
-  localStorage.setItem("bounceNickname", nickname);
-  connectingMessage = "Connecting...";
+  if (!options.spectator) {
+    nickname = trimmedNickname;
+    localStorage.setItem("bounceNickname", nickname);
+  }
+  connectingMessage = options.spectator ? "Opening spectator..." : "Connecting...";
   menuErrorText = "";
-  console.info("[BounceIO] Connecting online game", { nickname, skinId: options.skinId });
+  console.info("[BounceIO] Connecting online game", { nickname: options.spectator ? "Spectator" : nickname, skinId: options.skinId, spectator: !!options.spectator, roomId: currentRoomId });
   setAppState("connecting");
-  await connectRoom(nickname, options.skinId);
+  await connectRoom(options.spectator ? "Spectator" : nickname, options.skinId, false, currentRoomId, !!options.spectator);
 }
 
 function destroyChunkVisuals(chunkY: number): void {
@@ -7379,7 +7475,25 @@ function updateCamera(dt: number, scale: number): void {
   const renderPos = getLocalRenderPosition();
   const visibleWorldWidth = pixi.screen.width / scale;
   const visibleWorldHeight = pixi.screen.height / scale;
-  if (localPlayer && renderPos) {
+  if (isSpectatorMode()) {
+    const target = selectSpectatorTarget();
+    const vh = Math.max(300 / scale, visibleWorldHeight);
+    const followAlpha = cameraFollowAlpha(dt);
+    const xLookDir = Math.abs(target.velocity.x) > 20 ? Math.sign(target.velocity.x) : target.facing;
+    const targetX = clampCameraX(
+      target.position.x + PLAYER_WIDTH / 2 + xLookDir * CAMERA_CONFIG.lookAheadX * 0.45 - visibleWorldWidth / 2,
+      visibleWorldWidth
+    );
+    const targetY = target.position.y + PLAYER_HEIGHT / 2 - vh * 0.62;
+    if (cameraSnap) {
+      cameraX = targetX;
+      cameraY = targetY;
+      cameraSnap = false;
+    } else {
+      cameraX += (targetX - cameraX) * followAlpha;
+      cameraY += (targetY - cameraY) * followAlpha;
+    }
+  } else if (localPlayer && renderPos) {
     const vh     = Math.max(300 / scale, visibleWorldHeight);
     const followAlpha = cameraFollowAlpha(dt);
     const xLookDir = Math.abs(localPlayer.velocity.x) > 20 ? Math.sign(localPlayer.velocity.x) : localPlayer.facing;
@@ -7956,6 +8070,7 @@ let hudPhaseTxt: Text;
 let playerStatsHud: PlayerStatsHud | null = null;
 const hudRowTexts: Text[] = [];
 const hudLegendTexts: Text[] = [];
+let spectatorOverlayText: Text | null = null;
 let lastHudRegion: number | null = null;
 let lastHudLayoutKey = "";
 let lastHudPhaseKey = "";
@@ -7965,6 +8080,8 @@ const pendingLocalSkillChoices: number[] = [];
 let localSkillOfferSerial = 0;
 
 function destroyGameHud(): void {
+  spectatorOverlayText?.destroy();
+  spectatorOverlayText = null;
   if (!hudBuilt) return;
   playerStatsHud?.destroy();
   playerStatsHud = null;
@@ -7977,6 +8094,28 @@ function destroyGameHud(): void {
   lastHudLayoutKey = "";
   lastScoreboardKey = "";
   lastHudPhaseKey = "";
+}
+
+function updateSpectatorOverlay(): void {
+  if (!spectatorOverlayText) {
+    spectatorOverlayText = new Text({
+      text: "",
+      style: {
+        fill: PAL.uiParchment,
+        fontFamily: "monospace",
+        fontSize: hudPx(11),
+        fontWeight: "900",
+        stroke: { color: PAL.uiInk, width: 2 },
+      },
+    });
+    spectatorOverlayText.alpha = 0.82;
+    hudLayer.addChild(spectatorOverlayText);
+  }
+  const target = selectSpectatorTarget();
+  const following = target.id ? target.name : "Waiting for players...";
+  spectatorOverlayText.text = `SPECTATOR · ROOM ${currentRoomId}\nFOLLOWING: ${following}`;
+  spectatorOverlayText.x = hudPx(10);
+  spectatorOverlayText.y = hudPx(10);
 }
 
 function ensureHud(): void {
@@ -8014,6 +8153,13 @@ function ensureHud(): void {
 
 function updateHud(tSec: number): void {
   void tSec;
+  if (isSpectatorMode()) {
+    if (hudBuilt) destroyGameHud();
+    updateSpectatorOverlay();
+    return;
+  }
+  spectatorOverlayText?.destroy();
+  spectatorOverlayText = null;
   if (!localPlayer) return;
   ensureHud();
   playerStatsHud?.update(localPlayer, pixi.screen.width);
@@ -10085,7 +10231,7 @@ function rejectConnect(message: string): void {
   connectReject = null;
 }
 
-function connectRoom(name: string, skinId: CharacterId, preserveSession = false): Promise<void> {
+function connectRoom(name: string, skinId: CharacterId, preserveSession = false, roomId = "demo", spectator = false): Promise<void> {
   if (ws && ws.readyState === WebSocket.CONNECTING) return Promise.reject(new Error("Connection already in progress."));
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
   reconnectEnabled = true;
@@ -10096,7 +10242,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const configuredUrl = import.meta.env.VITE_WS_URL?.trim();
   const wsUrl = new URL(configuredUrl || `${proto}://${location.host}/ws`);
-  wsUrl.searchParams.set("room", "demo");
+  if (roomId && roomId !== "auto") wsUrl.searchParams.set("room", roomId);
   ws = new WebSocket(wsUrl.toString());
   ws.binaryType = "arraybuffer";
 
@@ -10115,6 +10261,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
       skinId,
       token: sessionToken ?? undefined,
       binarySnapshots: readQueryFlag("binarySnapshots"),
+      spectator,
     }, "critical");
     const pingTime = Date.now();
     if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
@@ -10145,10 +10292,19 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
       case "welcome":
         // Bootstrap clock from welcome only once; pong NTP updates refine it from then on.
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
-        localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
+        sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
+        currentRoomId = parsed.roomId || currentRoomId;
         registerBinaryEntityId(parsed.playerId);
-        // Store our own sanitized name so the leaderboard shows it correctly.
-        playerNames.set(localPlayerId, parsed.name);
+        if (spectator || parsed.spectator) {
+          spectatorSessionId = parsed.playerId;
+          localPlayerId = null;
+          localPlayer = null;
+          localVisualPosition = null;
+        } else {
+          localPlayerId = parsed.playerId;
+          // Store our own sanitized name so the leaderboard shows it correctly.
+          playerNames.set(localPlayerId, parsed.name);
+        }
         if (serverSeed !== parsed.seed) {
           serverSeed = parsed.seed;
           clearWorldChunks();
@@ -10156,11 +10312,14 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         } else if (loadedChunks.size === 0) {
           for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
         }
-        { const { x, y } = getSpawnPos(); localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), skinId); }
+        if (!spectator && !parsed.spectator && localPlayerId) {
+          const { x, y } = getSpawnPos();
+          localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), skinId);
+        }
         serverTick = 0; lastSnapshotSeq = -1;
         snapLocalVisualToSimulation();
         resetLocalPrediction(); cameraSnap = true;
-        console.info("[BounceIO] Joined online game");
+        console.info("[BounceIO] Joined online game", { spectator: spectator || parsed.spectator });
         setAppState("game");
         resolveConnect();
         break;
@@ -10225,7 +10384,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
       case "skill_card_offer":
-        openOnlineSkillOffer(parsed.offer);
+        if (!isSpectatorMode()) openOnlineSkillOffer(parsed.offer);
         break;
       case "skill_applied": {
         const target = parsed.playerId === localPlayerId
@@ -10265,7 +10424,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
     }
     if (reconnectEnabled) {
       pushNotification(`Disconnected. Retrying in ${reconnDelay / 1000}s`, PAL.uiGray);
-      schedReconn(name, skinId);
+      schedReconn(name, skinId, roomId, spectator);
     }
   });
   ws.addEventListener("error", () => {
@@ -10275,22 +10434,22 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
   return connectPromise;
 }
 
-function schedReconn(name: string, skinId: CharacterId): void {
+function schedReconn(name: string, skinId: CharacterId, roomId: string, spectator: boolean): void {
   if (reconnTimeout) return;
   reconnTimeout = setTimeout(() => {
     reconnTimeout = null;
     reconnDelay = Math.min(reconnDelay * 2, 30_000);
-    void connectRoom(name, skinId, true);
+    void connectRoom(name, skinId, true, roomId, spectator);
   }, reconnDelay);
 }
 
 function sendInput(inp: PlayerInput): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayerId) return;
+  if (isSpectatorMode() || !ws || ws.readyState !== WebSocket.OPEN || !localPlayerId) return;
   sendWsMessage({ type: "input", playerId: localPlayerId, inputSeq: inp.sequence, clientTime: Date.now(), input: inp }, "input");
 }
 
 function shouldPredictLocalMovement(): boolean {
-  return localPlayer !== null && !skillCardModal.active && (selectedMode !== "online" || matchPhase === "playing");
+  return !isSpectatorMode() && localPlayer !== null && !skillCardModal.active && (selectedMode !== "online" || matchPhase === "playing");
 }
 
 function maybePing(): void {
@@ -10343,7 +10502,7 @@ function estimatedServerTime(): number {
 }
 
 function reqChunks(): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayer) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const window = currentChunkWindow();
   if (!window) return;
   const now = performance.now();
@@ -10363,7 +10522,7 @@ function reqChunks(): void {
 }
 
 function maybeSendViewportInterest(force = false): void {
-  if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayer) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const interest = viewportInterestWindow();
   if (!interest) return;
   const now = performance.now();
@@ -10649,6 +10808,11 @@ function drawActors(): void {
     setRoundedPositionIfChanged(localCrownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (localPlayerId === leaderId && !crownAvailable)
       drawCrown(localGfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, PLAYER_COLORS[0]!);
+  } else {
+    localSprite.visible = false;
+    localCrownSprite.visible = false;
+    localGfx.clear();
+    localAttackBar.clear();
   }
 }
 
@@ -10689,6 +10853,17 @@ window.addEventListener("resize", () => {
   syncNicknameInput();
 });
 setAppState("mainMenu");
+if (initialSpectatorRequested) {
+  void enterGameScene({
+    mode: "online",
+    spectator: true,
+    roomId: initialSpectatorRoomId || undefined,
+    nickname: "Spectator",
+    skinId: currentSkinId(),
+  }).catch((err) => {
+    showSpectatorError(err instanceof Error ? err.message : "Could not open spectator mode.");
+  });
+}
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
 
@@ -10850,8 +11025,10 @@ pixi.ticker.add((ticker) => {
   ensureChunksAhead();
   maybeSendViewportInterest();
   reqChunks();
-  backgroundLifeSystem.setQuality(activeFixedPerformanceProfile);
-  backgroundLifeSystem.update(dtMs, cameraX, cameraY, pixi.screen.width, pixi.screen.height);
+  if (!isSpectatorMode()) {
+    backgroundLifeSystem.setQuality(activeFixedPerformanceProfile);
+    backgroundLifeSystem.update(dtMs, cameraX, cameraY, pixi.screen.width, pixi.screen.height);
+  }
   enqueueVisibleChunkRenders();
   processChunkRenderQueue();
   pruneDistantChunkVisuals();

@@ -110,3 +110,66 @@ func TestViewportAOIFiltersByWorldAABB(t *testing.T) {
 		t.Fatalf("expected only AABB-visible collectible, got %#v", collectibles)
 	}
 }
+
+func TestSpectatorJoinDoesNotConsumePlayerSlot(t *testing.T) {
+	seed := HashString("spectator")
+	room := &Room{
+		cfg:  RoomConfig{ID: "spectator", MaxPlayers: 1, MaxQueuedInputs: 8, TickRate: DefaultTickRate},
+		seed: seed,
+		log:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	state := &roomState{
+		room:          room,
+		sessions:      map[string]*session{},
+		tokenToPlayer: map[string]string{},
+		phase:         "waiting",
+	}
+	stats := NewServerMetrics()
+	playerClient := NewClient(nil, 8, 100, stats, room.log)
+	spectatorClient := NewClient(nil, 8, 100, stats, room.log)
+
+	playerReply := make(chan joinReply, 1)
+	joinCommand{client: playerClient, name: "Player", reply: playerReply}.apply(state)
+	if reply := <-playerReply; reply.err != "" {
+		t.Fatalf("player join failed: %s", reply.err)
+	}
+
+	spectatorReply := make(chan joinReply, 1)
+	joinCommand{client: spectatorClient, name: "Viewer", spectator: true, reply: spectatorReply}.apply(state)
+	if reply := <-spectatorReply; reply.err != "" {
+		t.Fatalf("spectator should join even when room is full: %s", reply.err)
+	}
+	if activeSessions(state) != 1 {
+		t.Fatalf("spectator should not count as an active player, got %d", activeSessions(state))
+	}
+	if len(state.sessions) != 2 {
+		t.Fatalf("expected one player session and one spectator session, got %d", len(state.sessions))
+	}
+}
+
+func TestSpectatorAOIFollowsLeaderOrSpawn(t *testing.T) {
+	seed := HashString("spectator-aoi")
+	room := &Room{cfg: RoomConfig{ID: "spectator-aoi"}, seed: seed, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	leader := &session{playerID: "leader", player: CreatePlayerState("leader", 120, -float64(ChunkHeightTiles*TileSize*12)), connected: true}
+	trailer := &session{playerID: "trailer", player: CreatePlayerState("trailer", 120, -float64(ChunkHeightTiles*TileSize*3)), connected: true}
+	spectator := &session{playerID: "spectator", spectator: true, connected: true}
+	state := &roomState{
+		room:     room,
+		sessions: map[string]*session{"leader": leader, "trailer": trailer, "spectator": spectator},
+	}
+
+	aoi := state.sessionAOI(spectator)
+	leaderChunk := ChunkYForWorldY(leader.player.Position.Y)
+	if !chunkInAOI(aoi, leaderChunk) {
+		t.Fatalf("spectator AOI should include leader chunk %d: %#v", leaderChunk, aoi)
+	}
+
+	leader.connected = false
+	trailer.connected = false
+	spectator.hasStableAOI = false
+	spawnX, spawnY := SpawnPosition(seed, 0)
+	focusX, focusY := state.sessionFocusPosition(spectator)
+	if focusX != spawnX || focusY != spawnY {
+		t.Fatalf("empty-room spectator should focus spawn %.1f,%.1f, got %.1f,%.1f", spawnX, spawnY, focusX, focusY)
+	}
+}

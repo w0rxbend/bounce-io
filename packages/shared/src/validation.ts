@@ -325,7 +325,9 @@ export function isClientMessage(value: unknown): value is ClientMessage {
         value.version === GAME_VERSION &&
         isString(value.name) &&
         (value.skinId === undefined || isString(value.skinId)) &&
-        (value.token === undefined || isString(value.token));
+        (value.token === undefined || isString(value.token)) &&
+        (value.binarySnapshots === undefined || typeof value.binarySnapshots === "boolean") &&
+        (value.spectator === undefined || typeof value.spectator === "boolean");
     case "input":
       return isString(value.playerId) &&
         (value.inputSeq === undefined || isInteger(value.inputSeq)) &&
@@ -371,7 +373,9 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         isFiniteNumber(value.serverTime) &&
         isFiniteNumber(value.tickRate) &&
         isString(value.matchPhase) &&
-        isInteger(value.seed);
+        isInteger(value.seed) &&
+        (value.roomId === undefined || isString(value.roomId)) &&
+        (value.spectator === undefined || typeof value.spectator === "boolean");
     case "resumed":
       return isString(value.playerId) &&
         isFiniteNumber(value.serverTime) &&
