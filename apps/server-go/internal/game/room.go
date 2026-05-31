@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 type RoomConfig struct {
@@ -51,6 +53,7 @@ type roomState struct {
 	pendingEvents     []MatchEvent
 	metrics           RoomMetrics
 	lastTickWallClock time.Time
+	spatialIndex      dynamicSpatialIndex
 }
 
 type chunkAOI struct {
@@ -63,10 +66,13 @@ type chunkAOI struct {
 }
 
 type scopedSnapshot struct {
-	encoded      []byte
-	players      int
-	enemies      int
-	collectibles int
+	encoded          []byte
+	playersList      []PlayerEntityFrame
+	enemiesList      []EnemyState
+	collectiblesList []CollectibleState
+	players          int
+	enemies          int
+	collectibles     int
 }
 
 type session struct {
@@ -87,14 +93,21 @@ type session struct {
 	pendingLevelChoices int
 	hasViewportAOI      bool
 	viewportAOI         chunkAOI
+	hasStableAOI        bool
+	stableAOI           chunkAOI
+	lastAOIChangeTick   uint64
+	binarySnapshots     bool
+	binaryVisible       map[uint32]struct{}
+	binaryBaselineTick  uint64
 }
 
 type joinCommand struct {
-	client *Client
-	name   string
-	skinID string
-	token  string
-	reply  chan joinReply
+	client          *Client
+	name            string
+	skinID          string
+	token           string
+	binarySnapshots bool
+	reply           chan joinReply
 }
 
 type joinReply struct {
@@ -112,6 +125,10 @@ func (cmd joinCommand) apply(s *roomState) {
 				existing.client = cmd.client
 				existing.connected = true
 				existing.disconnectedAt = time.Time{}
+				existing.binarySnapshots = cmd.binarySnapshots
+				if existing.binaryVisible == nil {
+					existing.binaryVisible = map[uint32]struct{}{}
+				}
 				cmd.client.SetSession(s.room, existing.playerID, existing.token, existing.name)
 				_ = cmd.client.EnqueueJSON(map[string]any{
 					"type":        "resumed",
@@ -159,6 +176,8 @@ func (cmd joinCommand) apply(s *roomState) {
 		lastReceivedSeq:  -1,
 		lastProcessedSeq: -1,
 		lastInput:        IdleInput(-1),
+		binarySnapshots:  cmd.binarySnapshots,
+		binaryVisible:    map[uint32]struct{}{},
 	}
 	s.sessions[playerID] = sess
 	s.tokenToPlayer[token] = playerID
@@ -403,9 +422,9 @@ func NewRoom(cfg RoomConfig, stats *ServerMetrics, log *slog.Logger) *Room {
 	return room
 }
 
-func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID string) joinReply {
+func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID string, binarySnapshots bool) joinReply {
 	reply := make(chan joinReply, 1)
-	cmd := joinCommand{client: client, name: name, skinID: skinID, token: token, reply: reply}
+	cmd := joinCommand{client: client, name: name, skinID: skinID, token: token, binarySnapshots: binarySnapshots, reply: reply}
 	select {
 	case r.commands <- cmd:
 	case <-ctxDone:
@@ -677,9 +696,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		}
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
-	enemies := s.enemyList()
-	collectibles := s.collectibleList()
 	collectedRelics := s.collectedRelicList()
+	s.spatialIndex = buildDynamicSpatialIndex(s, playerEntities)
 
 	events := s.enrichEvents(s.pendingEvents, s.tick, s.snapshotSeq)
 	s.pendingEvents = make([]MatchEvent, 0, 32)
@@ -698,6 +716,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 
 	startBroadcast := time.Now()
 	recipients := 0
+	totalSnapshotBytes := 0
 	for _, sess := range s.sessions {
 		if !sess.connected {
 			continue
@@ -705,6 +724,9 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		aoi := s.sessionAOI(sess)
 		scoped, ok := scopedByAOI[aoi]
 		if !ok {
+			scopedPlayers := s.spatialIndex.playersForAOI(aoi, s)
+			scopedEnemies := s.spatialIndex.enemiesForAOI(aoi)
+			scopedCollectibles := s.spatialIndex.collectiblesForAOI(aoi)
 			msg := SnapshotMessage{
 				Type:             "snapshot",
 				Tick:             s.tick,
@@ -715,9 +737,9 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 				AckInputSeq:      -1,
 				Players:          players,
 				Entities:         []EntityState{},
-				PlayerEntities:   s.playerFramesForAOI(aoi, playerEntities),
-				Enemies:          enemiesForAOI(aoi, enemies),
-				Collectibles:     collectiblesForAOI(aoi, collectibles),
+				PlayerEntities:   scopedPlayers,
+				Enemies:          scopedEnemies,
+				Collectibles:     scopedCollectibles,
 				CollectedRelics:  collectedRelics,
 				Events:           []MatchEvent{},
 				LastProcessedSeq: lastProcessed,
@@ -728,18 +750,32 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 				continue
 			}
 			scoped = scopedSnapshot{
-				encoded:      encoded,
-				players:      len(msg.PlayerEntities),
-				enemies:      len(msg.Enemies),
-				collectibles: len(msg.Collectibles),
+				encoded:          encoded,
+				playersList:      scopedPlayers,
+				enemiesList:      scopedEnemies,
+				collectiblesList: scopedCollectibles,
+				players:          len(msg.PlayerEntities),
+				enemies:          len(msg.Enemies),
+				collectibles:     len(msg.Collectibles),
 			}
 			scopedByAOI[aoi] = scoped
 		}
-		sess.client.RecordAOI(aoi.min, aoi.max, scoped.players, scoped.enemies, scoped.collectibles, len(scoped.encoded))
-		if sess.client.EnqueueSnapshotEncoded(scoped.encoded) {
+		outbound := scoped.encoded
+		msgType := websocket.MessageText
+		if sess.binarySnapshots {
+			entities := binaryEntitiesFromSnapshot(scoped.playersList, scoped.enemiesList, scoped.collectiblesList)
+			removed, nextVisible := removedBinaryEntities(sess.binaryVisible, entities)
+			outbound = encodeBinarySnapshot(s.tick, s.snapshotSeq, sess.binaryBaselineTick, serverTime, sess.lastProcessedSeq, entities, removed)
+			msgType = websocket.MessageBinary
+			sess.binaryVisible = nextVisible
+			sess.binaryBaselineTick = s.tick
+		}
+		sess.client.RecordAOI(aoi.min, aoi.max, scoped.players, scoped.enemies, scoped.collectibles, len(outbound))
+		totalSnapshotBytes += len(outbound)
+		if sess.client.EnqueueSnapshotMessage(outbound, msgType) {
 			recipients++
 			s.metrics.MessagesSent++
-			s.metrics.BytesSent += uint64(len(scoped.encoded))
+			s.metrics.BytesSent += uint64(len(outbound))
 			sess.client.SetAck(sess.lastProcessedSeq)
 		} else {
 			s.metrics.DroppedOutbound++
@@ -748,20 +784,37 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 			}
 		}
 	}
-	totalEncodedBytes := 0
-	for _, scoped := range scopedByAOI {
-		totalEncodedBytes += len(scoped.encoded)
-	}
-	s.metrics.recordSerialization(time.Since(startSerialization), totalEncodedBytes)
+	s.metrics.recordSerialization(time.Since(startSerialization), totalSnapshotBytes)
 	s.metrics.recordBroadcast(time.Since(startBroadcast), recipients)
 }
 
 func (s *roomState) sessionAOI(sess *session) chunkAOI {
 	if sess.hasViewportAOI {
-		return s.clampClientAOI(sess, sess.viewportAOI)
+		return s.stabilizedAOI(sess, sess.viewportAOI)
 	}
 	center := ChunkYForWorldY(sess.player.Position.Y)
-	return chunkAOIForChunks(max(0, center-DefaultAOIChunksBehind), center+DefaultAOIChunksAhead)
+	return s.stabilizedAOI(sess, chunkAOIForChunks(max(0, center-DefaultAOIChunksBehind), center+DefaultAOIChunksAhead))
+}
+
+func (s *roomState) stabilizedAOI(sess *session, requested chunkAOI) chunkAOI {
+	next := s.clampClientAOI(sess, requested).withMargin(AOIHysteresisPixels)
+	if !sess.hasStableAOI {
+		sess.stableAOI = next
+		sess.hasStableAOI = true
+		sess.lastAOIChangeTick = s.tick
+		return next
+	}
+	current := sess.stableAOI
+	if !aoiContains(current, next) {
+		sess.stableAOI = mergeAOI(current, next)
+		sess.lastAOIChangeTick = s.tick
+		return sess.stableAOI
+	}
+	if s.tick-sess.lastAOIChangeTick >= AOIHysteresisTicks {
+		sess.stableAOI = next
+		sess.lastAOIChangeTick = s.tick
+	}
+	return sess.stableAOI
 }
 
 func (s *roomState) clampClientAOI(sess *session, requested chunkAOI) chunkAOI {
@@ -822,6 +875,38 @@ func chunkAOIForChunks(minChunk, maxChunk int) chunkAOI {
 		right:  ChunkWidthTiles * TileSize,
 		top:    -max(0, maxChunk) * ChunkHeightTiles * TileSize,
 		bottom: (-max(0, minChunk) + 1) * ChunkHeightTiles * TileSize,
+	}
+}
+
+func (aoi chunkAOI) withMargin(px int) chunkAOI {
+	if px <= 0 {
+		return aoi
+	}
+	out := aoi
+	out.left = max(0, out.left-px)
+	out.right = min(ChunkWidthTiles*TileSize, out.right+px)
+	out.top -= px
+	out.bottom += px
+	return out
+}
+
+func aoiContains(outer, inner chunkAOI) bool {
+	return inner.min >= outer.min &&
+		inner.max <= outer.max &&
+		inner.left >= outer.left &&
+		inner.right <= outer.right &&
+		inner.top >= outer.top &&
+		inner.bottom <= outer.bottom
+}
+
+func mergeAOI(a, b chunkAOI) chunkAOI {
+	return chunkAOI{
+		min:    min(a.min, b.min),
+		max:    max(a.max, b.max),
+		left:   min(a.left, b.left),
+		right:  max(a.right, b.right),
+		top:    min(a.top, b.top),
+		bottom: max(a.bottom, b.bottom),
 	}
 }
 

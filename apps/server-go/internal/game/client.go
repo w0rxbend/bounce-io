@@ -13,7 +13,7 @@ import (
 
 type Client struct {
 	conn           *websocket.Conn
-	send           chan []byte
+	send           chan outboundMessage
 	snapshotSignal chan struct{}
 	done           chan struct{}
 	ctx            context.Context
@@ -41,7 +41,7 @@ type Client struct {
 	readLatencyMax    float64
 	jsonDecodeAvg     float64
 	jsonDecodeMax     float64
-	latestSnapshot    []byte
+	latestSnapshot    outboundMessage
 	snapshotPending   bool
 	lastSnapshotBytes int
 	aoiMinChunk       int
@@ -54,12 +54,17 @@ type Client struct {
 	serverStats       *ServerMetrics
 }
 
+type outboundMessage struct {
+	data    []byte
+	msgType websocket.MessageType
+}
+
 func NewClient(conn *websocket.Conn, queueSize int, maxDrops uint64, stats *ServerMetrics, log *slog.Logger) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = ctx
 	return &Client{
 		conn:           conn,
-		send:           make(chan []byte, queueSize),
+		send:           make(chan outboundMessage, queueSize),
 		snapshotSignal: make(chan struct{}, 1),
 		done:           make(chan struct{}),
 		ctx:            ctx,
@@ -173,8 +178,12 @@ func (c *Client) EnqueueJSON(payload any) bool {
 }
 
 func (c *Client) EnqueueEncoded(encoded []byte) bool {
+	return c.enqueueMessage(outboundMessage{data: encoded, msgType: websocket.MessageText})
+}
+
+func (c *Client) enqueueMessage(msg outboundMessage) bool {
 	select {
-	case c.send <- encoded:
+	case c.send <- msg:
 		return true
 	default:
 		c.mu.Lock()
@@ -191,9 +200,13 @@ func (c *Client) EnqueueEncoded(encoded []byte) bool {
 }
 
 func (c *Client) EnqueueSnapshotEncoded(encoded []byte) bool {
+	return c.EnqueueSnapshotMessage(encoded, websocket.MessageText)
+}
+
+func (c *Client) EnqueueSnapshotMessage(encoded []byte, msgType websocket.MessageType) bool {
 	c.mu.Lock()
 	overwrotePending := c.snapshotPending
-	c.latestSnapshot = encoded
+	c.latestSnapshot = outboundMessage{data: encoded, msgType: msgType}
 	c.snapshotPending = true
 	if overwrotePending {
 		c.dropped++
@@ -217,11 +230,11 @@ func (c *Client) EnqueueSnapshotEncoded(encoded []byte) bool {
 	return true
 }
 
-func (c *Client) takeLatestSnapshot() []byte {
+func (c *Client) takeLatestSnapshot() outboundMessage {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	msg := c.latestSnapshot
-	c.latestSnapshot = nil
+	c.latestSnapshot = outboundMessage{}
 	c.snapshotPending = false
 	return msg
 }
@@ -267,16 +280,20 @@ func (c *Client) writeLatestSnapshotIfReady(ctx context.Context) bool {
 
 func (c *Client) writeLatestSnapshot(ctx context.Context) bool {
 	msg := c.takeLatestSnapshot()
-	if len(msg) == 0 {
+	if len(msg.data) == 0 {
 		return true
 	}
 	return c.writeMessage(ctx, msg)
 }
 
-func (c *Client) writeMessage(ctx context.Context, msg []byte) bool {
+func (c *Client) writeMessage(ctx context.Context, msg outboundMessage) bool {
 	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	start := time.Now()
-	err := c.conn.Write(writeCtx, websocket.MessageText, msg)
+	msgType := msg.msgType
+	if msgType == 0 {
+		msgType = websocket.MessageText
+	}
+	err := c.conn.Write(writeCtx, msgType, msg.data)
 	latency := time.Since(start)
 	cancel()
 	if err != nil {
@@ -289,14 +306,14 @@ func (c *Client) writeMessage(ctx context.Context, msg []byte) bool {
 	latencyMS := float64(latency.Microseconds()) / 1000
 	c.mu.Lock()
 	c.msgOut++
-	c.bytesOut += uint64(len(msg))
+	c.bytesOut += uint64(len(msg.data))
 	c.writeLatencyAvg = recordEMA(c.writeLatencyAvg, latencyMS, 0.12)
 	if latencyMS > c.writeLatencyMax {
 		c.writeLatencyMax = latencyMS
 	}
 	c.mu.Unlock()
 	c.serverStats.MessagesSent.Add(1)
-	c.serverStats.BytesSent.Add(uint64(len(msg)))
+	c.serverStats.BytesSent.Add(uint64(len(msg.data)))
 	return true
 }
 

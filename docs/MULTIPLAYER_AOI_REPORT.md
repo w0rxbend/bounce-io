@@ -28,12 +28,15 @@ Date: 2026-05-31
 - Added client F1 overlay counters for last snapshot bytes and received player/enemy/item counts.
 - Added client F1 overlay counters for visible world size, visible chunks, loaded chunks, and rendered entities.
 - Added Go unit coverage for AOI filtering and chunk request gating.
+- Added AOI hysteresis/cooling so viewport shrinkage waits briefly and edge entities do not churn every tick.
+- Added a server-side dynamic spatial index for players, enemies, and dynamic collectibles; per-client snapshots query AOI cells instead of scanning each full dynamic collection per recipient.
+- Added opt-in WebSocket binary snapshots for hot state while keeping JSON reliable/control events and JSON snapshot fallback.
+- Added per-client binary baselines with removed entity hashes so clients can apply AOI enter/update/leave behavior.
 
 ## Remaining Risks
 
-- Reliable event batches are still room-wide. That is safer for correctness, but long matches with many distant combat/pickup events may need event AOI filtering or targeted reliable delivery.
-- Snapshots are still JSON. The payload is now more scoped; binary encoding should wait until metrics show JSON parse/encode is still a bottleneck.
-- The next server-side step is a persistent spatial index plus AOI subscription hysteresis, so snapshots do not scan all dynamic maps as rooms grow.
+- Binary snapshots depend on the JSON ID dictionary during rollout. Unknown hashed entities are skipped until their IDs arrive through `welcome`, `playerJoined`, `chunk`, or reliable event messages.
+- Reliable event batches are still room-wide. If long matches create distant-event pressure, the next step is targeted reliable event delivery.
 
 ## Local Latency/Jitter Checks
 

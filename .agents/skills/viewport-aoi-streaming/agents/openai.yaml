@@ -1,0 +1,4 @@
+interface:
+  display_name: "Viewport AOI Streaming"
+  short_description: "Viewport-driven AOI and streaming."
+  default_prompt: "Use this skill to reduce visible world size and bind server AOI/chunk streaming to the camera viewport."

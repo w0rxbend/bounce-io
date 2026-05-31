@@ -122,6 +122,29 @@ const WORLD_WIDTH = CHUNK_WIDTH_TILES * TILE_SIZE; // 576px
 
 type SnapshotServerMessage = Extract<ServerMessage, { type: "snapshot" }>;
 
+const BINARY_SNAPSHOT_MESSAGE_TYPE = 1;
+const BINARY_ENTITY_PLAYER = 1;
+const BINARY_ENTITY_ENEMY_BASE = 16;
+const BINARY_ENTITY_COLLECTIBLE = 64;
+const binaryEntityIds = new Map<number, string>();
+
+const enemyKindByBinaryCode: Record<number, EnemyKind> = {
+  0: "skeleton",
+  1: "skeleton",
+  2: "skeletonArmored",
+  3: "skeleton",
+  4: "goblin",
+  5: "goblinScout",
+  6: "goblinChief",
+  7: "iceBat",
+  8: "iceGolem",
+  9: "yeti",
+  10: "windSpirit",
+  11: "archer",
+  12: "skeletonArmored",
+  13: "iceBat",
+};
+
 function envNumber(name: string, fallback: number): number {
   const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env;
   const raw = env?.[name];
@@ -2607,7 +2630,7 @@ const pingSamples: number[] = [];
 let   pingJitterMs = 0;
 let serverTick    = 0;
 let lastSnapshotSeq = -1;
-let matchPhase    = "waiting";
+let matchPhase: SnapshotServerMessage["matchPhase"] = "waiting";
 let reconnDelay   = 1000;
 let reconnTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastViewportInterestSentMs = -Infinity;
@@ -6922,6 +6945,7 @@ function requestOnlinePickupsNearPlayer(): void {
 function syncAuthoritativeCollectibles(collectibles: CollectibleState[]): void {
   const ids = new Set<string>();
   for (const collectible of collectibles) {
+    registerBinaryEntityId(collectible.id);
     ids.add(collectible.id);
     dynamicCollectibles.set(collectible.id, collectible);
     if (!collectible.picked && !collectedRelics.has(collectible.id)) spawnStateCollectibleAnim(collectible);
@@ -8716,12 +8740,183 @@ function byteLength(value: string): number {
   return netTextEncoder.encode(value).length;
 }
 
-function recordIncomingNetworkMessage(raw: string): void {
-  const bytes = byteLength(raw);
+function hashEntityId(value: string): number {
+  let hash = 0x811c9dc5;
+  for (const ch of value) {
+    hash ^= ch.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+function registerBinaryEntityId(id: string | undefined): void {
+  if (!id) return;
+  binaryEntityIds.set(hashEntityId(id), id);
+}
+
+function recordIncomingNetworkBytes(bytes: number): void {
   netMetrics.messagesReceived++;
   netMetrics.bytesReceived += bytes;
   netMetrics.rateWindowMessagesReceived++;
   netMetrics.rateWindowBytesReceived += bytes;
+}
+
+function recordIncomingNetworkMessage(raw: string): void {
+  recordIncomingNetworkBytes(byteLength(raw));
+}
+
+function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
+  const view = new DataView(data);
+  let offset = 0;
+  const readU8 = (): number | null => {
+    if (offset + 1 > view.byteLength) return null;
+    const value = view.getUint8(offset);
+    offset += 1;
+    return value;
+  };
+  const readU16 = (): number | null => {
+    if (offset + 2 > view.byteLength) return null;
+    const value = view.getUint16(offset, true);
+    offset += 2;
+    return value;
+  };
+  const readU32 = (): number | null => {
+    if (offset + 4 > view.byteLength) return null;
+    const value = view.getUint32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const readI32 = (): number | null => {
+    if (offset + 4 > view.byteLength) return null;
+    const value = view.getInt32(offset, true);
+    offset += 4;
+    return value;
+  };
+  const readU64 = (): number | null => {
+    if (offset + 8 > view.byteLength) return null;
+    const low = view.getUint32(offset, true);
+    const high = view.getUint32(offset + 4, true);
+    offset += 8;
+    return high * 0x100000000 + low;
+  };
+  const messageType = readU8();
+  if (messageType !== BINARY_SNAPSHOT_MESSAGE_TYPE) return null;
+  const serverTickValue = readU32();
+  const baselineTick = readU32();
+  void baselineTick;
+  const snapshotSeqValue = readU32();
+  const ackInputSeq = readI32();
+  const serverTime = readU64();
+  const entityCount = readU16();
+  if (serverTickValue === null || snapshotSeqValue === null || ackInputSeq === null || serverTime === null || entityCount === null) return null;
+
+  const playerEntities: PlayerEntityFrame[] = [];
+  const enemies: EnemyState[] = [];
+  const collectibles: CollectibleState[] = [];
+  const presentHashes = new Set<number>();
+
+  for (let i = 0; i < entityCount; i += 1) {
+    if (offset + 21 > view.byteLength) return null;
+    const hash = view.getUint32(offset, true); offset += 4;
+    const entityType = view.getUint8(offset); offset += 1;
+    const x = view.getInt32(offset, true) / 100; offset += 4;
+    const y = view.getInt32(offset, true) / 100; offset += 4;
+    const vx = view.getInt16(offset, true) / 100; offset += 2;
+    const vy = view.getInt16(offset, true) / 100; offset += 2;
+    const rotation = view.getInt16(offset, true); offset += 2;
+    const flags = view.getUint16(offset, true); offset += 2;
+    const id = binaryEntityIds.get(hash);
+    if (!id) continue;
+    presentHashes.add(hash);
+    const health = flags & 0x1f;
+    const maxHealth = (flags >> 5) & 0x1f;
+    if (entityType === BINARY_ENTITY_PLAYER) {
+      const existing = id === localPlayerId ? localPlayer : remotePlayers.get(id)?.current;
+      playerEntities.push({
+        id,
+        s: existing?.skinId,
+        x,
+        y,
+        vx,
+        vy,
+        f: rotation >= 0 ? 1 : -1,
+        g: (flags & (1 << 10)) !== 0,
+        k: (flags & (1 << 13)) !== 0 ? "active" : (flags & (1 << 12)) !== 0 ? "windup" : (flags & (1 << 14)) !== 0 ? "recovery" : "idle",
+        h: health || existing?.health || PLAYER_MAX_HEALTH,
+        c: existing?.coins ?? 0,
+        mh: maxHealth || existing?.maxHealth || PLAYER_MAX_HEALTH,
+        sh: existing?.shield,
+        ms: existing?.maxShield,
+        hr: existing?.hitRange,
+        sk: existing?.selectedSkills,
+      });
+    } else if (entityType >= BINARY_ENTITY_ENEMY_BASE && entityType < BINARY_ENTITY_COLLECTIBLE) {
+      const existing = enemyEntries.get(id)?.state;
+      const kind = enemyKindByBinaryCode[entityType - BINARY_ENTITY_ENEMY_BASE] ?? existing?.kind ?? "skeleton";
+      enemies.push({
+        id,
+        kind,
+        position: { x, y },
+        velocity: { x: vx, y: vy },
+        facing: rotation >= 0 ? 1 : -1,
+        health: health || existing?.health || maxHealth || 1,
+        maxHealth: maxHealth || existing?.maxHealth || Math.max(1, health),
+        chunkY: existing?.chunkY ?? Math.max(0, Math.floor(-y / (CHUNK_HEIGHT_TILES * TILE_SIZE))),
+        patrolMinX: existing?.patrolMinX ?? x,
+        patrolMaxX: existing?.patrolMaxX ?? x,
+        platformY: existing?.platformY ?? y + 24,
+        attackCooldown: existing?.attackCooldown ?? 0,
+        hurtCooldown: existing?.hurtCooldown ?? 0,
+      });
+    } else if (entityType === BINARY_ENTITY_COLLECTIBLE) {
+      const existing = dynamicCollectibles.get(id);
+      collectibles.push({
+        id,
+        type: existing?.type ?? ((flags & 1) ? "coin" : "xp"),
+        x,
+        y,
+        xpValue: existing?.xpValue ?? 10,
+        picked: false,
+        spawnedBy: existing?.spawnedBy,
+      });
+    }
+  }
+
+  const removedCount = readU16();
+  if (removedCount === null) return null;
+  for (let i = 0; i < removedCount; i += 1) {
+    const hash = readU32();
+    if (hash === null) return null;
+    const id = binaryEntityIds.get(hash);
+    if (!id || presentHashes.has(hash)) continue;
+    const enemy = enemyEntries.get(id);
+    if (enemy) {
+      enemy.sprite.destroy();
+      enemy.hp.destroy();
+      enemyEntries.delete(id);
+    }
+    dynamicCollectibles.delete(id);
+  }
+
+  const lastProcessedSeq: Record<string, number> = {};
+  if (localPlayerId) lastProcessedSeq[localPlayerId] = ackInputSeq;
+  return {
+    type: "snapshot",
+    tick: serverTickValue,
+    serverTick: serverTickValue,
+    snapshotSeq: snapshotSeqValue,
+    serverTime,
+    matchPhase,
+    ackInputSeq,
+    players: [],
+    entities: [],
+    playerEntities,
+    enemies,
+    collectibles,
+    collectedRelics: [],
+    events: [],
+    lastProcessedSeq,
+  };
 }
 
 type OutboundPriority = "critical" | "input" | "heartbeat" | "bulk";
@@ -8809,6 +9004,7 @@ function handleMatchEvents(events: MatchEvent[]): void {
   for (const ev2 of events) {
     if (!shouldApplyMatchEvent(ev2)) continue;
     if (ev2.type === "COIN_COLLECTED") {
+      registerBinaryEntityId(ev2.coinId);
       collectedRelics.add(ev2.coinId);
       dynamicCollectibles.delete(ev2.coinId);
       pendingPickupCollectibles.delete(ev2.coinId);
@@ -8827,18 +9023,23 @@ function handleMatchEvents(events: MatchEvent[]): void {
       if (ev2.playerId === localPlayerId) pushNotification("KICK HIT", PAL.hazardGlow);
       else if (ev2.targetId === localPlayerId) pushNotification("KICKED!", PAL.hazardRed);
     } else if (ev2.type === "ENEMY_HIT") {
+      registerBinaryEntityId(ev2.enemyId);
       damageFeedback(ev2.x, ev2.y, ev2.damage);
       if ((ev2 as MatchEvent & { shockwave?: boolean }).shockwave) spawnWorldPulse(ev2.x, ev2.y, PAL.portalGlow, 58, 0.32, 3);
       if (ev2.playerId === localPlayerId) pushNotification("NPC HIT", PAL.hazardGlow);
     } else if (ev2.type === "ENEMY_KILLED") {
+      registerBinaryEntityId(ev2.enemyId);
+      for (const drop of ev2.drops) registerBinaryEntityId(drop.id);
       burst(ev2.x, ev2.y, PAL.coinGold);
       spawnFloatingText(ev2.x, ev2.y - 14, ev2.xpGranted ? `+${ev2.xpGranted} XP` : "DROP", PAL.coinGold);
       spawnDropAnimations(ev2.drops);
       if (ev2.playerId === localPlayerId) pushNotification("NPC DOWN", PAL.coinGold);
     } else if (ev2.type === "COLLECTIBLE_SPAWNED") {
+      registerBinaryEntityId(ev2.collectible.id);
       dynamicCollectibles.set(ev2.collectible.id, ev2.collectible);
       if (!collectedRelics.has(ev2.collectible.id)) spawnStateCollectibleAnim(ev2.collectible);
     } else if (ev2.type === "COLLECTIBLE_PICKED") {
+      registerBinaryEntityId(ev2.collectibleId);
       collectedRelics.add(ev2.collectibleId);
       dynamicCollectibles.delete(ev2.collectibleId);
       pendingPickupCollectibles.delete(ev2.collectibleId);
@@ -8949,15 +9150,18 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   handleMatchEvents(parsed.events);
   const fullPlayerIds = new Set<string>();
   for (const sp of parsed.players) {
+    registerBinaryEntityId(sp.id);
     fullPlayerIds.add(sp.id);
     if (sp.id === localPlayerId) reconcileLocalPlayer(sp, ackForPlayer(parsed, sp.id));
     else updateRemotePlayer(sp, parsed.serverTime, parsed.tick);
   }
   for (const entity of parsed.entities) {
+    registerBinaryEntityId(entity.id);
     if (entity.type !== "player" || entity.id === localPlayerId || fullPlayerIds.has(entity.id)) continue;
     updateRemotePlayer(playerStateFromSnapshotEntity(entity), parsed.serverTime, parsed.tick);
   }
   for (const entity of parsed.playerEntities ?? []) {
+    registerBinaryEntityId(entity.id);
     if (entity.id === localPlayerId && !fullPlayerIds.has(entity.id)) {
       reconcileLocalPlayer(playerStateFromEntityFrame(entity, localPlayer), ackForPlayer(parsed, entity.id));
       continue;
@@ -9018,6 +9222,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
   const wsUrl = new URL(configuredUrl || `${proto}://${location.host}/ws`);
   wsUrl.searchParams.set("room", "demo");
   ws = new WebSocket(wsUrl.toString());
+  ws.binaryType = "arraybuffer";
 
   const connectPromise = new Promise<void>((resolve, reject) => {
     connectResolve = resolve;
@@ -9026,12 +9231,21 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
 
   ws.addEventListener("open", () => {
     reconnDelay = 1000;
-    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", skinId, token: sessionToken ?? undefined }, "critical");
+    sendWsMessage({ type: "hello", protocol: PROTOCOL_VERSION, version: GAME_VERSION, name: name.trim() || "Explorer", skinId, token: sessionToken ?? undefined, binarySnapshots: true }, "critical");
     const pingTime = Date.now();
     if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
   });
 
   ws.addEventListener("message", (ev) => {
+    if (ev.data instanceof ArrayBuffer) {
+      recordIncomingNetworkBytes(ev.data.byteLength);
+      netMetrics.lastSnapshotBytes = ev.data.byteLength;
+      const parseStart = performance.now();
+      const snapshot = decodeBinarySnapshot(ev.data);
+      recordClientParseTime(performance.now() - parseStart);
+      if (snapshot) enqueueSnapshotMessage(snapshot);
+      return;
+    }
     if (typeof ev.data !== "string") return;
     recordIncomingNetworkMessage(ev.data);
     let parsed: unknown;
@@ -9048,6 +9262,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         // Bootstrap clock from welcome only once; pong NTP updates refine it from then on.
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; sessionToken = parsed.sessionToken; matchPhase = parsed.matchPhase;
+        registerBinaryEntityId(parsed.playerId);
         // Store our own sanitized name so the leaderboard shows it correctly.
         playerNames.set(localPlayerId, parsed.name);
         if (serverSeed !== parsed.seed) {
@@ -9068,6 +9283,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
       case "resumed":
         if (!hasServerClock) updateServerClock(parsed.serverTime - Date.now());
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
+        registerBinaryEntityId(parsed.playerId);
         serverTick = 0; lastSnapshotSeq = -1;
         localPlayer = applySkinId(clonePlayerState(parsed.playerState), skinForPlayer(parsed.playerState, skinId)); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         if (loadedChunks.size === 0) for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
@@ -9087,6 +9303,8 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         break;
       case "chunk": {
         const chunkY = parsed.chunk.chunkY;
+        for (const enemy of parsed.chunk.enemies) registerBinaryEntityId(enemy.id);
+        for (const relic of parsed.chunk.relics) registerBinaryEntityId(relic.id);
         pendingAuthoritativeChunks.delete(chunkY);
         if (!isChunkInCurrentWindow(chunkY)) {
           destroyChunkVisuals(chunkY);
@@ -9106,6 +9324,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
       }
       case "playerJoined":
         if (parsed.player.id !== localPlayerId) {
+          registerBinaryEntityId(parsed.player.id);
           playerNames.set(parsed.player.id, parsed.name);
           const existing = remotePlayers.get(parsed.player.id);
           if (existing) {

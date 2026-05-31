@@ -1,0 +1,4 @@
+interface:
+  display_name: "WebSocket-First Multiplayer"
+  short_description: "WebSocket-first multiplayer netcode."
+  default_prompt: "Use this skill to optimize browser multiplayer while keeping WebSocket as the production default transport."

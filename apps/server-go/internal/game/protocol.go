@@ -27,6 +27,8 @@ const (
 	DefaultChunkRequestSlack       = 1
 	MaxClientAOIChunksBehind       = 6
 	MaxClientAOIChunksAhead        = 8
+	AOIHysteresisTicks             = 12
+	AOIHysteresisPixels            = 32
 )
 
 const (
@@ -72,23 +74,25 @@ type MessageEnvelope struct {
 }
 
 type ClientHello struct {
-	Type     string `json:"type"`
-	Protocol int    `json:"protocol"`
-	Version  string `json:"version"`
-	Name     string `json:"name"`
-	SkinID   string `json:"skinId,omitempty"`
-	Token    string `json:"token,omitempty"`
+	Type            string `json:"type"`
+	Protocol        int    `json:"protocol"`
+	Version         string `json:"version"`
+	Name            string `json:"name"`
+	SkinID          string `json:"skinId,omitempty"`
+	Token           string `json:"token,omitempty"`
+	BinarySnapshots bool   `json:"binarySnapshots,omitempty"`
 }
 
 type ClientJoin struct {
-	Type       string `json:"type"`
-	Protocol   int    `json:"protocol"`
-	Version    string `json:"version"`
-	Name       string `json:"name"`
-	SkinID     string `json:"skinId,omitempty"`
-	Token      string `json:"token,omitempty"`
-	ClientID   string `json:"clientId,omitempty"`
-	ClientTime int64  `json:"clientTime,omitempty"`
+	Type            string `json:"type"`
+	Protocol        int    `json:"protocol"`
+	Version         string `json:"version"`
+	Name            string `json:"name"`
+	SkinID          string `json:"skinId,omitempty"`
+	Token           string `json:"token,omitempty"`
+	ClientID        string `json:"clientId,omitempty"`
+	ClientTime      int64  `json:"clientTime,omitempty"`
+	BinarySnapshots bool   `json:"binarySnapshots,omitempty"`
 }
 
 type ClientPing struct {

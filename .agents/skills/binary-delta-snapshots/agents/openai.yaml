@@ -1,0 +1,4 @@
+interface:
+  display_name: "Binary Delta Snapshots"
+  short_description: "Compact binary snapshot deltas."
+  default_prompt: "Use this skill to replace hot JSON/full-state snapshots with compact binary delta snapshots while preserving reliable JSON control events."

@@ -370,7 +370,7 @@ func (s *Server) handleJoin(ctx context.Context, client *Client, data []byte, r 
 		roomID = DefaultRoomID
 	}
 	room := s.getOrCreateRoom(roomID)
-	result := room.Join(ctx.Done(), client, join.Name, join.Token, join.SkinID)
+	result := room.Join(ctx.Done(), client, join.Name, join.Token, join.SkinID, join.BinarySnapshots)
 	if result.err != "" {
 		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: result.err, Message: "join failed"})
 		if result.err == "ROOM_FULL" || result.err == "ALREADY_CONNECTED" {

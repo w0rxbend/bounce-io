@@ -120,17 +120,19 @@ Current implemented slice
 - Client sends viewport-derived AOI.
 - Server clamps that AOI around the authoritative player.
 - Server filters players, enemies, and collectibles by chunk range plus viewport AABB.
+- Server applies AOI hysteresis/cooling to reduce subscription edge thrash.
+- Server indexes dynamic players, enemies, and collectibles in spatial cells before per-client AOI queries.
 - Server rejects chunk requests outside the clamped AOI.
+- Binary snapshots are implemented as an opt-in WebSocket binary frame for clients that advertise `binarySnapshots`.
+- JSON reliable/control messages and JSON snapshot fallback are retained.
+- Per-client binary baselines track removed entity IDs for AOI leave deltas.
 - Debug overlay includes AOI snapshot size and dynamic entity counts.
 - Server `/metrics` includes per-client AOI counts and last snapshot bytes.
 
 Remaining work
 
-- Add AOI hysteresis/cooling for subscriptions.
-- Add persistent spatial index instead of scanning all dynamic maps.
-- Implement binary delta snapshot encode/decode.
-- Track baselines and removed IDs for enter/update/leave.
-- Add artificial latency/jitter/loss test instructions to docs.
+- Run measured latency/jitter/loss load tests against the binary snapshot path once the local Go/npm toolchain is available.
+- Consider targeted reliable event delivery if room-wide event batches become measurable pressure.
 - Revisit WebTransport only after WebSocket+AOI+binary deltas are measured.
 
 Local latency/jitter testing
