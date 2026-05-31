@@ -240,6 +240,33 @@ test("valid hello with session token passes validation", () => {
   }), true);
 });
 
+test("viewport interest message validates bounded chunk window", () => {
+  assert.equal(isClientMessage({
+    type: "viewport",
+    minChunkY: 2,
+    maxChunkY: 8,
+    x1: 0,
+    y1: -1200,
+    x2: 576,
+    y2: 120,
+    visibleWidth: 960,
+    visibleHeight: 540,
+    zoom: 1.5,
+  }), true);
+  assert.equal(isClientMessage({
+    type: "viewport",
+    minChunkY: 8,
+    maxChunkY: 2,
+    x1: 0,
+    y1: -1200,
+    x2: 576,
+    y2: 120,
+    visibleWidth: 960,
+    visibleHeight: 540,
+    zoom: 1.5,
+  }), false);
+});
+
 test("snapshot message validates correctly including coins in player state", () => {
   const playerState = createPlayerState("p1", 100, -50);
   playerState.grounded = true;

@@ -1,0 +1,155 @@
+WebSocket-first multiplayer optimization plan
+Date: 2026-05-31
+
+This project should not migrate to WebTransport yet. WebSocket remains the production default transport while the main lag sources are fixed at the architecture and protocol level.
+
+Priority order
+
+1. Keep WebSocket as the default transport.
+2. Fix architecture-level lag first:
+   - excessive viewport size,
+   - oversized server AOI,
+   - full-state updates,
+   - lack of spatial partitioning,
+   - weak prediction/interpolation.
+3. Keep WebTransport as a future upgrade path, not the current migration target.
+
+Findings
+
+- The server is already authoritative: clients send input commands, the room simulates state, and snapshots include tick/sequence data plus last processed input sequence.
+- The client already has local prediction, reconciliation, remote interpolation, stale snapshot rejection, and snapshot backlog dropping.
+- The most valuable immediate fixes are viewport reduction, AOI scoping, stale snapshot replacement, and eventually binary delta snapshots.
+- Static chunks are deterministic from seed + chunk coordinates, so snapshots should carry dynamic authoritative state, not the whole world.
+- WebSocket/TCP head-of-line blocking can hurt high-frequency state, but replacing the transport before shrinking payloads and AOI would hide the real bottleneck.
+
+Architecture target
+
+Client
+  - sends input commands, viewport AOI, pickup/skill events
+  - predicts local player
+  - reconciles with authoritative snapshots
+  - interpolates remote entities
+  - ignores stale snapshots
+
+Go WebSocket server
+  - owns authoritative room state
+  - runs fixed simulation ticks
+  - keeps per-client AOI based on camera viewport AABB + margin
+  - spatially partitions dynamic entities
+  - emits enter/update/leave deltas
+  - replaces obsolete snapshots instead of queueing stale state
+
+Future transport layer
+  - WebSocket default
+  - WebTransport optional only after binary deltas, AOI, and smoothing are proven
+  - WebSocket fallback always retained
+
+Implementation plan
+
+1. Camera / viewport
+   - Reduce default camera zoom to show fewer chunks/entities.
+   - Clamp max zoom-out.
+   - Couple rendering culling and network AOI to visible world size.
+   - Debug metrics:
+     - visible world width/height,
+     - visible chunks,
+     - loaded chunks,
+     - rendered entities.
+
+2. Server AOI
+   - Client sends viewport world-space AABB and chunk range.
+   - Server clamps AOI around authoritative player state.
+   - Server sends no dynamic entities outside the clamped AOI.
+   - Add hysteresis/cooling for chunk/entity subscription changes to prevent edge thrash.
+
+3. WebSocket default
+   - Keep WebSocket as production transport.
+   - Continue latest-snapshot replacement.
+   - Keep reliable/control messages separate from replaceable state updates.
+   - Optimize protocol shape before changing transport.
+
+4. Binary delta snapshots
+   - Add a compact binary snapshot format for hot state:
+     - uint8 messageType,
+     - uint32 serverTick,
+     - uint32 baselineTick,
+     - uint16 entityCount,
+     - repeated entity delta:
+       - uint32 entityId,
+       - uint8 entityType,
+       - int32 quantizedX,
+       - int32 quantizedY,
+       - int16 quantizedVx,
+       - int16 quantizedVy,
+       - int16 rotation,
+       - uint16 stateFlags,
+     - uint16 removedCount,
+     - repeated uint32 removedEntityId.
+   - Keep JSON reliable events during rollout.
+   - Client ignores stale binary snapshots by serverTick/baselineTick.
+
+5. Spatial partitioning
+   - Add a server grid/spatial hash keyed by chunk/cell.
+   - Query only nearby cells inside each client AOI.
+   - Maintain per-client subscriptions.
+   - Send enter/update/leave deltas instead of full dynamic lists.
+
+6. Authoritative server
+   - Clients never send final positions.
+   - Server validates movement/world interactions.
+   - Server returns lastProcessedInputSeq for reconciliation.
+
+7. Client smoothing
+   - Keep local prediction and server reconciliation.
+   - Keep interpolation buffer for remote entities.
+   - Extrapolate only briefly during packet gaps.
+   - Snap only when correction exceeds threshold.
+
+8. WebTransport later
+   - Do not migrate now.
+   - Add a transport abstraction only if it stays small and non-invasive.
+   - Future mapping:
+     - unreliable datagrams for movement snapshots,
+     - reliable streams for critical events,
+     - WebSocket fallback retained.
+
+Current implemented slice
+
+- WebSocket remains the only production transport.
+- Default camera zoom is tighter and zoom-out is clamped.
+- Client sends viewport-derived AOI.
+- Server clamps that AOI around the authoritative player.
+- Server filters players, enemies, and collectibles by chunk range plus viewport AABB.
+- Server rejects chunk requests outside the clamped AOI.
+- Debug overlay includes AOI snapshot size and dynamic entity counts.
+- Server `/metrics` includes per-client AOI counts and last snapshot bytes.
+
+Remaining work
+
+- Add AOI hysteresis/cooling for subscriptions.
+- Add persistent spatial index instead of scanning all dynamic maps.
+- Implement binary delta snapshot encode/decode.
+- Track baselines and removed IDs for enter/update/leave.
+- Add artificial latency/jitter/loss test instructions to docs.
+- Revisit WebTransport only after WebSocket+AOI+binary deltas are measured.
+
+Local latency/jitter testing
+
+Use Linux `tc netem` around the client or server network path:
+
+```bash
+sudo tc qdisc add dev lo root netem delay 80ms 25ms distribution normal
+sudo tc qdisc change dev lo root netem delay 120ms 40ms loss 1%
+sudo tc qdisc del dev lo root
+```
+
+Measure:
+
+- F1 overlay: FPS, visible world size, visible chunks, loaded chunks, rendered entities, snapshot age/jitter, stale drops.
+- Server `/metrics`: tick duration, snapshot size, AOI counts, queue depth, drops, heap/GC.
+
+WebTransport migration notes
+
+- WebTransport is attractive for unreliable latest-state datagrams and reliable streams, but it requires HTTP/3/QUIC deployment support.
+- It should be introduced behind a feature flag with WebSocket fallback.
+- The game-facing transport API should map reliable messages to WebSocket sends today and WebTransport streams later; unreliable messages should be replaceable snapshots today and datagrams later.

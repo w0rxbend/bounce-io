@@ -65,6 +65,18 @@ export type ClientMessage =
       chunkY: number;
     }
   | {
+      type: "viewport";
+      minChunkY: number;
+      maxChunkY: number;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      visibleWidth: number;
+      visibleHeight: number;
+      zoom: number;
+    }
+  | {
       type: "ping";
       clientTime: number;
     }

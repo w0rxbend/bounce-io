@@ -22,6 +22,11 @@ const (
 	DefaultMaxPlayers              = 8
 	DefaultOutboundQueue           = 32
 	DefaultReconnectGrace          = 30 * time.Second
+	DefaultAOIChunksBehind         = 3
+	DefaultAOIChunksAhead          = 5
+	DefaultChunkRequestSlack       = 1
+	MaxClientAOIChunksBehind       = 6
+	MaxClientAOIChunksAhead        = 8
 )
 
 const (
@@ -102,6 +107,19 @@ type ClientRequestChunk struct {
 	ChunkY int    `json:"chunkY"`
 }
 
+type ClientViewport struct {
+	Type          string  `json:"type"`
+	MinChunkY     int     `json:"minChunkY"`
+	MaxChunkY     int     `json:"maxChunkY"`
+	X1            float64 `json:"x1"`
+	Y1            float64 `json:"y1"`
+	X2            float64 `json:"x2"`
+	Y2            float64 `json:"y2"`
+	VisibleWidth  float64 `json:"visibleWidth"`
+	VisibleHeight float64 `json:"visibleHeight"`
+	Zoom          float64 `json:"zoom"`
+}
+
 type ClientInput struct {
 	Type       string       `json:"type"`
 	ClientID   string       `json:"clientId,omitempty"`
@@ -160,98 +178,98 @@ type Vec2 struct {
 }
 
 type PlayerState struct {
-	ID                  string   `json:"id"`
-	SkinID              string   `json:"skinId,omitempty"`
-	Position            Vec2     `json:"position"`
-	Velocity            Vec2     `json:"velocity"`
-	Facing              int      `json:"facing"`
-	Grounded            bool     `json:"grounded"`
-	CoyoteTimer         float64  `json:"coyoteTimer"`
-	JumpBufferTimer     float64  `json:"jumpBufferTimer"`
-	KickCooldown        float64  `json:"kickCooldown"`
-	KickPhase           string   `json:"kickPhase"`
-	KickTimer           float64  `json:"kickTimer"`
-	KickInvulnerable    float64  `json:"kickInvulnerable"`
-	Invulnerable        float64  `json:"invulnerable"`
-	StunTimer           float64  `json:"stunTimer"`
-	CheckpointChunkY    int      `json:"checkpointChunkY"`
-	Coins               int      `json:"coins"`
-	Health              int      `json:"health"`
-	MaxHealth           int      `json:"maxHealth"`
-	Damage              int      `json:"damage"`
-	AttackSpeed         float64  `json:"attackSpeed"`
-	JumpPower           float64  `json:"jumpPower"`
-	AirControl          float64  `json:"airControl"`
-	KnockbackResistance float64  `json:"knockbackResistance"`
-	MovementSpeed       float64  `json:"movementSpeed"`
-	Level               int      `json:"level"`
-	Relics              int      `json:"relics"`
-	Crystals            int      `json:"crystals"`
-	RelicFragments      int      `json:"relicFragments"`
-	HitRange            float64  `json:"hitRange"`
-	AttackCooldownMs    float64  `json:"attackCooldownMs"`
-	DamageReduction     float64  `json:"damageReduction"`
-	Shield              float64  `json:"shield"`
-	MaxShield           float64  `json:"maxShield"`
-	ShieldRegenPerSec   float64  `json:"shieldRegenPerSecond"`
-	ShieldRegenDelayMs  float64  `json:"shieldRegenDelayMs"`
-	LastDamageAt        int64    `json:"lastDamageAt"`
-	ShieldRegenCooldown float64  `json:"shieldRegenCooldownMs"`
-	JumpPowerMultiplier float64  `json:"jumpPowerMultiplier"`
-	AirControlMultiplier float64 `json:"airControlMultiplier"`
-	ExtraJumps          int      `json:"extraJumps"`
-	ExtraJumpsUsed      int      `json:"extraJumpsUsed"`
-	DashUnlocked        bool     `json:"dashUnlocked"`
-	DashCooldownMs      float64  `json:"dashCooldownMs"`
-	DashCooldownRemainingMs float64 `json:"dashCooldownRemainingMs"`
-	DashTimerMs         float64  `json:"dashTimerMs"`
-	PickupRadius        float64  `json:"pickupRadius"`
-	XPGainMultiplier    float64  `json:"xpGainMultiplier"`
-	KillXPMultiplier    float64  `json:"killXpMultiplier"`
-	SelectedSkills      map[string]int `json:"selectedSkills"`
-	ShockwaveCounter    int      `json:"shockwaveCounter"`
-	FallStartY          *float64 `json:"fallStartY"`
+	ID                      string         `json:"id"`
+	SkinID                  string         `json:"skinId,omitempty"`
+	Position                Vec2           `json:"position"`
+	Velocity                Vec2           `json:"velocity"`
+	Facing                  int            `json:"facing"`
+	Grounded                bool           `json:"grounded"`
+	CoyoteTimer             float64        `json:"coyoteTimer"`
+	JumpBufferTimer         float64        `json:"jumpBufferTimer"`
+	KickCooldown            float64        `json:"kickCooldown"`
+	KickPhase               string         `json:"kickPhase"`
+	KickTimer               float64        `json:"kickTimer"`
+	KickInvulnerable        float64        `json:"kickInvulnerable"`
+	Invulnerable            float64        `json:"invulnerable"`
+	StunTimer               float64        `json:"stunTimer"`
+	CheckpointChunkY        int            `json:"checkpointChunkY"`
+	Coins                   int            `json:"coins"`
+	Health                  int            `json:"health"`
+	MaxHealth               int            `json:"maxHealth"`
+	Damage                  int            `json:"damage"`
+	AttackSpeed             float64        `json:"attackSpeed"`
+	JumpPower               float64        `json:"jumpPower"`
+	AirControl              float64        `json:"airControl"`
+	KnockbackResistance     float64        `json:"knockbackResistance"`
+	MovementSpeed           float64        `json:"movementSpeed"`
+	Level                   int            `json:"level"`
+	Relics                  int            `json:"relics"`
+	Crystals                int            `json:"crystals"`
+	RelicFragments          int            `json:"relicFragments"`
+	HitRange                float64        `json:"hitRange"`
+	AttackCooldownMs        float64        `json:"attackCooldownMs"`
+	DamageReduction         float64        `json:"damageReduction"`
+	Shield                  float64        `json:"shield"`
+	MaxShield               float64        `json:"maxShield"`
+	ShieldRegenPerSec       float64        `json:"shieldRegenPerSecond"`
+	ShieldRegenDelayMs      float64        `json:"shieldRegenDelayMs"`
+	LastDamageAt            int64          `json:"lastDamageAt"`
+	ShieldRegenCooldown     float64        `json:"shieldRegenCooldownMs"`
+	JumpPowerMultiplier     float64        `json:"jumpPowerMultiplier"`
+	AirControlMultiplier    float64        `json:"airControlMultiplier"`
+	ExtraJumps              int            `json:"extraJumps"`
+	ExtraJumpsUsed          int            `json:"extraJumpsUsed"`
+	DashUnlocked            bool           `json:"dashUnlocked"`
+	DashCooldownMs          float64        `json:"dashCooldownMs"`
+	DashCooldownRemainingMs float64        `json:"dashCooldownRemainingMs"`
+	DashTimerMs             float64        `json:"dashTimerMs"`
+	PickupRadius            float64        `json:"pickupRadius"`
+	XPGainMultiplier        float64        `json:"xpGainMultiplier"`
+	KillXPMultiplier        float64        `json:"killXpMultiplier"`
+	SelectedSkills          map[string]int `json:"selectedSkills"`
+	ShockwaveCounter        int            `json:"shockwaveCounter"`
+	FallStartY              *float64       `json:"fallStartY"`
 }
 
 type EntityState struct {
-	ID           string  `json:"id"`
-	SkinID       string  `json:"skinId,omitempty"`
-	Kind         string  `json:"kind"`
-	Type         string  `json:"type"`
-	Position     Vec2    `json:"position"`
-	Velocity     Vec2    `json:"velocity"`
-	Facing       int     `json:"facing"`
-	Grounded     bool    `json:"grounded"`
-	KickPhase    string  `json:"kickPhase,omitempty"`
-	KickTimer    float64 `json:"kickTimer,omitempty"`
-	Invulnerable float64 `json:"invulnerable,omitempty"`
-	Health       int     `json:"health"`
-	Coins        int     `json:"coins"`
-	MaxHealth    int     `json:"maxHealth,omitempty"`
-	Shield       float64 `json:"shield,omitempty"`
-	MaxShield    float64 `json:"maxShield,omitempty"`
-	HitRange     float64 `json:"hitRange,omitempty"`
+	ID             string         `json:"id"`
+	SkinID         string         `json:"skinId,omitempty"`
+	Kind           string         `json:"kind"`
+	Type           string         `json:"type"`
+	Position       Vec2           `json:"position"`
+	Velocity       Vec2           `json:"velocity"`
+	Facing         int            `json:"facing"`
+	Grounded       bool           `json:"grounded"`
+	KickPhase      string         `json:"kickPhase,omitempty"`
+	KickTimer      float64        `json:"kickTimer,omitempty"`
+	Invulnerable   float64        `json:"invulnerable,omitempty"`
+	Health         int            `json:"health"`
+	Coins          int            `json:"coins"`
+	MaxHealth      int            `json:"maxHealth,omitempty"`
+	Shield         float64        `json:"shield,omitempty"`
+	MaxShield      float64        `json:"maxShield,omitempty"`
+	HitRange       float64        `json:"hitRange,omitempty"`
 	SelectedSkills map[string]int `json:"selectedSkills,omitempty"`
 }
 
 type PlayerEntityFrame struct {
-	ID           string  `json:"id"`
-	SkinID       string  `json:"s,omitempty"`
-	X            float64 `json:"x"`
-	Y            float64 `json:"y"`
-	VX           float64 `json:"vx"`
-	VY           float64 `json:"vy"`
-	Facing       int     `json:"f"`
-	Grounded     bool    `json:"g"`
-	KickPhase    string  `json:"k,omitempty"`
-	KickTimer    float64 `json:"kt,omitempty"`
-	Invulnerable float64 `json:"iv,omitempty"`
-	Health       int     `json:"h"`
-	Coins        int     `json:"c"`
-	MaxHealth    int     `json:"mh,omitempty"`
-	Shield       float64 `json:"sh,omitempty"`
-	MaxShield    float64 `json:"ms,omitempty"`
-	HitRange     float64 `json:"hr,omitempty"`
+	ID             string         `json:"id"`
+	SkinID         string         `json:"s,omitempty"`
+	X              float64        `json:"x"`
+	Y              float64        `json:"y"`
+	VX             float64        `json:"vx"`
+	VY             float64        `json:"vy"`
+	Facing         int            `json:"f"`
+	Grounded       bool           `json:"g"`
+	KickPhase      string         `json:"k,omitempty"`
+	KickTimer      float64        `json:"kt,omitempty"`
+	Invulnerable   float64        `json:"iv,omitempty"`
+	Health         int            `json:"h"`
+	Coins          int            `json:"c"`
+	MaxHealth      int            `json:"mh,omitempty"`
+	Shield         float64        `json:"sh,omitempty"`
+	MaxShield      float64        `json:"ms,omitempty"`
+	HitRange       float64        `json:"hr,omitempty"`
 	SelectedSkills map[string]int `json:"sk,omitempty"`
 }
 
@@ -298,7 +316,7 @@ type SkillCard struct {
 	Description   string `json:"description"`
 	Icon          string `json:"icon"`
 	MaxStacks     int    `json:"maxStacks"`
-	CurrentStacks int   `json:"currentStacks"`
+	CurrentStacks int    `json:"currentStacks"`
 }
 
 type SkillCardOffer struct {

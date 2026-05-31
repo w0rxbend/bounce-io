@@ -172,15 +172,17 @@ const CHUNKS_PRELOAD_BEHIND = 3;     // keep enough below for intentional descen
 const CHUNKS_PRELOAD_AHEAD  = 4;     // preload upward route without growing forever
 const INITIAL_CHUNKS_TO_LOAD = 4;
 const CHUNK_PIXEL_HEIGHT = CHUNK_HEIGHT_TILES * TILE_SIZE;
+const NETWORK_AOI_SCALE = envNumber("VITE_NETWORK_AOI_SCALE", 1.35);
+const VIEWPORT_INTEREST_SEND_MS = envNumber("VITE_VIEWPORT_INTEREST_SEND_MS", 250);
 const ACTIVE_VIEW_MARGIN_PX = 120;
 const PRESSURE_VIEW_MARGIN_PX = 64;
 const VISUAL_RENDER_MARGIN_PX = 96;
 const VISUAL_RETAIN_MARGIN_PX = CHUNK_PIXEL_HEIGHT * 1.25;
 const BIOME_FLUTTER_VIEW_MARGIN_PX = 64;
 const CAMERA_CONFIG = {
-  zoom: 1.25,
-  minZoom: 1.0,
-  maxZoom: 1.5,
+  zoom: 1.5,
+  minZoom: 1.25,
+  maxZoom: 2.0,
   followLerp: 0.12,
   lookAheadX: 80,
   lookAheadY: -40,
@@ -2608,6 +2610,8 @@ let lastSnapshotSeq = -1;
 let matchPhase    = "waiting";
 let reconnDelay   = 1000;
 let reconnTimeout: ReturnType<typeof setTimeout> | null = null;
+let lastViewportInterestSentMs = -Infinity;
+let lastViewportInterestKey = "";
 
 type AppState = "mainMenu" | "modeSelect" | "skinSelect" | "onlineNickname" | "connecting" | "game";
 type GameMode = "local" | "online";
@@ -2781,6 +2785,10 @@ interface NetworkMetrics {
   pendingInputCount: number;
   pendingSnapshotQueue: number;
   backpressureSkips: number;
+  lastSnapshotPlayers: number;
+  lastSnapshotEnemies: number;
+  lastSnapshotCollectibles: number;
+  lastSnapshotBytes: number;
   interpolationBufferUnderruns: number;
   remoteExtrapolationMs: number;
   lastSnapshotDelayMs: number;
@@ -2816,6 +2824,10 @@ const netMetrics: NetworkMetrics = {
   pendingInputCount: 0,
   pendingSnapshotQueue: 0,
   backpressureSkips: 0,
+  lastSnapshotPlayers: 0,
+  lastSnapshotEnemies: 0,
+  lastSnapshotCollectibles: 0,
+  lastSnapshotBytes: 0,
   interpolationBufferUnderruns: 0,
   remoteExtrapolationMs: 0,
   lastSnapshotDelayMs: 0,
@@ -3142,6 +3154,13 @@ function chunkTopWorldY(chunkY: number): number {
   return -chunkY * CHUNK_PIXEL_HEIGHT;
 }
 
+function chunkWindowFromVerticalRange(topY: number, bottomY: number): { min: number; max: number } {
+  return {
+    min: Math.max(0, chunkYForWorldY(bottomY)),
+    max: Math.max(0, chunkYForWorldY(topY)),
+  };
+}
+
 function activeWorldMarginPx(): number {
   const fps = pixi.ticker.FPS;
   if (pendingChunkRenders.size > 0) return PRESSURE_VIEW_MARGIN_PX;
@@ -3163,6 +3182,23 @@ function activeWorldBounds(margin = activeWorldMarginPx()): { left: number; righ
     top: cameraY - margin,
     bottom: cameraY + visibleWorldHeight + margin,
   };
+}
+
+function viewportInterestWindow(): { min: number; max: number; x1: number; y1: number; x2: number; y2: number; visibleWidth: number; visibleHeight: number; zoom: number } | null {
+  if (!localPlayer) return null;
+  const scale = getScale();
+  const visibleWidth = pixi.screen.width / scale;
+  const visibleHeight = pixi.screen.height / scale;
+  const margin = Math.max(visibleWidth, visibleHeight) * Math.max(0, NETWORK_AOI_SCALE - 1);
+  const x1 = Math.max(0, cameraX - margin);
+  const x2 = Math.min(WORLD_WIDTH, cameraX + visibleWidth + margin);
+  const y1 = cameraY - margin;
+  const y2 = cameraY + visibleHeight + margin;
+  const window = chunkWindowFromVerticalRange(y1, y2);
+  const playerChunkY = chunkYForWorldY(localPlayer.position.y);
+  window.min = Math.min(window.min, playerChunkY);
+  window.max = Math.max(window.max, playerChunkY);
+  return { ...window, x1, y1, x2, y2, visibleWidth, visibleHeight, zoom: cameraZoom() };
 }
 
 function isWorldYActive(y: number, margin = activeWorldMarginPx()): boolean {
@@ -3274,6 +3310,8 @@ function pruneDistantChunkVisuals(): void {
 
 function currentChunkWindow(): { min: number; max: number } | null {
   if (!localPlayer) return null;
+  const viewportWindow = viewportInterestWindow();
+  if (viewportWindow) return { min: viewportWindow.min, max: viewportWindow.max };
   const pChunkY = chunkYForWorldY(localPlayer.position.y);
   return {
     min: Math.max(0, pChunkY - CHUNKS_PRELOAD_BEHIND),
@@ -3416,6 +3454,8 @@ function resetGameSession(mode: GameMode): void {
   hasServerClock = false;
   pingSamples.length = 0;
   pingJitterMs = 0;
+  lastViewportInterestSentMs = -Infinity;
+  lastViewportInterestKey = "";
   Object.assign(netMetrics, {
     messagesReceived: 0,
     messagesSent: 0,
@@ -3441,6 +3481,10 @@ function resetGameSession(mode: GameMode): void {
     pendingInputCount: 0,
     pendingSnapshotQueue: 0,
     backpressureSkips: 0,
+    lastSnapshotPlayers: 0,
+    lastSnapshotEnemies: 0,
+    lastSnapshotCollectibles: 0,
+    lastSnapshotBytes: 0,
     interpolationBufferUnderruns: 0,
     remoteExtrapolationMs: 0,
     lastSnapshotDelayMs: 0,
@@ -7795,6 +7839,22 @@ function updateDebug(): void {
   if (!showDebug) return;
 
   drawHudPanel(dbgGfx, 4, 58, 330, 318);
+  const visibleWorldWidth = pixi.screen.width / getScale();
+  const visibleWorldHeight = pixi.screen.height / getScale();
+  let visibleChunks = 0;
+  for (const chunkY of loadedChunks.keys()) {
+    if (isChunkActive(chunkY, 0)) visibleChunks++;
+  }
+  let renderedEntities = localPlayer && (localSprite.visible || localGfx.visible) ? 1 : 0;
+  for (const remote of remotePlayers.values()) {
+    if (remote.sprite.visible || remote.gfx.visible) renderedEntities++;
+  }
+  for (const enemy of enemyEntries.values()) {
+    if (enemy.sprite.visible || enemy.hp.visible) renderedEntities++;
+  }
+  for (const relic of relicAnims.values()) {
+    if (relic.container.visible) renderedEntities++;
+  }
 
   const fps = Math.round(pixi.ticker.FPS);
   dbgGfx.rect(8, 64, Math.min(fps * 1.4, 118), 3).fill(fps > 50 ? 0x5dff9c : fps > 30 ? PAL.coinGold : PAL.hazardRed);
@@ -7845,11 +7905,13 @@ function updateDebug(): void {
     `prep ${perfMetrics.renderPrepMsAvg.toFixed(1)}ms netapply ${perfMetrics.networkApplyMsAvg.toFixed(2)}ms entity ${perfMetrics.entityUpdateMsAvg.toFixed(1)}ms\n` +
     `particles ${perfMetrics.particleUpdateMsAvg.toFixed(1)}ms ui ${perfMetrics.uiUpdateMsAvg.toFixed(1)}ms count ${perfMetrics.particleCount}\n` +
     `objects ${perfMetrics.displayObjectCount} sprites ${perfMetrics.visibleSpriteCount} gfx ${perfMetrics.graphicsObjectCount} text ${perfMetrics.textObjectCount} filters ${perfMetrics.activeFilterCount}\n` +
-    `pixiParticles ${perfMetrics.visibleParticleCount} chunks ${authoritativeChunks.size}/${loadedChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
+    `view ${visibleWorldWidth.toFixed(0)}x${visibleWorldHeight.toFixed(0)} chunks visible/loaded ${visibleChunks}/${loadedChunks.size} entities ${renderedEntities}\n` +
+    `pixiParticles ${perfMetrics.visibleParticleCount} chunks auth ${authoritativeChunks.size} pending ${pendingAuthoritativeChunks.size}\n` +
     `long ${perfMetrics.longTaskCount} last/max ${perfMetrics.longTaskLastMs.toFixed(1)}/${perfMetrics.longTaskMaxMs.toFixed(1)}ms heap ${perfMetrics.heapUsedMB.toFixed(0)}MB\n` +
     `ping ${pingMs.toFixed(0)}ms  jitter ${pingJitterMs.toFixed(1)}ms  interp ${adaptiveInterpDelayMs.toFixed(0)}ms\n` +
     `net in ${netMetrics.messagesReceivedPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesReceivedPerSecond)}B/s\n` +
     `net out ${netMetrics.messagesSentPerSecond.toFixed(1)}/s ${Math.round(netMetrics.bytesSentPerSecond)}B/s buf ${Math.round(netMetrics.bufferedAmountBytes)}B\n` +
+    `aoi snap ${netMetrics.lastSnapshotBytes}B players/enemies/items ${netMetrics.lastSnapshotPlayers}/${netMetrics.lastSnapshotEnemies}/${netMetrics.lastSnapshotCollectibles}\n` +
     `snap age ${netMetrics.snapshotDelayMs.toFixed(1)}ms jitter ${netMetrics.snapshotJitterMs.toFixed(1)}ms ibuf ${netMetrics.interpolationBufferSize.toFixed(1)}\n` +
     `parse ${netMetrics.parseTimeAvgMs.toFixed(2)}ms max ${netMetrics.parseTimeMaxMs.toFixed(2)}ms\n` +
     `corr ${netMetrics.correctionDistancePx.toFixed(1)}px max ${netMetrics.correctionDistanceMaxPx.toFixed(1)}px rollback ${netMetrics.localPredictionRollbackCount}\n` +
@@ -8876,6 +8938,9 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   }
   const entityStart = performance.now();
   lastSnapshotSeq = parsed.snapshotSeq;
+  netMetrics.lastSnapshotPlayers = (parsed.players?.length ?? 0) + (parsed.entities?.filter((entity) => entity.type === "player").length ?? 0) + (parsed.playerEntities?.length ?? 0);
+  netMetrics.lastSnapshotEnemies = parsed.enemies?.length ?? 0;
+  netMetrics.lastSnapshotCollectibles = parsed.collectibles?.length ?? 0;
   recordSnapshotDelay(parsed.serverTime);
   serverTick = parsed.tick; matchPhase = parsed.matchPhase;
   // Reconcile full collected set so late-joiners see correct coin state
@@ -9011,6 +9076,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         resolveConnect();
         break;
       case "snapshot":
+        netMetrics.lastSnapshotBytes = byteLength(ev.data);
         enqueueSnapshotMessage(parsed);
         break;
       case "events":
@@ -9182,6 +9248,31 @@ function reqChunks(): void {
         pendingAuthoritativeChunks.add(cy);
       }
     }
+  }
+}
+
+function maybeSendViewportInterest(force = false): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN || !localPlayer) return;
+  const interest = viewportInterestWindow();
+  if (!interest) return;
+  const now = performance.now();
+  const key = `${interest.min}:${interest.max}:${Math.round(interest.x1)}:${Math.round(interest.y1)}:${Math.round(interest.x2)}:${Math.round(interest.y2)}:${interest.zoom.toFixed(2)}`;
+  if (!force && key === lastViewportInterestKey) return;
+  if (!force && now - lastViewportInterestSentMs < VIEWPORT_INTEREST_SEND_MS) return;
+  if (sendWsMessage({
+    type: "viewport",
+    minChunkY: interest.min,
+    maxChunkY: interest.max,
+    x1: Math.round(interest.x1),
+    y1: Math.round(interest.y1),
+    x2: Math.round(interest.x2),
+    y2: Math.round(interest.y2),
+    visibleWidth: Math.round(interest.visibleWidth),
+    visibleHeight: Math.round(interest.visibleHeight),
+    zoom: Number(interest.zoom.toFixed(3)),
+  }, "bulk")) {
+    lastViewportInterestSentMs = now;
+    lastViewportInterestKey = key;
   }
 }
 
@@ -9470,6 +9561,7 @@ window.addEventListener("resize", () => {
   lastHudLayoutKey = "";
   playerStatsHud?.reset();
   if (appState === "game") cameraSnap = true;
+  lastViewportInterestKey = "";
   skillCardModal.layout(pixi.screen.width, pixi.screen.height);
   syncNicknameInput();
 });
@@ -9495,8 +9587,6 @@ pixi.ticker.add((ticker) => {
   const { networkApplyMs, entityApplyMs: networkEntityApplyMs } = processQueuedSnapshots();
 
   const renderPrepStart = performance.now();
-  ensureChunksAhead();
-  reqChunks();
   maybePing();
   updateNetworkRates();
   updateAdaptiveInterpDelay();
@@ -9630,6 +9720,9 @@ pixi.ticker.add((ticker) => {
   const visualPrepStart = performance.now();
   updateLocalVisualPosition(dt);
   updateCamera(dt, scale);
+  ensureChunksAhead();
+  maybeSendViewportInterest();
+  reqChunks();
   backgroundLifeSystem.setQuality(activeFixedPerformanceProfile);
   backgroundLifeSystem.update(dtMs, cameraX, cameraY, pixi.screen.width, pixi.screen.height);
   enqueueVisibleChunkRenders();

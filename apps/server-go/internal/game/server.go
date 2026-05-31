@@ -323,6 +323,8 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 			s.handleInput(client, data)
 		case "requestChunk":
 			s.handleRequestChunk(client, data)
+		case "viewport":
+			s.handleViewport(client, data)
 		case "pickup_collectible":
 			s.handlePickupCollectible(client, data)
 		case "select_skill_card":
@@ -411,6 +413,19 @@ func (s *Server) handleRequestChunk(client *Client, data []byte) {
 	var msg ClientRequestChunk
 	if err := json.Unmarshal(data, &msg); err == nil {
 		room.RequestChunk(playerID, msg.ChunkY)
+	} else {
+		s.logParseError(client, nil, "PARSE_ERROR", err)
+	}
+}
+
+func (s *Server) handleViewport(client *Client, data []byte) {
+	room, playerID, _ := client.Session()
+	if room == nil || playerID == "" {
+		return
+	}
+	var msg ClientViewport
+	if err := json.Unmarshal(data, &msg); err == nil {
+		room.UpdateViewport(playerID, msg.MinChunkY, msg.MaxChunkY, msg.X1, msg.Y1, msg.X2, msg.Y2)
 	} else {
 		s.logParseError(client, nil, "PARSE_ERROR", err)
 	}

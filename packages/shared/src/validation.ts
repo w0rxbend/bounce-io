@@ -330,6 +330,23 @@ export function isClientMessage(value: unknown): value is ClientMessage {
         isPlayerInput(value.input);
     case "requestChunk":
       return isInteger(value.chunkY);
+    case "viewport":
+      return isInteger(value.minChunkY) &&
+        isInteger(value.maxChunkY) &&
+        (value.minChunkY as number) >= 0 &&
+        (value.maxChunkY as number) >= (value.minChunkY as number) &&
+        isFiniteNumber(value.x1) &&
+        isFiniteNumber(value.y1) &&
+        isFiniteNumber(value.x2) &&
+        isFiniteNumber(value.y2) &&
+        (value.x2 as number) >= (value.x1 as number) &&
+        (value.y2 as number) >= (value.y1 as number) &&
+        isFiniteNumber(value.visibleWidth) &&
+        isFiniteNumber(value.visibleHeight) &&
+        isFiniteNumber(value.zoom) &&
+        (value.visibleWidth as number) > 0 &&
+        (value.visibleHeight as number) > 0 &&
+        (value.zoom as number) > 0;
     case "ping":
       return isFiniteNumber(value.clientTime);
     case "pickup_collectible":

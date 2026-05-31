@@ -20,32 +20,38 @@ type Client struct {
 	cancel         context.CancelFunc
 	log            *slog.Logger
 
-	mu              sync.RWMutex
-	id              string
-	token           string
-	name            string
-	room            *Room
-	lastRTT         float64
-	jitter          float64
-	lastPacket      time.Time
-	lastInput       int64
-	lastAck         int64
-	dropped         uint64
-	msgIn           uint64
-	bytesIn         uint64
-	msgOut          uint64
-	bytesOut        uint64
-	writeLatencyAvg float64
-	writeLatencyMax float64
-	readLatencyAvg  float64
-	readLatencyMax  float64
-	jsonDecodeAvg   float64
-	jsonDecodeMax   float64
-	latestSnapshot  []byte
-	snapshotPending bool
-	closeOnce       sync.Once
-	maxDrops        uint64
-	serverStats     *ServerMetrics
+	mu                sync.RWMutex
+	id                string
+	token             string
+	name              string
+	room              *Room
+	lastRTT           float64
+	jitter            float64
+	lastPacket        time.Time
+	lastInput         int64
+	lastAck           int64
+	dropped           uint64
+	msgIn             uint64
+	bytesIn           uint64
+	msgOut            uint64
+	bytesOut          uint64
+	writeLatencyAvg   float64
+	writeLatencyMax   float64
+	readLatencyAvg    float64
+	readLatencyMax    float64
+	jsonDecodeAvg     float64
+	jsonDecodeMax     float64
+	latestSnapshot    []byte
+	snapshotPending   bool
+	lastSnapshotBytes int
+	aoiMinChunk       int
+	aoiMaxChunk       int
+	aoiPlayers        int
+	aoiEnemies        int
+	aoiCollectibles   int
+	closeOnce         sync.Once
+	maxDrops          uint64
+	serverStats       *ServerMetrics
 }
 
 func NewClient(conn *websocket.Conn, queueSize int, maxDrops uint64, stats *ServerMetrics, log *slog.Logger) *Client {
@@ -137,7 +143,24 @@ func (c *Client) Metrics() ClientMetrics {
 		QueueDepth:        len(c.send) + boolInt(c.snapshotPending),
 		LastInputSeq:      c.lastInput,
 		LastAckInputSeq:   c.lastAck,
+		LastSnapshotBytes: c.lastSnapshotBytes,
+		AOIChunksMin:      c.aoiMinChunk,
+		AOIChunksMax:      c.aoiMaxChunk,
+		AOIPlayers:        c.aoiPlayers,
+		AOIEnemies:        c.aoiEnemies,
+		AOICollectibles:   c.aoiCollectibles,
 	}
+}
+
+func (c *Client) RecordAOI(minChunk, maxChunk, players, enemies, collectibles, bytes int) {
+	c.mu.Lock()
+	c.aoiMinChunk = minChunk
+	c.aoiMaxChunk = maxChunk
+	c.aoiPlayers = players
+	c.aoiEnemies = enemies
+	c.aoiCollectibles = collectibles
+	c.lastSnapshotBytes = bytes
+	c.mu.Unlock()
 }
 
 func (c *Client) EnqueueJSON(payload any) bool {

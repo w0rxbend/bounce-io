@@ -66,6 +66,12 @@ type ClientMetrics struct {
 	QueueDepth        int     `json:"queueDepth"`
 	LastInputSeq      int64   `json:"lastInputSeq"`
 	LastAckInputSeq   int64   `json:"lastAckInputSeq"`
+	LastSnapshotBytes int     `json:"lastSnapshotBytes"`
+	AOIChunksMin      int     `json:"aoiChunksMin"`
+	AOIChunksMax      int     `json:"aoiChunksMax"`
+	AOIPlayers        int     `json:"aoiPlayers"`
+	AOIEnemies        int     `json:"aoiEnemies"`
+	AOICollectibles   int     `json:"aoiCollectibles"`
 }
 
 func recordEMA(previous, next, alpha float64) float64 {

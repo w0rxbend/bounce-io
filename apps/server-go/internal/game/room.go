@@ -53,22 +53,40 @@ type roomState struct {
 	lastTickWallClock time.Time
 }
 
+type chunkAOI struct {
+	min    int
+	max    int
+	left   int
+	right  int
+	top    int
+	bottom int
+}
+
+type scopedSnapshot struct {
+	encoded      []byte
+	players      int
+	enemies      int
+	collectibles int
+}
+
 type session struct {
-	client           *Client
-	playerID         string
-	token            string
-	name             string
-	skinID           string
-	player           PlayerState
-	connected        bool
-	disconnectedAt   time.Time
-	inputQueue       []PlayerInput
-	inputsThisTick   int
-	lastReceivedSeq  int64
-	lastProcessedSeq int64
-	lastInput        PlayerInput
-	currentSkillOffer *SkillCardOffer
+	client              *Client
+	playerID            string
+	token               string
+	name                string
+	skinID              string
+	player              PlayerState
+	connected           bool
+	disconnectedAt      time.Time
+	inputQueue          []PlayerInput
+	inputsThisTick      int
+	lastReceivedSeq     int64
+	lastProcessedSeq    int64
+	lastInput           PlayerInput
+	currentSkillOffer   *SkillCardOffer
 	pendingLevelChoices int
+	hasViewportAOI      bool
+	viewportAOI         chunkAOI
 }
 
 type joinCommand struct {
@@ -226,6 +244,16 @@ type chunkCommand struct {
 	chunkY   int
 }
 
+type viewportCommand struct {
+	playerID  string
+	minChunkY int
+	maxChunkY int
+	x1        float64
+	y1        float64
+	x2        float64
+	y2        float64
+}
+
 type pickupCollectibleCommand struct {
 	playerID      string
 	collectibleID string
@@ -280,7 +308,33 @@ func (cmd chunkCommand) apply(s *roomState) {
 	if sess == nil || !sess.connected {
 		return
 	}
+	if !s.chunkRequestAllowed(sess, cmd.chunkY) {
+		s.metrics.DroppedOutbound++
+		return
+	}
 	_ = sess.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, cmd.chunkY)})
+}
+
+func (cmd viewportCommand) apply(s *roomState) {
+	sess := s.sessions[cmd.playerID]
+	if sess == nil || !sess.connected {
+		return
+	}
+	if cmd.minChunkY < 0 {
+		cmd.minChunkY = 0
+	}
+	if cmd.maxChunkY < cmd.minChunkY {
+		cmd.maxChunkY = cmd.minChunkY
+	}
+	sess.viewportAOI = s.clampClientAOI(sess, chunkAOI{
+		min:    cmd.minChunkY,
+		max:    cmd.maxChunkY,
+		left:   int(math.Floor(cmd.x1)),
+		right:  int(math.Ceil(cmd.x2)),
+		top:    int(math.Floor(cmd.y1)),
+		bottom: int(math.Ceil(cmd.y2)),
+	})
+	sess.hasViewportAOI = true
 }
 
 type metricsCommand struct {
@@ -385,6 +439,13 @@ func (r *Room) Leave(playerID, reason string) {
 func (r *Room) RequestChunk(playerID string, chunkY int) {
 	select {
 	case r.commands <- chunkCommand{playerID: playerID, chunkY: chunkY}:
+	default:
+	}
+}
+
+func (r *Room) UpdateViewport(playerID string, minChunkY, maxChunkY int, x1, y1, x2, y2 float64) {
+	select {
+	case r.commands <- viewportCommand{playerID: playerID, minChunkY: minChunkY, maxChunkY: maxChunkY, x1: x1, y1: y1, x2: x2, y2: y2}:
 	default:
 	}
 }
@@ -587,35 +648,38 @@ func (s *session) consumeInput() PlayerInput {
 
 func (s *roomState) broadcastSnapshot(now time.Time) {
 	s.snapshotSeq++
-	players := make([]PlayerState, 0, len(s.sessions))
-	playerEntities := make([]PlayerEntityFrame, 0, len(s.sessions))
+	players := make([]PlayerState, 0)
+	playerEntities := make(map[string]PlayerEntityFrame, len(s.sessions))
 	lastProcessed := make(map[string]int64, len(s.sessions))
 	for _, sess := range s.sessions {
 		if !sess.connected {
 			continue
 		}
-		playerEntities = append(playerEntities, PlayerEntityFrame{
-			ID:           sess.playerID,
-			SkinID:       sess.player.SkinID,
-			X:            quantize2(sess.player.Position.X),
-			Y:            quantize2(sess.player.Position.Y),
-			VX:           quantize2(sess.player.Velocity.X),
-			VY:           quantize2(sess.player.Velocity.Y),
-			Facing:       sess.player.Facing,
-			Grounded:     sess.player.Grounded,
-			KickPhase:    sess.player.KickPhase,
-			KickTimer:    quantize2(sess.player.KickTimer),
-			Invulnerable: quantize2(sess.player.Invulnerable),
-			Health:       sess.player.Health,
-			Coins:        sess.player.Coins,
-			MaxHealth:    sess.player.MaxHealth,
-			Shield:       quantize2(sess.player.Shield),
-			MaxShield:    quantize2(sess.player.MaxShield),
-			HitRange:     quantize2(sess.player.HitRange),
+		playerEntities[sess.playerID] = PlayerEntityFrame{
+			ID:             sess.playerID,
+			SkinID:         sess.player.SkinID,
+			X:              quantize2(sess.player.Position.X),
+			Y:              quantize2(sess.player.Position.Y),
+			VX:             quantize2(sess.player.Velocity.X),
+			VY:             quantize2(sess.player.Velocity.Y),
+			Facing:         sess.player.Facing,
+			Grounded:       sess.player.Grounded,
+			KickPhase:      sess.player.KickPhase,
+			KickTimer:      quantize2(sess.player.KickTimer),
+			Invulnerable:   quantize2(sess.player.Invulnerable),
+			Health:         sess.player.Health,
+			Coins:          sess.player.Coins,
+			MaxHealth:      sess.player.MaxHealth,
+			Shield:         quantize2(sess.player.Shield),
+			MaxShield:      quantize2(sess.player.MaxShield),
+			HitRange:       quantize2(sess.player.HitRange),
 			SelectedSkills: sess.player.SelectedSkills,
-		})
+		}
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
+	enemies := s.enemyList()
+	collectibles := s.collectibleList()
+	collectedRelics := s.collectedRelicList()
 
 	events := s.enrichEvents(s.pendingEvents, s.tick, s.snapshotSeq)
 	s.pendingEvents = make([]MatchEvent, 0, 32)
@@ -629,29 +693,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		})
 	}
 	startSerialization := time.Now()
-	base := SnapshotMessage{
-		Type:             "snapshot",
-		Tick:             s.tick,
-		ServerTick:       s.tick,
-		SnapshotSeq:      s.snapshotSeq,
-		ServerTime:       unixMillis(now),
-		MatchPhase:       s.phase,
-		AckInputSeq:      -1,
-		Players:          players,
-		Entities:         []EntityState{},
-		PlayerEntities:   playerEntities,
-		Enemies:          s.enemyList(),
-		Collectibles:     s.collectibleList(),
-		CollectedRelics:  s.collectedRelicList(),
-		Events:           []MatchEvent{},
-		LastProcessedSeq: lastProcessed,
-	}
-	encoded, err := json.Marshal(base)
-	if err != nil {
-		s.room.log.Error("marshal snapshot", "error", err)
-		return
-	}
-	s.metrics.recordSerialization(time.Since(startSerialization), len(encoded))
+	serverTime := unixMillis(now)
+	scopedByAOI := map[chunkAOI]scopedSnapshot{}
 
 	startBroadcast := time.Now()
 	recipients := 0
@@ -659,10 +702,44 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		if !sess.connected {
 			continue
 		}
-		if sess.client.EnqueueSnapshotEncoded(encoded) {
+		aoi := s.sessionAOI(sess)
+		scoped, ok := scopedByAOI[aoi]
+		if !ok {
+			msg := SnapshotMessage{
+				Type:             "snapshot",
+				Tick:             s.tick,
+				ServerTick:       s.tick,
+				SnapshotSeq:      s.snapshotSeq,
+				ServerTime:       serverTime,
+				MatchPhase:       s.phase,
+				AckInputSeq:      -1,
+				Players:          players,
+				Entities:         []EntityState{},
+				PlayerEntities:   s.playerFramesForAOI(aoi, playerEntities),
+				Enemies:          enemiesForAOI(aoi, enemies),
+				Collectibles:     collectiblesForAOI(aoi, collectibles),
+				CollectedRelics:  collectedRelics,
+				Events:           []MatchEvent{},
+				LastProcessedSeq: lastProcessed,
+			}
+			encoded, err := json.Marshal(msg)
+			if err != nil {
+				s.room.log.Error("marshal scoped snapshot", "error", err)
+				continue
+			}
+			scoped = scopedSnapshot{
+				encoded:      encoded,
+				players:      len(msg.PlayerEntities),
+				enemies:      len(msg.Enemies),
+				collectibles: len(msg.Collectibles),
+			}
+			scopedByAOI[aoi] = scoped
+		}
+		sess.client.RecordAOI(aoi.min, aoi.max, scoped.players, scoped.enemies, scoped.collectibles, len(scoped.encoded))
+		if sess.client.EnqueueSnapshotEncoded(scoped.encoded) {
 			recipients++
 			s.metrics.MessagesSent++
-			s.metrics.BytesSent += uint64(len(encoded))
+			s.metrics.BytesSent += uint64(len(scoped.encoded))
 			sess.client.SetAck(sess.lastProcessedSeq)
 		} else {
 			s.metrics.DroppedOutbound++
@@ -671,7 +748,139 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 			}
 		}
 	}
+	totalEncodedBytes := 0
+	for _, scoped := range scopedByAOI {
+		totalEncodedBytes += len(scoped.encoded)
+	}
+	s.metrics.recordSerialization(time.Since(startSerialization), totalEncodedBytes)
 	s.metrics.recordBroadcast(time.Since(startBroadcast), recipients)
+}
+
+func (s *roomState) sessionAOI(sess *session) chunkAOI {
+	if sess.hasViewportAOI {
+		return s.clampClientAOI(sess, sess.viewportAOI)
+	}
+	center := ChunkYForWorldY(sess.player.Position.Y)
+	return chunkAOIForChunks(max(0, center-DefaultAOIChunksBehind), center+DefaultAOIChunksAhead)
+}
+
+func (s *roomState) clampClientAOI(sess *session, requested chunkAOI) chunkAOI {
+	center := ChunkYForWorldY(sess.player.Position.Y)
+	minAllowed := max(0, center-MaxClientAOIChunksBehind)
+	maxAllowed := center + MaxClientAOIChunksAhead
+	if requested.right < requested.left {
+		requested.left, requested.right = requested.right, requested.left
+	}
+	if requested.bottom < requested.top {
+		requested.top, requested.bottom = requested.bottom, requested.top
+	}
+	out := chunkAOI{
+		min:    max(minAllowed, requested.min),
+		max:    min(maxAllowed, requested.max),
+		left:   max(0, requested.left),
+		right:  min(ChunkWidthTiles*TileSize, requested.right),
+		top:    requested.top,
+		bottom: requested.bottom,
+	}
+	if out.max < out.min {
+		return chunkAOIForChunks(max(0, center-DefaultAOIChunksBehind), center+DefaultAOIChunksAhead)
+	}
+	if out.right < out.left {
+		out.left = 0
+		out.right = ChunkWidthTiles * TileSize
+	}
+	if out.bottom < out.top {
+		base := chunkAOIForChunks(out.min, out.max)
+		out.top = base.top
+		out.bottom = base.bottom
+	}
+	if !chunkInAOI(out, center) {
+		out.min = min(out.min, center)
+		out.max = max(out.max, center)
+	}
+	playerLeft := int(math.Floor(sess.player.Position.X))
+	playerRight := int(math.Ceil(sess.player.Position.X + PlayerWidth))
+	playerTop := int(math.Floor(sess.player.Position.Y))
+	playerBottom := int(math.Ceil(sess.player.Position.Y + PlayerHeight))
+	out.left = min(out.left, playerLeft)
+	out.right = max(out.right, playerRight)
+	out.top = min(out.top, playerTop)
+	out.bottom = max(out.bottom, playerBottom)
+	out.left = max(0, out.left)
+	out.right = min(ChunkWidthTiles*TileSize, out.right)
+	return out
+}
+
+func chunkAOIForChunks(minChunk, maxChunk int) chunkAOI {
+	if maxChunk < minChunk {
+		minChunk, maxChunk = maxChunk, minChunk
+	}
+	return chunkAOI{
+		min:    max(0, minChunk),
+		max:    max(0, maxChunk),
+		left:   0,
+		right:  ChunkWidthTiles * TileSize,
+		top:    -max(0, maxChunk) * ChunkHeightTiles * TileSize,
+		bottom: (-max(0, minChunk) + 1) * ChunkHeightTiles * TileSize,
+	}
+}
+
+func (s *roomState) chunkRequestAllowed(sess *session, chunkY int) bool {
+	aoi := s.sessionAOI(sess)
+	return chunkY >= max(0, aoi.min-DefaultChunkRequestSlack) && chunkY <= aoi.max+DefaultChunkRequestSlack
+}
+
+func (s *roomState) playerFramesForAOI(aoi chunkAOI, frames map[string]PlayerEntityFrame) []PlayerEntityFrame {
+	out := make([]PlayerEntityFrame, 0, len(frames))
+	for _, sess := range s.sessions {
+		if !sess.connected || !chunkInAOI(aoi, ChunkYForWorldY(sess.player.Position.Y)) ||
+			!rectIntersectsAOI(aoi, sess.player.Position.X, sess.player.Position.Y, PlayerWidth, PlayerHeight) {
+			continue
+		}
+		if frame, ok := frames[sess.playerID]; ok {
+			out = append(out, frame)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func enemiesForAOI(aoi chunkAOI, enemies []EnemyState) []EnemyState {
+	out := make([]EnemyState, 0, len(enemies))
+	for _, enemy := range enemies {
+		if chunkInAOI(aoi, enemy.ChunkY) && rectIntersectsAOI(aoi, enemy.Position.X, enemy.Position.Y, 22, 28) {
+			out = append(out, enemy)
+		}
+	}
+	return out
+}
+
+func collectiblesForAOI(aoi chunkAOI, collectibles []CollectibleState) []CollectibleState {
+	out := make([]CollectibleState, 0, len(collectibles))
+	for _, collectible := range collectibles {
+		if chunkInAOI(aoi, ChunkYForWorldY(collectible.Y)) && pointInAOI(aoi, collectible.X, collectible.Y) {
+			out = append(out, collectible)
+		}
+	}
+	return out
+}
+
+func chunkInAOI(aoi chunkAOI, chunkY int) bool {
+	return chunkY >= aoi.min && chunkY <= aoi.max
+}
+
+func rectIntersectsAOI(aoi chunkAOI, x, y, width, height float64) bool {
+	return x+width >= float64(aoi.left) &&
+		x <= float64(aoi.right) &&
+		y+height >= float64(aoi.top) &&
+		y <= float64(aoi.bottom)
+}
+
+func pointInAOI(aoi chunkAOI, x, y float64) bool {
+	return x >= float64(aoi.left) &&
+		x <= float64(aoi.right) &&
+		y >= float64(aoi.top) &&
+		y <= float64(aoi.bottom)
 }
 
 func (s *roomState) enrichEvents(events []MatchEvent, serverTick, snapshotSeq uint64) []MatchEvent {
@@ -1071,7 +1280,7 @@ func (s *roomState) makeEnemyDrops(enemy EnemyState) []CollectibleState {
 	countRange := max(0, EnemyDropMax-EnemyDropMin)
 	count := EnemyDropMin
 	if countRange > 0 {
-		count += int(seed%uint32(countRange+1))
+		count += int(seed % uint32(countRange+1))
 	}
 	drops := make([]CollectibleState, 0, count)
 	for i := 0; i < count; i++ {
