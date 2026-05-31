@@ -10227,7 +10227,7 @@ function playerStateFromSnapshotEntity(entity: SnapshotEntity): PlayerState {
   player.grounded = entity.grounded ?? player.grounded;
   player.kickPhase = entity.kickPhase ?? player.kickPhase;
   player.kickTimer = entity.kickTimer ?? player.kickTimer;
-  player.invulnerable = entity.invulnerable ?? player.invulnerable;
+  player.invulnerable = entity.invulnerable ?? 0;
   player.health = entity.health ?? player.health;
   player.coins = entity.coins ?? player.coins;
   player.maxHealth = entity.maxHealth ?? player.maxHealth;
@@ -10249,7 +10249,7 @@ function playerStateFromEntityFrame(frame: PlayerEntityFrame, base?: PlayerState
   player.grounded = frame.g;
   player.kickPhase = frame.k ?? player.kickPhase;
   player.kickTimer = frame.kt ?? player.kickTimer;
-  player.invulnerable = frame.iv ?? player.invulnerable;
+  player.invulnerable = frame.iv ?? 0;
   player.health = frame.h;
   player.coins = frame.c;
   player.maxHealth = frame.mh ?? player.maxHealth;
