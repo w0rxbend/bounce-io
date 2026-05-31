@@ -228,7 +228,7 @@ const VIEWPORT_CULLING_CONFIG = {
   cullEnemyVisuals: true,
   cullPlatformSprites: true,
 };
-const HUD_UI_SCALE = 1.08;
+const HUD_UI_SCALE = 1.14;
 
 const ASSET_URLS = {
   bgCloudBank: "/assets/environment/backgrounds/cloud_bank.png",
@@ -7439,23 +7439,23 @@ class PlayerStatsHud {
   private readonly bars = new Graphics();
   private readonly titleText = new Text({
     text: "PLAYER",
-    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(8), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(10), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private readonly hpText = new Text({
     text: "",
-    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(8), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private readonly xpText = new Text({
     text: "",
-    style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(8), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private readonly levelText = new Text({
     text: "",
-    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(11), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private readonly atkText = new Text({
     text: "",
-    style: { fill: PAL.hazardGlow, fontFamily: "monospace", fontSize: hudPx(8), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: PAL.hazardGlow, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private layoutKey = "";
   private statsKey = "";
@@ -7466,11 +7466,11 @@ class PlayerStatsHud {
   }
 
   update(player: PlayerState, screenWidth: number): void {
-    const width = hudPx(screenWidth < 440 ? 136 : 158);
+    const width = hudPx(screenWidth < 440 ? 166 : 196);
     const hasShield = hudStatNumber(player.maxShield, 0) > 0;
-    const height = hudPx(hasShield ? 82 : 66);
-    const x = 12;
-    const y = 12;
+    const height = hudPx(hasShield ? 104 : 84);
+    const x = hudPx(10);
+    const y = hudPx(10);
     const layoutKey = `${width}|${height}|${x}|${y}`;
     if (layoutKey !== this.layoutKey) {
       this.layoutKey = layoutKey;
@@ -7478,16 +7478,16 @@ class PlayerStatsHud {
       this.container.y = y;
       this.panel.clear();
       drawHudPanel(this.panel, 0, 0, width, height);
-      this.titleText.x = hudPx(12);
-      this.titleText.y = hudPx(8);
-      this.hpText.x = hudPx(12);
-      this.hpText.y = hudPx(24);
-      this.xpText.x = hudPx(12);
-      this.xpText.y = hudPx(hasShield ? 56 : 42);
-      this.levelText.x = width - hudPx(56);
-      this.levelText.y = hudPx(8);
-      this.atkText.x = width - hudPx(56);
-      this.atkText.y = hudPx(hasShield ? 56 : 42);
+      this.titleText.x = hudPx(14);
+      this.titleText.y = hudPx(10);
+      this.hpText.x = hudPx(14);
+      this.hpText.y = hudPx(31);
+      this.xpText.x = hudPx(14);
+      this.xpText.y = hudPx(hasShield ? 74 : 54);
+      this.levelText.x = width - hudPx(70);
+      this.levelText.y = hudPx(10);
+      this.atkText.x = width - hudPx(70);
+      this.atkText.y = hudPx(hasShield ? 74 : 54);
       this.statsKey = "";
     }
 
@@ -7507,25 +7507,25 @@ class PlayerStatsHud {
 
     const hpRatio = Math.max(0, Math.min(1, hp / hpMax));
     const xpRatio = Math.max(0, Math.min(1, xpProgress / xpNeeded));
-    const hpBarW = width - hudPx(86);
-    const xpBarW = width - hudPx(86);
+    const hpBarW = width - hudPx(108);
+    const xpBarW = width - hudPx(108);
     this.bars.clear();
-    this.bars.rect(hudPx(42), hudPx(28), hpBarW, hudPx(5)).fill(PAL.hazardRed);
-    this.bars.rect(hudPx(42), hudPx(28), Math.round(hpBarW * hpRatio), hudPx(5)).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
-    this.bars.rect(hudPx(42), hudPx(30), Math.round(hpBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
+    this.bars.rect(hudPx(53), hudPx(34), hpBarW, hudPx(7)).fill(PAL.hazardRed);
+    this.bars.rect(hudPx(53), hudPx(34), Math.round(hpBarW * hpRatio), hudPx(7)).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
+    this.bars.rect(hudPx(53), hudPx(37), Math.round(hpBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
     if (shieldMax > 0) {
       const shieldRatio = Math.max(0, Math.min(1, shield / shieldMax));
-      this.bars.rect(hudPx(42), hudPx(42), hpBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-      this.bars.rect(hudPx(42), hudPx(42), Math.round(hpBarW * shieldRatio), hudPx(4)).fill(PAL.portalGlow);
-      this.bars.rect(hudPx(42), hudPx(43), Math.round(hpBarW * shieldRatio), 1).fill({ color: 0xffffff, alpha: 0.34 });
+      this.bars.rect(hudPx(53), hudPx(53), hpBarW, hudPx(6)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+      this.bars.rect(hudPx(53), hudPx(53), Math.round(hpBarW * shieldRatio), hudPx(6)).fill(PAL.portalGlow);
+      this.bars.rect(hudPx(53), hudPx(55), Math.round(hpBarW * shieldRatio), 1).fill({ color: 0xffffff, alpha: 0.34 });
     }
-    this.bars.rect(hudPx(42), hudPx(hasShield ? 60 : 46), xpBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-    this.bars.rect(hudPx(42), hudPx(hasShield ? 60 : 46), Math.round(xpBarW * xpRatio), hudPx(4)).fill(PAL.portalBlue);
-    this.bars.rect(width - hudPx(62), hudPx(25), hudPx(44), hudPx(14)).fill(0x06100a);
-    this.bars.rect(width - hudPx(59), hudPx(28), hudPx(38), hudPx(8)).fill({ color: PAL.mossGreen, alpha: 0.86 });
-    this.bars.rect(width - hudPx(57), hudPx(45), hudPx(5), hudPx(5)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(54), hudPx(42), hudPx(2), hudPx(11)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(51), hudPx(48), hudPx(6), hudPx(2)).fill(PAL.hazardGlow);
+    this.bars.rect(hudPx(53), hudPx(hasShield ? 79 : 59), xpBarW, hudPx(6)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+    this.bars.rect(hudPx(53), hudPx(hasShield ? 79 : 59), Math.round(xpBarW * xpRatio), hudPx(6)).fill(PAL.portalBlue);
+    this.bars.rect(width - hudPx(76), hudPx(31), hudPx(55), hudPx(18)).fill(0x06100a);
+    this.bars.rect(width - hudPx(72), hudPx(35), hudPx(47), hudPx(10)).fill({ color: PAL.mossGreen, alpha: 0.86 });
+    this.bars.rect(width - hudPx(69), hudPx(56), hudPx(6), hudPx(6)).fill(PAL.hazardGlow);
+    this.bars.rect(width - hudPx(66), hudPx(52), hudPx(3), hudPx(14)).fill(PAL.hazardGlow);
+    this.bars.rect(width - hudPx(62), hudPx(60), hudPx(7), hudPx(3)).fill(PAL.hazardGlow);
 
     this.hpText.text = `HP ${Math.ceil(hp)}/${Math.ceil(hpMax)}`;
     this.xpText.text = shieldMax > 0 ? `SH ${Math.ceil(shield)}/${Math.ceil(shieldMax)} XP ${xpProgress}/${xpNeeded}` : `XP ${xpProgress}/${xpNeeded}`;
@@ -7928,14 +7928,14 @@ function ensureHud(): void {
   hudLegendGfx = new Graphics();
   hudPhaseTxt = new Text({
     text: "",
-    style: { fill: PAL.uiHighlight, fontFamily: "monospace", fontSize: hudPx(11), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fill: PAL.uiHighlight, fontFamily: "monospace", fontSize: hudPx(12), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   hudLayer.addChild(playerStatsHud.container, hudLeaderboardGfx, hudLegendGfx, hudPhaseTxt);
 
   for (let i = 0; i < 6; i++) {
     const txt = new Text({
       text: "",
-      style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+      style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(i === 0 ? 13 : 11), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
     });
     hudRowTexts.push(txt);
     hudLayer.addChild(txt);
@@ -7943,9 +7943,10 @@ function ensureHud(): void {
 
   const tips = ["HOW TO PLAY", "A/D MOVE", "SPACE JUMP", "S DROP", "F KICK"];
   for (const tip of tips) {
+    const isTitle = tip === tips[0];
     const txt = new Text({
       text: tip,
-      style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(8), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+      style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(isTitle ? 12 : 10), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
     });
     hudLegendTexts.push(txt);
     hudLayer.addChild(txt);
@@ -7987,15 +7988,16 @@ function updateHud(tSec: number): void {
     hudPhaseTxt.alpha = matchPhase === "playing" ? 0.76 : 1;
   }
 
-  const leaderboardW = hudPx(Math.min(214, Math.max(164, Math.floor(pixi.screen.width * 0.28))));
+  const leaderboardW = hudPx(Math.min(300, Math.max(218, Math.floor(pixi.screen.width * 0.34))));
   const visibleRows = rows.slice(0, 5);
-  const leaderboardH = hudPx(24 + visibleRows.length * 18);
-  const leaderboardX = Math.max(10, pixi.screen.width - leaderboardW - 12);
-  const leaderboardY = 12;
-  const legendW = hudPx(Math.min(188, Math.max(142, Math.floor(pixi.screen.width * 0.25))));
-  const legendH = hudPx(78);
-  const legendX = Math.max(10, pixi.screen.width - legendW - 12);
-  const legendY = Math.max(leaderboardY + leaderboardH + 10, pixi.screen.height - legendH - 12);
+  const leaderboardRowGap = hudPx(23);
+  const leaderboardH = hudPx(42) + visibleRows.length * leaderboardRowGap;
+  const leaderboardX = Math.max(hudPx(10), pixi.screen.width - leaderboardW - hudPx(12));
+  const leaderboardY = hudPx(10);
+  const legendW = hudPx(Math.min(250, Math.max(190, Math.floor(pixi.screen.width * 0.28))));
+  const legendH = hudPx(104);
+  const legendX = Math.max(hudPx(10), pixi.screen.width - legendW - hudPx(12));
+  const legendY = Math.max(leaderboardY + leaderboardH + hudPx(14), pixi.screen.height - legendH - hudPx(12));
   const layoutKey = `${pixi.screen.width}|${pixi.screen.height}|${leaderboardW}|${leaderboardH}|${legendW}`;
   if (layoutKey !== lastHudLayoutKey) {
     lastHudLayoutKey = layoutKey;
@@ -8004,16 +8006,16 @@ function updateHud(tSec: number): void {
     hudLegendGfx.clear();
     drawHudPanel(hudLegendGfx, legendX, legendY, legendW, legendH);
     const legendTitle = hudLegendTexts[0]!;
-    legendTitle.x = legendX + hudPx(12);
-    legendTitle.y = legendY + hudPx(12);
+    legendTitle.x = legendX + hudPx(16);
+    legendTitle.y = legendY + hudPx(15);
     for (let i = 1; i < hudLegendTexts.length; i++) {
       const tip = hudLegendTexts[i]!;
-      tip.x = legendX + hudPx(12);
-      tip.y = legendY + hudPx(12 + i * 14);
+      tip.x = legendX + hudPx(16);
+      tip.y = legendY + hudPx(18 + i * 18);
     }
   }
 
-  const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}`;
+  const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}|${leaderboardW}`;
   if (scoreKey !== lastScoreboardKey) {
     lastScoreboardKey = scoreKey;
     hudRowTexts.forEach((txt) => { txt.visible = false; });
@@ -8021,15 +8023,15 @@ function updateHud(tSec: number): void {
     title.visible = true;
     title.text = "LEADERBOARD";
     title.style.fill = PAL.coinGold;
-    title.x = leaderboardX + hudPx(10);
-    title.y = leaderboardY + hudPx(8);
+    title.x = leaderboardX + hudPx(16);
+    title.y = leaderboardY + hudPx(12);
     for (const [i, r] of visibleRows.entries()) {
       const txt = hudRowTexts[i + 1]!;
       txt.visible = true;
-      txt.text = `${i + 1}. ${r.name.slice(0, 10)}  ${r.h}m  ${r.coins}`;
+      txt.text = `${i + 1}. ${r.name.slice(0, 12).padEnd(12, " ")} ${String(r.h).padStart(3, " ")}m  ${r.coins}`;
       txt.style.fill = r.local ? PAL.coinGold : PAL.uiParchment;
-      txt.x = leaderboardX + hudPx(10);
-      txt.y = leaderboardY + hudPx(27 + i * 18);
+      txt.x = leaderboardX + hudPx(16);
+      txt.y = leaderboardY + hudPx(40) + i * leaderboardRowGap;
     }
   }
 
