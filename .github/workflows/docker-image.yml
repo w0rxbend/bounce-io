@@ -59,7 +59,6 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          passphrase: ${{ secrets.DEPLOY_SSH_PASSPHRASE }}
           source: docker-compose.yml
           target: ${{ env.DEPLOY_PATH }}
 
@@ -72,7 +71,6 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          passphrase: ${{ secrets.DEPLOY_SSH_PASSPHRASE }}
           envs: DOCKER_USERNAME,DOCKER_PASSWORD
           script: |
             mkdir -p ~/bounce-io
