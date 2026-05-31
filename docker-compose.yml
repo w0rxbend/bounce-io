@@ -19,7 +19,7 @@ services:
       context: .
       dockerfile: apps/client/Dockerfile
       args:
-        VITE_WS_URL: ${VITE_WS_URL:-}
+        VITE_WS_URL: ${VITE_WS_URL:-http://130.61.92.255:8787}
     depends_on:
       - backend
     ports:
