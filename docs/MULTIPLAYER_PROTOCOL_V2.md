@@ -1,6 +1,6 @@
 # Multiplayer Protocol v2
 
-Transport: WebSocket. Reliable/control messages use text frames containing JSON. Clients that advertise `binarySnapshots: true` during join receive replaceable high-frequency snapshots as binary frames; clients that omit the flag continue receiving JSON snapshots.
+Transport: WebSocket. Reliable/control messages use text frames containing JSON. JSON snapshots remain the default. Clients that explicitly advertise `binarySnapshots: true` during join receive replaceable high-frequency snapshots as binary frames; clients that omit the flag continue receiving JSON snapshots.
 
 The Go server accepts the current PixiJS client protocol and the clearer `join` / flat-input shape below. Existing `hello`, nested `input`, `requestChunk`, and `ping` messages remain supported during migration.
 
@@ -127,7 +127,7 @@ The server discards stale or duplicate input (`inputSeq` / `input.sequence`) and
 
 ### Binary Snapshot
 
-When `binarySnapshots` is enabled, the hot state snapshot is sent as a WebSocket binary frame:
+When `binarySnapshots` is enabled, the hot state snapshot is sent as a WebSocket binary frame. This path is opt-in during rollout; use `?binarySnapshots=1` only for testing.
 
 ```text
 uint8  messageType = 1

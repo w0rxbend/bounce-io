@@ -20,6 +20,9 @@ export default defineConfig({
       "/ws": {
         target: "http://localhost:8787",
         ws: true
+      },
+      "/metrics": {
+        target: "http://localhost:8787"
       }
     }
   }

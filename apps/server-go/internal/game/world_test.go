@@ -65,6 +65,41 @@ func TestSameSeedGeneratesSameWorld(t *testing.T) {
 	}
 }
 
+func TestGeneratedChunkCacheDoesNotShareMutableSlices(t *testing.T) {
+	seed := HashString("demo")
+	chunk := GenerateChunk(seed, 3)
+	originalTile := chunk.Tiles[0]
+	originalRouteNode := chunk.Routes[0].Nodes[0]
+
+	chunk.Tiles[0] = "mutated"
+	chunk.Routes[0].Nodes[0].X += 1000
+	if chunk.Portal != nil {
+		chunk.Portal.ID = "mutated"
+	}
+
+	again := GenerateChunk(seed, 3)
+	if again.Tiles[0] != originalTile {
+		t.Fatalf("cached chunk shared tile backing array: got %q want %q", again.Tiles[0], originalTile)
+	}
+	if again.Routes[0].Nodes[0] != originalRouteNode {
+		t.Fatalf("cached chunk shared route node backing array: got %#v want %#v", again.Routes[0].Nodes[0], originalRouteNode)
+	}
+	if again.Portal != nil && again.Portal.ID == "mutated" {
+		t.Fatalf("cached chunk shared portal pointer")
+	}
+}
+
+func TestFarRegionMathKeepsChunksInsideComputedRegions(t *testing.T) {
+	for chunkY := 0; chunkY < 1000; chunkY++ {
+		regionIndex := RegionIndexForChunkY(chunkY)
+		start := RegionStartChunkY(regionIndex)
+		end := start + RegionLengthForIndex(regionIndex)
+		if chunkY < start || chunkY >= end {
+			t.Fatalf("chunk %d mapped outside region %d range [%d,%d)", chunkY, regionIndex, start, end)
+		}
+	}
+}
+
 func TestRegionGenerationIncreasesCollectibleDensity(t *testing.T) {
 	seed := HashString("demo")
 	total := 0
@@ -210,6 +245,29 @@ func TestRelicCollectionUpdatesAuthoritativeState(t *testing.T) {
 		state.pendingEvents[0]["type"] != "PLAYER_STATS" ||
 		state.pendingEvents[1]["type"] != "COIN_COLLECTED" {
 		t.Fatalf("expected PLAYER_STATS and COIN_COLLECTED events, got %#v", state.pendingEvents)
+	}
+}
+
+func TestDynamicCollectiblePickupIsChunkLocalAndDeletesPicked(t *testing.T) {
+	state := &roomState{
+		collectibles: map[string]CollectibleState{
+			"near": {ID: "near", Type: "xp", X: 24, Y: 24, XPValue: 10},
+			"far":  {ID: "far", Type: "xp", X: 24, Y: float64(-4 * ChunkHeightTiles * TileSize), XPValue: 10},
+		},
+		pendingEvents: []MatchEvent{},
+	}
+	sess := &session{
+		playerID: "p1",
+		player:   CreatePlayerState("p1", 16, 16),
+	}
+
+	state.checkDynamicCollectibleCollection(sess)
+
+	if _, ok := state.collectibles["near"]; ok {
+		t.Fatalf("picked collectible should be removed from lifecycle map")
+	}
+	if _, ok := state.collectibles["far"]; !ok {
+		t.Fatalf("far collectible should not be touched by chunk-local pickup scan")
 	}
 }
 

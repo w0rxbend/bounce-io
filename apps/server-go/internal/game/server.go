@@ -194,12 +194,24 @@ func (s *Server) handlePrometheusMetrics(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write([]byte("# HELP skybound_dropped_outbound_total Dropped outbound messages.\n"))
 	_, _ = w.Write([]byte("# TYPE skybound_dropped_outbound_total counter\n"))
 	_, _ = w.Write([]byte("skybound_dropped_outbound_total " + strconv.FormatUint(snap.WebSocket.DroppedOutbound, 10) + "\n"))
+	_, _ = w.Write([]byte("# HELP skybound_dropped_reliable_total Dropped reliable outbound messages.\n"))
+	_, _ = w.Write([]byte("# TYPE skybound_dropped_reliable_total counter\n"))
+	_, _ = w.Write([]byte("skybound_dropped_reliable_total " + strconv.FormatUint(snap.WebSocket.DroppedReliable, 10) + "\n"))
+	_, _ = w.Write([]byte("# HELP skybound_dropped_snapshots_total Replaced or dropped outbound snapshot messages.\n"))
+	_, _ = w.Write([]byte("# TYPE skybound_dropped_snapshots_total counter\n"))
+	_, _ = w.Write([]byte("skybound_dropped_snapshots_total " + strconv.FormatUint(snap.WebSocket.DroppedSnapshots, 10) + "\n"))
 	for _, room := range snap.Rooms {
 		labels := `{room="` + room.ID + `"}`
 		_, _ = w.Write([]byte("skybound_room_tick" + labels + " " + strconv.FormatUint(room.Tick, 10) + "\n"))
 		_, _ = w.Write([]byte("skybound_room_tick_duration_avg_ms" + labels + " " + strconv.FormatFloat(room.Metrics.TickDurationAvgMS, 'f', 3, 64) + "\n"))
 		_, _ = w.Write([]byte("skybound_room_tick_overruns_total" + labels + " " + strconv.FormatUint(room.Metrics.TickOverruns, 10) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_command_drain_avg_ms" + labels + " " + strconv.FormatFloat(room.Metrics.CommandDrainAvgMS, 'f', 3, 64) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_command_backlog" + labels + " " + strconv.Itoa(room.Metrics.CommandBacklog) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_snapshot_build_avg_ms" + labels + " " + strconv.FormatFloat(room.Metrics.SnapshotBuildAvgMS, 'f', 3, 64) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_snapshot_send_avg_ms" + labels + " " + strconv.FormatFloat(room.Metrics.SnapshotSendAvgMS, 'f', 3, 64) + "\n"))
 		_, _ = w.Write([]byte("skybound_room_outbound_drops_total" + labels + " " + strconv.FormatUint(room.Metrics.DroppedOutbound, 10) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_reliable_drops_total" + labels + " " + strconv.FormatUint(room.Metrics.DroppedReliable, 10) + "\n"))
+		_, _ = w.Write([]byte("skybound_room_snapshot_drops_total" + labels + " " + strconv.FormatUint(room.Metrics.DroppedSnapshots, 10) + "\n"))
 	}
 }
 
@@ -217,6 +229,8 @@ type MetricsSnapshot struct {
 		BytesReceivedPerSec    float64 `json:"bytesReceivedPerSecond"`
 		BytesSentPerSec        float64 `json:"bytesSentPerSecond"`
 		DroppedOutbound        uint64  `json:"droppedOutboundMessages"`
+		DroppedReliable        uint64  `json:"droppedReliableMessages"`
+		DroppedSnapshots       uint64  `json:"droppedSnapshotMessages"`
 		BackpressureDisconnect uint64  `json:"backpressureDisconnects"`
 	} `json:"websocket"`
 	Rooms []RoomSnapshot `json:"rooms"`
@@ -237,6 +251,8 @@ func (s *Server) metricsSnapshot() MetricsSnapshot {
 	out.WebSocket.BytesReceived = s.stats.BytesReceived.Load()
 	out.WebSocket.BytesSent = s.stats.BytesSent.Load()
 	out.WebSocket.DroppedOutbound = s.stats.DroppedOutbound.Load()
+	out.WebSocket.DroppedReliable = s.stats.DroppedReliable.Load()
+	out.WebSocket.DroppedSnapshots = s.stats.DroppedSnapshots.Load()
 	out.WebSocket.BackpressureDisconnect = s.stats.BackpressureDisconnect.Load()
 	out.WebSocket.MessagesReceivedPerSec = float64(out.WebSocket.MessagesReceived) / uptime
 	out.WebSocket.MessagesSentPerSec = float64(out.WebSocket.MessagesSent) / uptime
@@ -402,7 +418,7 @@ func (s *Server) handleInput(client *Client, data []byte) {
 	if input.ClientTime > 0 {
 		ageMS = float64(nowMillis() - input.ClientTime)
 	}
-	room.Input(playerID, input, ageMS, client)
+	room.Input(playerID, input, ageMS, len(data), client)
 }
 
 func (s *Server) handleRequestChunk(client *Client, data []byte) {

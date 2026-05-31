@@ -123,7 +123,7 @@ Current implemented slice
 - Server applies AOI hysteresis/cooling to reduce subscription edge thrash.
 - Server indexes dynamic players, enemies, and collectibles in spatial cells before per-client AOI queries.
 - Server rejects chunk requests outside the clamped AOI.
-- Binary snapshots are implemented as an opt-in WebSocket binary frame for clients that advertise `binarySnapshots`.
+- Binary snapshots are implemented behind an explicit opt-in flag (`?binarySnapshots=1`) for clients that advertise `binarySnapshots`.
 - JSON reliable/control messages and JSON snapshot fallback are retained.
 - Per-client binary baselines track removed entity IDs for AOI leave deltas.
 - Debug overlay includes AOI snapshot size and dynamic entity counts.

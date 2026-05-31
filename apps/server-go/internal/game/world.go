@@ -3,59 +3,74 @@ package game
 import (
 	"math"
 	"strings"
+	"sync"
 )
+
+const generatedChunkCacheLimit = 512
+
+type generatedChunkCacheKey struct {
+	seed   uint32
+	chunkY int
+}
+
+var generatedChunkCache = struct {
+	sync.Mutex
+	chunks map[generatedChunkCacheKey]GeneratedChunk
+}{
+	chunks: map[generatedChunkCacheKey]GeneratedChunk{},
+}
 
 func CreatePlayerState(id string, x, y float64) PlayerState {
 	return PlayerState{
-		ID:                  id,
-		Position:            Vec2{X: x, Y: y},
-		Velocity:            Vec2{},
-		Facing:              1,
-		Grounded:            false,
-		CoyoteTimer:         0,
-		JumpBufferTimer:     0,
-		KickCooldown:        0,
-		KickPhase:           "idle",
-		KickTimer:           0,
-		KickInvulnerable:    0,
-		Invulnerable:        0,
-		StunTimer:           0,
-		CheckpointChunkY:    0,
-		Coins:               0,
-		Health:              BaseMaxHealth,
-		MaxHealth:           BaseMaxHealth,
-		Damage:              1,
-		AttackSpeed:         1,
-		JumpPower:           1,
-		AirControl:          1,
-		KnockbackResistance: 0,
-		MovementSpeed:       1,
-		Level:               1,
-		Relics:              0,
-		Crystals:            0,
-		RelicFragments:      0,
-		HitRange:            KickRangePX,
-		AttackCooldownMs:    KickCooldownSeconds * 1000,
-		DamageReduction:     0,
-		Shield:              0,
-		MaxShield:           0,
-		ShieldRegenPerSec:   0,
-		ShieldRegenDelayMs:  skillShieldRegenDelayMs,
-		LastDamageAt:        0,
-		ShieldRegenCooldown: 0,
-		JumpPowerMultiplier: 1,
-		AirControlMultiplier: 1,
-		ExtraJumps:          0,
-		ExtraJumpsUsed:      0,
-		DashUnlocked:        false,
-		DashCooldownMs:      skillDashBaseCooldownMs,
+		ID:                      id,
+		Position:                Vec2{X: x, Y: y},
+		Velocity:                Vec2{},
+		Facing:                  1,
+		Grounded:                false,
+		CoyoteTimer:             0,
+		JumpBufferTimer:         0,
+		KickCooldown:            0,
+		KickPhase:               "idle",
+		KickTimer:               0,
+		KickInvulnerable:        0,
+		Invulnerable:            0,
+		StunTimer:               0,
+		CheckpointChunkY:        0,
+		Coins:                   0,
+		Health:                  BaseMaxHealth,
+		MaxHealth:               BaseMaxHealth,
+		Damage:                  1,
+		AttackSpeed:             1,
+		JumpPower:               1,
+		AirControl:              1,
+		KnockbackResistance:     0,
+		MovementSpeed:           1,
+		Level:                   1,
+		Relics:                  0,
+		Crystals:                0,
+		RelicFragments:          0,
+		HitRange:                KickRangePX,
+		AttackCooldownMs:        KickCooldownSeconds * 1000,
+		DamageReduction:         0,
+		Shield:                  0,
+		MaxShield:               0,
+		ShieldRegenPerSec:       0,
+		ShieldRegenDelayMs:      skillShieldRegenDelayMs,
+		LastDamageAt:            0,
+		ShieldRegenCooldown:     0,
+		JumpPowerMultiplier:     1,
+		AirControlMultiplier:    1,
+		ExtraJumps:              0,
+		ExtraJumpsUsed:          0,
+		DashUnlocked:            false,
+		DashCooldownMs:          skillDashBaseCooldownMs,
 		DashCooldownRemainingMs: 0,
-		DashTimerMs:         0,
-		PickupRadius:        PickupRadius,
-		XPGainMultiplier:    1,
-		KillXPMultiplier:    1,
-		SelectedSkills:      map[string]int{},
-		ShockwaveCounter:    0,
+		DashTimerMs:             0,
+		PickupRadius:            PickupRadius,
+		XPGainMultiplier:        1,
+		KillXPMultiplier:        1,
+		SelectedSkills:          map[string]int{},
+		ShockwaveCounter:        0,
 	}
 }
 
@@ -377,6 +392,52 @@ func landingSurfaceY(seed uint32, player PlayerState, drop bool, previousBottom 
 }
 
 func GenerateChunk(seed uint32, chunkY int) GeneratedChunk {
+	key := generatedChunkCacheKey{seed: seed, chunkY: chunkY}
+	generatedChunkCache.Lock()
+	if chunk, ok := generatedChunkCache.chunks[key]; ok {
+		generatedChunkCache.Unlock()
+		return cloneGeneratedChunk(chunk)
+	}
+	generatedChunkCache.Unlock()
+
+	chunk := generateChunkUncached(seed, chunkY)
+
+	generatedChunkCache.Lock()
+	if len(generatedChunkCache.chunks) >= generatedChunkCacheLimit {
+		generatedChunkCache.chunks = map[generatedChunkCacheKey]GeneratedChunk{}
+	}
+	generatedChunkCache.chunks[key] = cloneGeneratedChunk(chunk)
+	generatedChunkCache.Unlock()
+
+	return chunk
+}
+
+func cloneGeneratedChunk(chunk GeneratedChunk) GeneratedChunk {
+	chunk.Tiles = cloneSlice(chunk.Tiles)
+	chunk.Platforms = cloneSlice(chunk.Platforms)
+	chunk.Landmarks = cloneSlice(chunk.Landmarks)
+	chunk.Routes = cloneSlice(chunk.Routes)
+	for i := range chunk.Routes {
+		chunk.Routes[i].Nodes = cloneSlice(chunk.Routes[i].Nodes)
+	}
+	chunk.Relics = cloneSlice(chunk.Relics)
+	chunk.Enemies = cloneSlice(chunk.Enemies)
+	chunk.JumpPads = cloneSlice(chunk.JumpPads)
+	chunk.WindZones = cloneSlice(chunk.WindZones)
+	if chunk.Portal != nil {
+		portal := *chunk.Portal
+		chunk.Portal = &portal
+	}
+	return chunk
+}
+
+func cloneSlice[T any](in []T) []T {
+	out := make([]T, len(in))
+	copy(out, in)
+	return out
+}
+
+func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 	regionIndex := RegionIndexForChunkY(chunkY)
 	plan := BuildRegionPlan(seed, regionIndex)
 	platformRecords := plan.Platforms[chunkY]
@@ -491,16 +552,16 @@ type worldRegionProfile struct {
 }
 
 type levelDesignConfig struct {
-	TargetPlatformDensity     float64
-	RoutesPerBandMin          int
-	RoutesPerBandMax          int
-	RestPlatformEveryBands    int
-	RiskyShortcutChance        float64
-	JumpPadChance             float64
-	MaxNormalJumpHeight       float64
-	MaxNormalJumpHorizontal   float64
-	JumpPadBoostHeight        float64
-	JumpPadMultiplier         float64
+	TargetPlatformDensity   float64
+	RoutesPerBandMin        int
+	RoutesPerBandMax        int
+	RestPlatformEveryBands  int
+	RiskyShortcutChance     float64
+	JumpPadChance           float64
+	MaxNormalJumpHeight     float64
+	MaxNormalJumpHorizontal float64
+	JumpPadBoostHeight      float64
+	JumpPadMultiplier       float64
 }
 
 var LevelDesign = levelDesignConfig{
@@ -512,7 +573,7 @@ var LevelDesign = levelDesignConfig{
 	JumpPadChance:           0.35,
 	MaxNormalJumpHeight:     (JumpSpeed * JumpSpeed) / (2 * Gravity),
 	MaxNormalJumpHorizontal: float64(MaxReachableHorizontalGapTiles * TileSize),
-	JumpPadBoostHeight:     (JumpSpeed * 2.35 * JumpSpeed * 2.35) / (2 * Gravity),
+	JumpPadBoostHeight:      (JumpSpeed * 2.35 * JumpSpeed * 2.35) / (2 * Gravity),
 	JumpPadMultiplier:       2.35,
 }
 
@@ -555,29 +616,46 @@ func RegionIndexForChunkY(chunkY int) int {
 	if chunkY <= 0 {
 		return 0
 	}
-	cursor := 0
-	for regionIndex := 0; ; regionIndex++ {
+	cycleLength := regionCycleLengthChunks()
+	cycleRegions := len(worldRegionProfiles)
+	cycles := chunkY / cycleLength
+	cursor := cycles * cycleLength
+	regionIndex := cycles * cycleRegions
+	for offset := 0; offset < cycleRegions; offset++ {
 		next := cursor + RegionLengthForIndex(regionIndex)
 		if chunkY < next {
 			return regionIndex
 		}
 		cursor = next
+		regionIndex++
 	}
+	return regionIndex
 }
 
 func RegionStartChunkY(regionIndex int) int {
 	if regionIndex <= 0 {
 		return 0
 	}
-	chunkY := 0
-	for i := 0; i < regionIndex; i++ {
-		chunkY += RegionLengthForIndex(i)
+	cycleRegions := len(worldRegionProfiles)
+	cycles := regionIndex / cycleRegions
+	remainder := regionIndex % cycleRegions
+	chunkY := cycles * regionCycleLengthChunks()
+	for i := 0; i < remainder; i++ {
+		chunkY += worldRegionProfiles[i].LengthChunks
 	}
 	return chunkY
 }
 
 func RegionLengthForIndex(regionIndex int) int {
 	return worldRegionProfiles[positiveMod(regionIndex, len(worldRegionProfiles))].LengthChunks
+}
+
+func regionCycleLengthChunks() int {
+	total := 0
+	for _, profile := range worldRegionProfiles {
+		total += profile.LengthChunks
+	}
+	return total
 }
 
 func IsCheckpointChunk(chunkY int) bool {

@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import { GAME_VERSION, PROTOCOL_VERSION } from "../../packages/shared/src/constants.js";
 import type { ServerMessage } from "../../packages/shared/src/protocol.js";
 
-const TEST_TIMEOUT_MS = 8_000;
+const TEST_TIMEOUT_MS = Number(process.env.LIVE_WS_TEST_TIMEOUT_MS ?? 20_000);
+
+function hasGoToolchain(): boolean {
+  const result = spawnSync("go", ["version"], { stdio: "ignore" });
+  return result.status === 0;
+}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,21 +79,29 @@ async function waitForSnapshotWithPlayers(ws: WebSocket, count: number): Promise
   const deadline = Date.now() + TEST_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const message = await nextMessage(ws);
-    if (message.type === "snapshot" && message.players.length >= count) {
+    if (message.type !== "snapshot") continue;
+    const playerEntityCount = message.entities.filter((entity) => entity.type === "player").length;
+    const compactPlayerCount = message.playerEntities?.length ?? 0;
+    const playerCount = Math.max(message.players.length, playerEntityCount, compactPlayerCount);
+    if (playerCount >= count) {
       return message;
     }
   }
   throw new Error(`did not receive snapshot with ${count} players`);
 }
 
-test("live websocket server accepts two players in the same room and broadcasts snapshots", async (t) => {
+test("live Go websocket server accepts two players in the same room and broadcasts snapshots", async (t) => {
+  if (!hasGoToolchain()) {
+    t.skip("Go toolchain is not available; skipping live Go websocket smoke test");
+    return;
+  }
+
   const port = 19_000 + Math.floor(Math.random() * 10_000);
-  const proc = spawn(process.execPath, ["--import", "tsx", "apps/server/src/index.ts"], {
-    cwd: process.cwd(),
+  const proc = spawn("go", ["run", "./cmd/server"], {
+    cwd: "apps/server-go",
     env: {
       ...process.env,
       PORT: String(port),
-      PATH: `/home/worxbend/.nvm/versions/node/v26.1.0/bin:${process.env["PATH"] ?? ""}`
     }
   });
 
@@ -117,7 +130,9 @@ test("live websocket server accepts two players in the same room and broadcasts 
   const snapshot = await waitForSnapshotWithPlayers(first.ws, 2);
   assert.equal(snapshot.type, "snapshot");
   if (snapshot.type === "snapshot") {
-    assert.equal(snapshot.players.length, 2);
+    const playerEntityCount = snapshot.entities.filter((entity) => entity.type === "player").length;
+    const compactPlayerCount = snapshot.playerEntities?.length ?? 0;
+    assert.equal(Math.max(snapshot.players.length, playerEntityCount, compactPlayerCount), 2);
     assert.equal(Object.keys(snapshot.lastProcessedSeq).length, 2);
   }
 }, { timeout: TEST_TIMEOUT_MS + 2_000 });

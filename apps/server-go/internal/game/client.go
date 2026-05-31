@@ -21,6 +21,7 @@ type Client struct {
 	log            *slog.Logger
 
 	mu                sync.RWMutex
+	createdAt         time.Time
 	id                string
 	token             string
 	name              string
@@ -31,6 +32,8 @@ type Client struct {
 	lastInput         int64
 	lastAck           int64
 	dropped           uint64
+	droppedReliable   uint64
+	droppedSnapshots  uint64
 	msgIn             uint64
 	bytesIn           uint64
 	msgOut            uint64
@@ -70,6 +73,7 @@ func NewClient(conn *websocket.Conn, queueSize int, maxDrops uint64, stats *Serv
 		ctx:            ctx,
 		cancel:         cancel,
 		log:            log,
+		createdAt:      time.Now(),
 		lastPacket:     time.Now(),
 		maxDrops:       maxDrops,
 		serverStats:    stats,
@@ -130,30 +134,40 @@ func (c *Client) Metrics() ClientMetrics {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	packetAge := float64(time.Since(c.lastPacket).Microseconds()) / 1000
+	uptime := time.Since(c.createdAt).Seconds()
+	if uptime < 1 {
+		uptime = 1
+	}
 	return ClientMetrics{
-		MessagesReceived:  c.msgIn,
-		BytesReceived:     c.bytesIn,
-		MessagesSent:      c.msgOut,
-		BytesSent:         c.bytesOut,
-		DroppedOutbound:   c.dropped,
-		WriteLatencyAvgMS: c.writeLatencyAvg,
-		WriteLatencyMaxMS: c.writeLatencyMax,
-		ReadLatencyAvgMS:  c.readLatencyAvg,
-		ReadLatencyMaxMS:  c.readLatencyMax,
-		JSONDecodeAvgMS:   c.jsonDecodeAvg,
-		JSONDecodeMaxMS:   c.jsonDecodeMax,
-		RTTMS:             c.lastRTT,
-		JitterMS:          c.jitter,
-		LastPacketAgeMS:   packetAge,
-		QueueDepth:        len(c.send) + boolInt(c.snapshotPending),
-		LastInputSeq:      c.lastInput,
-		LastAckInputSeq:   c.lastAck,
-		LastSnapshotBytes: c.lastSnapshotBytes,
-		AOIChunksMin:      c.aoiMinChunk,
-		AOIChunksMax:      c.aoiMaxChunk,
-		AOIPlayers:        c.aoiPlayers,
-		AOIEnemies:        c.aoiEnemies,
-		AOICollectibles:   c.aoiCollectibles,
+		MessagesReceived:       c.msgIn,
+		BytesReceived:          c.bytesIn,
+		MessagesSent:           c.msgOut,
+		BytesSent:              c.bytesOut,
+		MessagesReceivedPerSec: float64(c.msgIn) / uptime,
+		MessagesSentPerSec:     float64(c.msgOut) / uptime,
+		BytesReceivedPerSec:    float64(c.bytesIn) / uptime,
+		BytesSentPerSec:        float64(c.bytesOut) / uptime,
+		DroppedOutbound:        c.dropped,
+		DroppedReliable:        c.droppedReliable,
+		DroppedSnapshots:       c.droppedSnapshots,
+		WriteLatencyAvgMS:      c.writeLatencyAvg,
+		WriteLatencyMaxMS:      c.writeLatencyMax,
+		ReadLatencyAvgMS:       c.readLatencyAvg,
+		ReadLatencyMaxMS:       c.readLatencyMax,
+		JSONDecodeAvgMS:        c.jsonDecodeAvg,
+		JSONDecodeMaxMS:        c.jsonDecodeMax,
+		RTTMS:                  c.lastRTT,
+		JitterMS:               c.jitter,
+		LastPacketAgeMS:        packetAge,
+		QueueDepth:             len(c.send) + boolInt(c.snapshotPending),
+		LastInputSeq:           c.lastInput,
+		LastAckInputSeq:        c.lastAck,
+		LastSnapshotBytes:      c.lastSnapshotBytes,
+		AOIChunksMin:           c.aoiMinChunk,
+		AOIChunksMax:           c.aoiMaxChunk,
+		AOIPlayers:             c.aoiPlayers,
+		AOIEnemies:             c.aoiEnemies,
+		AOICollectibles:        c.aoiCollectibles,
 	}
 }
 
@@ -188,9 +202,11 @@ func (c *Client) enqueueMessage(msg outboundMessage) bool {
 	default:
 		c.mu.Lock()
 		c.dropped++
+		c.droppedReliable++
 		dropped := c.dropped
 		c.mu.Unlock()
 		c.serverStats.DroppedOutbound.Add(1)
+		c.serverStats.DroppedReliable.Add(1)
 		if dropped >= c.maxDrops {
 			c.serverStats.BackpressureDisconnect.Add(1)
 			c.Close(websocket.StatusPolicyViolation, "outbound queue overflow")
@@ -210,12 +226,14 @@ func (c *Client) EnqueueSnapshotMessage(encoded []byte, msgType websocket.Messag
 	c.snapshotPending = true
 	if overwrotePending {
 		c.dropped++
+		c.droppedSnapshots++
 	}
 	dropped := c.dropped
 	c.mu.Unlock()
 
 	if overwrotePending {
 		c.serverStats.DroppedOutbound.Add(1)
+		c.serverStats.DroppedSnapshots.Add(1)
 		if dropped >= c.maxDrops {
 			c.serverStats.BackpressureDisconnect.Add(1)
 			c.Close(websocket.StatusPolicyViolation, "outbound snapshot overflow")

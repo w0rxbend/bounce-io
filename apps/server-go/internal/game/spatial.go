@@ -56,7 +56,7 @@ func buildDynamicSpatialIndex(s *roomState, playerFrames map[string]PlayerEntity
 
 func (index dynamicSpatialIndex) playersForAOI(aoi chunkAOI, s *roomState) []PlayerEntityFrame {
 	out := make([]PlayerEntityFrame, 0)
-	for _, key := range cellKeysForAOI(aoi) {
+	forEachCellKeyInAOI(aoi, func(key spatialCellKey) {
 		for _, player := range index.players[key] {
 			sess := s.sessions[player.id]
 			if sess == nil || !sess.connected {
@@ -66,43 +66,33 @@ func (index dynamicSpatialIndex) playersForAOI(aoi chunkAOI, s *roomState) []Pla
 				out = append(out, player.frame)
 			}
 		}
-	}
+	})
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
 func (index dynamicSpatialIndex) enemiesForAOI(aoi chunkAOI) []EnemyState {
 	out := make([]EnemyState, 0)
-	seen := map[string]struct{}{}
-	for _, key := range cellKeysForAOI(aoi) {
+	forEachCellKeyInAOI(aoi, func(key spatialCellKey) {
 		for _, enemy := range index.enemies[key] {
-			if _, ok := seen[enemy.ID]; ok {
-				continue
-			}
 			if chunkInAOI(aoi, enemy.ChunkY) && rectIntersectsAOI(aoi, enemy.Position.X, enemy.Position.Y, 22, 28) {
 				out = append(out, enemy)
-				seen[enemy.ID] = struct{}{}
 			}
 		}
-	}
+	})
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
 func (index dynamicSpatialIndex) collectiblesForAOI(aoi chunkAOI) []CollectibleState {
 	out := make([]CollectibleState, 0)
-	seen := map[string]struct{}{}
-	for _, key := range cellKeysForAOI(aoi) {
+	forEachCellKeyInAOI(aoi, func(key spatialCellKey) {
 		for _, collectible := range index.collectibles[key] {
-			if _, ok := seen[collectible.ID]; ok {
-				continue
-			}
 			if chunkInAOI(aoi, ChunkYForWorldY(collectible.Y)) && pointInAOI(aoi, collectible.X, collectible.Y) {
 				out = append(out, collectible)
-				seen[collectible.ID] = struct{}{}
 			}
 		}
-	}
+	})
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
@@ -123,6 +113,18 @@ func cellKeysForAOI(aoi chunkAOI) []spatialCellKey {
 		}
 	}
 	return out
+}
+
+func forEachCellKeyInAOI(aoi chunkAOI, visit func(spatialCellKey)) {
+	minX := aoi.left / spatialCellSize
+	maxX := aoi.right / spatialCellSize
+	minY := floorDiv(aoi.top, spatialCellSize)
+	maxY := floorDiv(aoi.bottom, spatialCellSize)
+	for y := minY; y <= maxY; y++ {
+		for x := minX; x <= maxX; x++ {
+			visit(spatialCellKey{x: x, y: y})
+		}
+	}
 }
 
 func floorDiv(value, divisor int) int {

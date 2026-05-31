@@ -14,6 +14,8 @@ type ServerMetrics struct {
 	MessagesSent           atomic.Uint64
 	BytesSent              atomic.Uint64
 	DroppedOutbound        atomic.Uint64
+	DroppedReliable        atomic.Uint64
+	DroppedSnapshots       atomic.Uint64
 	BackpressureDisconnect atomic.Uint64
 }
 
@@ -28,11 +30,20 @@ type RoomMetrics struct {
 	TickIntervalAvgMS      float64 `json:"tickIntervalAvgMs"`
 	TickIntervalMaxMS      float64 `json:"tickIntervalMaxMs"`
 	TickOverruns           uint64  `json:"tickOverruns"`
+	CommandDrainAvgMS      float64 `json:"commandDrainAvgMs"`
+	CommandDrainMaxMS      float64 `json:"commandDrainMaxMs"`
+	CommandsDrained        uint64  `json:"commandsDrained"`
+	CommandBacklog         int     `json:"commandBacklog"`
+	CommandBacklogMax      int     `json:"commandBacklogMax"`
 	Broadcasts             uint64  `json:"broadcasts"`
 	BroadcastDurationAvgMS float64 `json:"broadcastDurationAvgMs"`
 	BroadcastDurationMaxMS float64 `json:"broadcastDurationMaxMs"`
+	SnapshotSendAvgMS      float64 `json:"snapshotSendAvgMs"`
+	SnapshotSendMaxMS      float64 `json:"snapshotSendMaxMs"`
 	SerializationAvgMS     float64 `json:"serializationAvgMs"`
 	SerializationMaxMS     float64 `json:"serializationMaxMs"`
+	SnapshotBuildAvgMS     float64 `json:"snapshotBuildAvgMs"`
+	SnapshotBuildMaxMS     float64 `json:"snapshotBuildMaxMs"`
 	JSONEncodeAvgMS        float64 `json:"jsonEncodeAvgMs"`
 	JSONEncodeMaxMS        float64 `json:"jsonEncodeMaxMs"`
 	MessagesReceived       uint64  `json:"messagesReceived"`
@@ -40,6 +51,8 @@ type RoomMetrics struct {
 	MessagesSent           uint64  `json:"messagesSent"`
 	BytesSent              uint64  `json:"bytesSent"`
 	DroppedOutbound        uint64  `json:"droppedOutboundMessages"`
+	DroppedReliable        uint64  `json:"droppedReliableMessages"`
+	DroppedSnapshots       uint64  `json:"droppedSnapshotMessages"`
 	BackpressureDisconnect uint64  `json:"backpressureDisconnects"`
 	LastSnapshotBytes      int     `json:"lastSnapshotBytes"`
 	SnapshotBytesAvg       float64 `json:"snapshotBytesAvg"`
@@ -49,29 +62,35 @@ type RoomMetrics struct {
 }
 
 type ClientMetrics struct {
-	MessagesReceived  uint64  `json:"messagesReceived"`
-	BytesReceived     uint64  `json:"bytesReceived"`
-	MessagesSent      uint64  `json:"messagesSent"`
-	BytesSent         uint64  `json:"bytesSent"`
-	DroppedOutbound   uint64  `json:"droppedOutboundMessages"`
-	WriteLatencyAvgMS float64 `json:"writeLatencyAvgMs"`
-	WriteLatencyMaxMS float64 `json:"writeLatencyMaxMs"`
-	ReadLatencyAvgMS  float64 `json:"readLatencyAvgMs"`
-	ReadLatencyMaxMS  float64 `json:"readLatencyMaxMs"`
-	JSONDecodeAvgMS   float64 `json:"jsonDecodeAvgMs"`
-	JSONDecodeMaxMS   float64 `json:"jsonDecodeMaxMs"`
-	RTTMS             float64 `json:"rttMs"`
-	JitterMS          float64 `json:"jitterMs"`
-	LastPacketAgeMS   float64 `json:"lastPacketAgeMs"`
-	QueueDepth        int     `json:"queueDepth"`
-	LastInputSeq      int64   `json:"lastInputSeq"`
-	LastAckInputSeq   int64   `json:"lastAckInputSeq"`
-	LastSnapshotBytes int     `json:"lastSnapshotBytes"`
-	AOIChunksMin      int     `json:"aoiChunksMin"`
-	AOIChunksMax      int     `json:"aoiChunksMax"`
-	AOIPlayers        int     `json:"aoiPlayers"`
-	AOIEnemies        int     `json:"aoiEnemies"`
-	AOICollectibles   int     `json:"aoiCollectibles"`
+	MessagesReceived       uint64  `json:"messagesReceived"`
+	BytesReceived          uint64  `json:"bytesReceived"`
+	MessagesSent           uint64  `json:"messagesSent"`
+	BytesSent              uint64  `json:"bytesSent"`
+	MessagesReceivedPerSec float64 `json:"messagesReceivedPerSecond"`
+	MessagesSentPerSec     float64 `json:"messagesSentPerSecond"`
+	BytesReceivedPerSec    float64 `json:"bytesReceivedPerSecond"`
+	BytesSentPerSec        float64 `json:"bytesSentPerSecond"`
+	DroppedOutbound        uint64  `json:"droppedOutboundMessages"`
+	DroppedReliable        uint64  `json:"droppedReliableMessages"`
+	DroppedSnapshots       uint64  `json:"droppedSnapshotMessages"`
+	WriteLatencyAvgMS      float64 `json:"writeLatencyAvgMs"`
+	WriteLatencyMaxMS      float64 `json:"writeLatencyMaxMs"`
+	ReadLatencyAvgMS       float64 `json:"readLatencyAvgMs"`
+	ReadLatencyMaxMS       float64 `json:"readLatencyMaxMs"`
+	JSONDecodeAvgMS        float64 `json:"jsonDecodeAvgMs"`
+	JSONDecodeMaxMS        float64 `json:"jsonDecodeMaxMs"`
+	RTTMS                  float64 `json:"rttMs"`
+	JitterMS               float64 `json:"jitterMs"`
+	LastPacketAgeMS        float64 `json:"lastPacketAgeMs"`
+	QueueDepth             int     `json:"queueDepth"`
+	LastInputSeq           int64   `json:"lastInputSeq"`
+	LastAckInputSeq        int64   `json:"lastAckInputSeq"`
+	LastSnapshotBytes      int     `json:"lastSnapshotBytes"`
+	AOIChunksMin           int     `json:"aoiChunksMin"`
+	AOIChunksMax           int     `json:"aoiChunksMax"`
+	AOIPlayers             int     `json:"aoiPlayers"`
+	AOIEnemies             int     `json:"aoiEnemies"`
+	AOICollectibles        int     `json:"aoiCollectibles"`
 }
 
 func recordEMA(previous, next, alpha float64) float64 {
@@ -98,6 +117,19 @@ func (m *RoomMetrics) recordTick(duration, interval, budget time.Duration) {
 	}
 }
 
+func (m *RoomMetrics) recordCommandDrain(duration time.Duration, drained, backlog int) {
+	durationMS := float64(duration.Microseconds()) / 1000
+	m.CommandDrainAvgMS = recordEMA(m.CommandDrainAvgMS, durationMS, 0.08)
+	if durationMS > m.CommandDrainMaxMS {
+		m.CommandDrainMaxMS = durationMS
+	}
+	m.CommandsDrained += uint64(drained)
+	m.CommandBacklog = backlog
+	if backlog > m.CommandBacklogMax {
+		m.CommandBacklogMax = backlog
+	}
+}
+
 func (m *RoomMetrics) recordBroadcast(duration time.Duration, recipients int) {
 	durationMS := float64(duration.Microseconds()) / 1000
 	m.Broadcasts++
@@ -105,6 +137,8 @@ func (m *RoomMetrics) recordBroadcast(duration time.Duration, recipients int) {
 	if durationMS > m.BroadcastDurationMaxMS {
 		m.BroadcastDurationMaxMS = durationMS
 	}
+	m.SnapshotSendAvgMS = m.BroadcastDurationAvgMS
+	m.SnapshotSendMaxMS = m.BroadcastDurationMaxMS
 	m.BroadcastDurationMS = durationMS
 	m.BroadcastRecipients = recipients
 }
@@ -115,6 +149,8 @@ func (m *RoomMetrics) recordSerialization(duration time.Duration, bytes int) {
 	if durationMS > m.SerializationMaxMS {
 		m.SerializationMaxMS = durationMS
 	}
+	m.SnapshotBuildAvgMS = m.SerializationAvgMS
+	m.SnapshotBuildMaxMS = m.SerializationMaxMS
 	m.JSONEncodeAvgMS = recordEMA(m.JSONEncodeAvgMS, durationMS, 0.08)
 	if durationMS > m.JSONEncodeMaxMS {
 		m.JSONEncodeMaxMS = durationMS

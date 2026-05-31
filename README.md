@@ -39,7 +39,9 @@ The first player to reach the exit platform at the top wins. If time runs out, p
 | `Space` / `W` | Jump |
 | `S` | Drop through one-way platforms |
 | `F` | Kick |
+| `I` | Toggle inspection overlay |
 | `F1` | Toggle debug overlay |
+| `Shift+F1` | Toggle world/chunk debug overlay |
 | `F2` | Force respawn |
 | `F3` | Regenerate local world |
 
@@ -63,7 +65,7 @@ In another terminal, start the Vite client:
 npm run dev:client
 ```
 
-The Vite client runs on `http://localhost:5173` and proxies `/ws` to the local game server on port `8787`.
+The Vite client runs on `http://localhost:5173` and proxies `/ws` plus `/metrics` to the local game server on port `8787`.
 
 ## Quality Checks
 
@@ -72,6 +74,10 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Performance Diagnostics
+
+Before optimizing FPS or multiplayer smoothness, capture client overlay and server metrics evidence. See [docs/PERFORMANCE_DIAGNOSTICS.md](docs/PERFORMANCE_DIAGNOSTICS.md).
 
 ## Project Notes
 

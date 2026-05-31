@@ -12,6 +12,8 @@ import (
 	"github.com/coder/websocket"
 )
 
+const roomCommandDrainLimit = 128
+
 type RoomConfig struct {
 	ID               string
 	TickRate         int
@@ -67,6 +69,7 @@ type chunkAOI struct {
 
 type scopedSnapshot struct {
 	encoded          []byte
+	message          SnapshotMessage
 	playersList      []PlayerEntityFrame
 	enemiesList      []EnemyState
 	collectiblesList []CollectibleState
@@ -216,12 +219,19 @@ type inputCommand struct {
 	playerID string
 	input    PlayerInput
 	ageMS    float64
+	bytes    int
 	client   *Client
 }
 
 func (cmd inputCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
 	if sess == nil || !sess.connected {
+		return
+	}
+	if s.phase != "playing" {
+		sess.inputQueue = sess.inputQueue[:0]
+		sess.lastInput = IdleInput(sess.lastProcessedSeq)
+		cmd.client.RecordInput(cmd.input.Sequence, cmd.ageMS)
 		return
 	}
 	if cmd.input.Sequence <= sess.lastProcessedSeq || cmd.input.Sequence <= sess.lastReceivedSeq {
@@ -238,7 +248,7 @@ func (cmd inputCommand) apply(s *roomState) {
 		sess.inputQueue = sess.inputQueue[:s.room.cfg.MaxQueuedInputs]
 	}
 	s.metrics.MessagesReceived++
-	s.metrics.BytesReceived += 1
+	s.metrics.BytesReceived += uint64(cmd.bytes)
 	cmd.client.RecordInput(cmd.input.Sequence, cmd.ageMS)
 }
 
@@ -329,6 +339,7 @@ func (cmd chunkCommand) apply(s *roomState) {
 	}
 	if !s.chunkRequestAllowed(sess, cmd.chunkY) {
 		s.metrics.DroppedOutbound++
+		s.metrics.DroppedReliable++
 		return
 	}
 	_ = sess.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, cmd.chunkY)})
@@ -440,9 +451,9 @@ func (r *Room) Join(ctxDone <-chan struct{}, client *Client, name, token, skinID
 	}
 }
 
-func (r *Room) Input(playerID string, input PlayerInput, ageMS float64, client *Client) {
+func (r *Room) Input(playerID string, input PlayerInput, ageMS float64, bytes int, client *Client) {
 	select {
-	case r.commands <- inputCommand{playerID: playerID, input: input, ageMS: ageMS, client: client}:
+	case r.commands <- inputCommand{playerID: playerID, input: input, ageMS: ageMS, bytes: bytes, client: client}:
 	default:
 		r.stats.DroppedOutbound.Add(1)
 	}
@@ -528,27 +539,45 @@ func (r *Room) loop() {
 		select {
 		case <-r.stop:
 			return
+		case now := <-ticker.C:
+			state.runTick(now, interval)
+			continue
+		default:
+		}
+
+		select {
+		case <-r.stop:
+			return
+		case now := <-ticker.C:
+			state.runTick(now, interval)
 		case cmd := <-r.commands:
 			cmd.apply(state)
-		case now := <-ticker.C:
-			start := time.Now()
-			state.drainCommands()
-			state.tickRoom(now, interval)
-			state.metrics.recordTick(time.Since(start), now.Sub(state.lastTickWallClock), interval)
-			state.lastTickWallClock = now
 		}
 	}
 }
 
-func (s *roomState) drainCommands() {
-	for {
+func (s *roomState) runTick(now time.Time, interval time.Duration) {
+	start := time.Now()
+	drainStart := time.Now()
+	drained := s.drainCommands(roomCommandDrainLimit)
+	s.metrics.recordCommandDrain(time.Since(drainStart), drained, len(s.room.commands))
+	s.tickRoom(now, interval)
+	s.metrics.recordTick(time.Since(start), now.Sub(s.lastTickWallClock), interval)
+	s.lastTickWallClock = now
+}
+
+func (s *roomState) drainCommands(limit int) int {
+	drained := 0
+	for drained < limit {
 		select {
 		case cmd := <-s.room.commands:
 			cmd.apply(s)
+			drained++
 		default:
-			return
+			return drained
 		}
 	}
+	return drained
 }
 
 func (s *roomState) jumpPadCooldownKey(playerID, padID string) string {
@@ -589,6 +618,10 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 
 	if s.phase == "countdown" && now.After(s.countdownEndsAt) {
 		s.phase = "playing"
+		for _, sess := range s.sessions {
+			sess.inputQueue = sess.inputQueue[:0]
+			sess.lastInput = IdleInput(sess.lastProcessedSeq)
+		}
 		s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "MATCH_STARTED"})
 		s.broadcastJSON(MatchPhaseMessage{Type: "matchPhase", Phase: "playing"})
 	}
@@ -744,13 +777,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 				Events:           []MatchEvent{},
 				LastProcessedSeq: lastProcessed,
 			}
-			encoded, err := json.Marshal(msg)
-			if err != nil {
-				s.room.log.Error("marshal scoped snapshot", "error", err)
-				continue
-			}
 			scoped = scopedSnapshot{
-				encoded:          encoded,
+				message:          msg,
 				playersList:      scopedPlayers,
 				enemiesList:      scopedEnemies,
 				collectiblesList: scopedCollectibles,
@@ -769,6 +797,17 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 			msgType = websocket.MessageBinary
 			sess.binaryVisible = nextVisible
 			sess.binaryBaselineTick = s.tick
+		} else {
+			if len(outbound) == 0 {
+				encoded, err := json.Marshal(scoped.message)
+				if err != nil {
+					s.room.log.Error("marshal scoped snapshot", "error", err)
+					continue
+				}
+				scoped.encoded = encoded
+				scopedByAOI[aoi] = scoped
+				outbound = encoded
+			}
 		}
 		sess.client.RecordAOI(aoi.min, aoi.max, scoped.players, scoped.enemies, scoped.collectibles, len(outbound))
 		totalSnapshotBytes += len(outbound)
@@ -779,6 +818,7 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 			sess.client.SetAck(sess.lastProcessedSeq)
 		} else {
 			s.metrics.DroppedOutbound++
+			s.metrics.DroppedSnapshots++
 			if sess.client.Metrics().DroppedOutbound >= sess.client.maxDrops {
 				s.metrics.BackpressureDisconnect++
 			}
@@ -1115,7 +1155,17 @@ func (s *roomState) collectibleList() []CollectibleState {
 }
 
 func (s *roomState) checkDynamicCollectibleCollection(sess *session) {
-	for id := range s.collectibles {
+	centerChunkY := ChunkYForWorldY(sess.player.Position.Y)
+	minChunkY := max(0, centerChunkY-1)
+	maxChunkY := centerChunkY + 1
+	for id, collectible := range s.collectibles {
+		if collectible.Picked {
+			continue
+		}
+		chunkY := ChunkYForWorldY(collectible.Y)
+		if chunkY < minChunkY || chunkY > maxChunkY {
+			continue
+		}
 		s.tryPickupCollectible(sess, id)
 	}
 }
@@ -1136,8 +1186,6 @@ func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bo
 		return false
 	}
 
-	collectible.Picked = true
-	s.collectibles[collectibleID] = collectible
 	xpValue := collectible.XPValue
 	if collectible.Type == "xp" {
 		xpValue = int(math.Round(float64(xpValue) * player.XPGainMultiplier))
@@ -1166,6 +1214,7 @@ func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bo
 		"xpGranted":  xpGranted,
 		"level":      player.Level,
 	})
+	delete(s.collectibles, collectibleID)
 	return true
 }
 
