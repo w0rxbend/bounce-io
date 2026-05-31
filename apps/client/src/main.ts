@@ -7492,6 +7492,10 @@ class PlayerStatsHud {
     text: "",
     style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
+  private readonly shieldText = new Text({
+    text: "",
+    style: { fill: PAL.portalGlow, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
   private readonly xpText = new Text({
     text: "",
     style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
@@ -7508,14 +7512,14 @@ class PlayerStatsHud {
   private statsKey = "";
 
   constructor() {
-    this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.xpText, this.levelText, this.atkText);
+    this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.shieldText, this.xpText, this.levelText, this.atkText);
     disableDisplayEvents(this.container);
   }
 
   update(player: PlayerState, screenWidth: number): void {
-    const width = hudPx(screenWidth < 440 ? 166 : 196);
+    const width = hudPx(screenWidth < 520 ? 222 : 286);
     const hasShield = hudStatNumber(player.maxShield, 0) > 0;
-    const height = hudPx(hasShield ? 104 : 84);
+    const height = hudPx(hasShield ? 148 : 120);
     const x = hudPx(10);
     const y = hudPx(10);
     const layoutKey = `${width}|${height}|${x}|${y}`;
@@ -7525,16 +7529,21 @@ class PlayerStatsHud {
       this.container.y = y;
       this.panel.clear();
       drawHudPanel(this.panel, 0, 0, width, height);
-      this.titleText.x = hudPx(14);
-      this.titleText.y = hudPx(10);
-      this.hpText.x = hudPx(14);
-      this.hpText.y = hudPx(31);
-      this.xpText.x = hudPx(14);
-      this.xpText.y = hudPx(hasShield ? 74 : 54);
-      this.levelText.x = width - hudPx(70);
-      this.levelText.y = hudPx(10);
-      this.atkText.x = width - hudPx(70);
-      this.atkText.y = hudPx(hasShield ? 74 : 54);
+      const leftX = hudPx(18);
+      const rightX = width - hudPx(96);
+      this.titleText.x = leftX;
+      this.titleText.y = hudPx(14);
+      this.hpText.x = leftX;
+      this.hpText.y = hudPx(39);
+      this.shieldText.x = leftX;
+      this.shieldText.y = hudPx(70);
+      this.shieldText.visible = hasShield;
+      this.xpText.x = leftX;
+      this.xpText.y = hudPx(hasShield ? 101 : 73);
+      this.levelText.x = rightX;
+      this.levelText.y = hudPx(14);
+      this.atkText.x = rightX;
+      this.atkText.y = hudPx(hasShield ? 101 : 73);
       this.statsKey = "";
     }
 
@@ -7554,28 +7563,31 @@ class PlayerStatsHud {
 
     const hpRatio = Math.max(0, Math.min(1, hp / hpMax));
     const xpRatio = Math.max(0, Math.min(1, xpProgress / xpNeeded));
-    const hpBarW = width - hudPx(108);
-    const xpBarW = width - hudPx(108);
+    const statBarW = width - hudPx(36);
+    const barX = hudPx(18);
     this.bars.clear();
-    this.bars.rect(hudPx(53), hudPx(34), hpBarW, hudPx(7)).fill(PAL.hazardRed);
-    this.bars.rect(hudPx(53), hudPx(34), Math.round(hpBarW * hpRatio), hudPx(7)).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
-    this.bars.rect(hudPx(53), hudPx(37), Math.round(hpBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
+    this.bars.rect(barX, hudPx(56), statBarW, hudPx(8)).fill(PAL.hazardRed);
+    this.bars.rect(barX, hudPx(56), Math.round(statBarW * hpRatio), hudPx(8)).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
+    this.bars.rect(barX, hudPx(59), Math.round(statBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
     if (shieldMax > 0) {
       const shieldRatio = Math.max(0, Math.min(1, shield / shieldMax));
-      this.bars.rect(hudPx(53), hudPx(53), hpBarW, hudPx(6)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-      this.bars.rect(hudPx(53), hudPx(53), Math.round(hpBarW * shieldRatio), hudPx(6)).fill(PAL.portalGlow);
-      this.bars.rect(hudPx(53), hudPx(55), Math.round(hpBarW * shieldRatio), 1).fill({ color: 0xffffff, alpha: 0.34 });
+      this.bars.rect(barX, hudPx(87), statBarW, hudPx(7)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+      this.bars.rect(barX, hudPx(87), Math.round(statBarW * shieldRatio), hudPx(7)).fill(PAL.portalGlow);
+      this.bars.rect(barX, hudPx(90), Math.round(statBarW * shieldRatio), 1).fill({ color: 0xffffff, alpha: 0.34 });
     }
-    this.bars.rect(hudPx(53), hudPx(hasShield ? 79 : 59), xpBarW, hudPx(6)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-    this.bars.rect(hudPx(53), hudPx(hasShield ? 79 : 59), Math.round(xpBarW * xpRatio), hudPx(6)).fill(PAL.portalBlue);
-    this.bars.rect(width - hudPx(76), hudPx(31), hudPx(55), hudPx(18)).fill(0x06100a);
-    this.bars.rect(width - hudPx(72), hudPx(35), hudPx(47), hudPx(10)).fill({ color: PAL.mossGreen, alpha: 0.86 });
-    this.bars.rect(width - hudPx(69), hudPx(56), hudPx(6), hudPx(6)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(66), hudPx(52), hudPx(3), hudPx(14)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(62), hudPx(60), hudPx(7), hudPx(3)).fill(PAL.hazardGlow);
+    const xpBarY = hudPx(hasShield ? 118 : 90);
+    this.bars.rect(barX, xpBarY, statBarW, hudPx(7)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
+    this.bars.rect(barX, xpBarY, Math.round(statBarW * xpRatio), hudPx(7)).fill(PAL.portalBlue);
+    this.bars.rect(width - hudPx(106), hudPx(34), hudPx(84), hudPx(18)).fill(0x06100a);
+    this.bars.rect(width - hudPx(101), hudPx(38), hudPx(74), hudPx(10)).fill({ color: PAL.mossGreen, alpha: 0.86 });
+    this.bars.rect(width - hudPx(88), hudPx(hasShield ? 78 : 50), hudPx(8), hudPx(8)).fill(PAL.hazardGlow);
+    this.bars.rect(width - hudPx(84), hudPx(hasShield ? 73 : 45), hudPx(4), hudPx(17)).fill(PAL.hazardGlow);
+    this.bars.rect(width - hudPx(78), hudPx(hasShield ? 83 : 55), hudPx(9), hudPx(4)).fill(PAL.hazardGlow);
 
     this.hpText.text = `HP ${Math.ceil(hp)}/${Math.ceil(hpMax)}`;
-    this.xpText.text = shieldMax > 0 ? `SH ${Math.ceil(shield)}/${Math.ceil(shieldMax)} XP ${xpProgress}/${xpNeeded}` : `XP ${xpProgress}/${xpNeeded}`;
+    this.shieldText.visible = shieldMax > 0;
+    this.shieldText.text = shieldMax > 0 ? `SH ${Math.ceil(shield)}/${Math.ceil(shieldMax)}` : "";
+    this.xpText.text = `XP ${xpProgress}/${xpNeeded}`;
     this.levelText.text = `LVL ${level}`;
     this.atkText.text = skillCount > 0 ? `ATK ${formatHudStat(attack)} S${skillCount}` : `ATK ${formatHudStat(attack)}`;
   }
