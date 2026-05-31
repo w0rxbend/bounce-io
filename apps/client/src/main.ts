@@ -2698,6 +2698,7 @@ interface RemoteEntry {
   sprite: Sprite;
   crownSprite: Sprite;
   gfx: Graphics;
+  attackBar: Graphics;
   label: Text;
 }
 const remotePlayers  = new Map<string, RemoteEntry>();
@@ -3071,13 +3072,15 @@ let cloudDriftFront = 0;
 const localSprite = makeCharacterSprite(currentSkinId());
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
+const localAttackBar = new Graphics();
 disableDisplayEvents(localGfx);
+disableDisplayEvents(localAttackBar);
 localSprite.anchor.set(0.5, playerSpriteAnchorY());
 localSprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.62 : 0;
 localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
 localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
-localLayer.addChild(localSprite, localGfx, localCrownSprite);
+localLayer.addChild(localSprite, localGfx, localAttackBar, localCrownSprite);
 
 interface DisplayTreeStats {
   total: number;
@@ -3690,6 +3693,7 @@ function clearRemotePlayers(): void {
     e.sprite.destroy();
     e.crownSprite.destroy();
     e.gfx.destroy();
+    e.attackBar.destroy();
     e.label.destroy();
   }
   remotePlayers.clear();
@@ -6449,16 +6453,56 @@ function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: num
     g.rect(fx2, vy2 + vh - 9, 8, 5).fill(color);
     g.rect(fx2, vy2 + vh - 9, 8, 1).fill(PAL.coinGlow);
   }
+}
 
-  // Kick cooldown bar
-  if (s.kickCooldown > 0 || phase !== "idle") {
-    const total = KICK_COOLDOWN_SECONDS + KICK_WINDUP_SECONDS + KICK_ACTIVE_SECONDS + KICK_RECOVERY_SECONDS;
-    const bw = 18, bx = x + PLAYER_WIDTH / 2 - bw / 2, by = y - 7;
-    g.rect(bx, by, bw, 2).fill({ color: PAL.uiInk, alpha: 0.7 });
-    const fill = phase !== "idle"
-      ? 1 - s.kickTimer / (phase === "windup" ? KICK_WINDUP_SECONDS : phase === "active" ? KICK_ACTIVE_SECONDS : KICK_RECOVERY_SECONDS)
-      : 1 - s.kickCooldown / total;
-    g.rect(bx, by, Math.round(bw * Math.max(0, fill)), 2).fill(PAL.hazardRed);
+function attackPhaseDuration(phase: PlayerState["kickPhase"]): number {
+  if (phase === "windup") return KICK_WINDUP_SECONDS;
+  if (phase === "active") return KICK_ACTIVE_SECONDS;
+  if (phase === "recovery") return KICK_RECOVERY_SECONDS;
+  return 0;
+}
+
+function attackRechargeProgress(player: PlayerState): { visible: boolean; progress: number; color: number } {
+  if (player.health <= 0) return { visible: false, progress: 1, color: PAL.mossBright };
+  const phase = player.kickPhase;
+  if (phase !== "idle") {
+    const duration = Math.max(0.001, attackPhaseDuration(phase));
+    const phaseProgress = Math.max(0, Math.min(1, player.kickTimer / duration));
+    const color = phase === "windup" ? PAL.coinGold : phase === "active" ? PAL.hazardRed : PAL.hazardGlow;
+    return { visible: true, progress: phaseProgress, color };
+  }
+  if (player.kickCooldown <= 0) return { visible: false, progress: 1, color: PAL.mossBright };
+  const cooldownSeconds = Math.max(0.05, hudStatNumber(player.attackCooldownMs, KICK_COOLDOWN_SECONDS * 1000) / 1000);
+  return {
+    visible: true,
+    progress: Math.max(0, Math.min(1, 1 - player.kickCooldown / cooldownSeconds)),
+    color: PAL.portalGlow,
+  };
+}
+
+function drawAttackRechargeBar(g: Graphics, player: PlayerState, position: PlayerState["position"], elapsed: number): void {
+  g.clear();
+  const state = attackRechargeProgress(player);
+  if (!state.visible) {
+    g.visible = false;
+    return;
+  }
+  g.visible = true;
+  const x = Math.round(position.x + PLAYER_WIDTH / 2);
+  const y = Math.round(position.y - 25);
+  const width = 38;
+  const height = 5;
+  const fillWidth = Math.max(1, Math.round(width * state.progress));
+  const shimmer = 0.18 + Math.sin(elapsed * 0.018) * 0.08;
+  g.rect(x - width / 2 - 3, y - 3, width + 6, height + 6).fill({ color: 0x000000, alpha: 0.52 });
+  g.rect(x - width / 2 - 2, y - 2, width + 4, height + 4).fill({ color: PAL.uiInk, alpha: 0.9 });
+  g.rect(x - width / 2, y, width, height).fill({ color: 0x101c14, alpha: 0.96 });
+  g.rect(x - width / 2, y, fillWidth, height).fill(state.color);
+  g.rect(x - width / 2, y, fillWidth, 1).fill({ color: 0xffffff, alpha: 0.35 + shimmer });
+  if (player.kickPhase === "active") {
+    g.rect(x - width / 2 - 2, y - 2, width + 4, height + 4).stroke({ color: PAL.coinGlow, alpha: 0.86, width: 1 });
+  } else {
+    g.rect(x - width / 2 - 1, y - 1, width + 2, height + 2).stroke({ color: state.color, alpha: 0.48, width: 1 });
   }
 }
 
@@ -6487,10 +6531,12 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
   crownSprite.anchor.set(0.5, 1);
   crownSprite.visible = false;
   const gfx = new Graphics();
+  const attackBar = new Graphics();
   disableDisplayEvents(gfx);
+  disableDisplayEvents(attackBar);
   gfx.alpha = hasPlayerAnimationAssets() ? 0.16 : 1;
   const label = makeLabel(name);
-  remoteLayer.addChild(sprite, gfx, crownSprite, label);
+  remoteLayer.addChild(sprite, gfx, attackBar, crownSprite, label);
   return {
     states: [{ state: clonePlayerState(player), t: serverTime, tick }],
     current: clonePlayerState(player),
@@ -6499,6 +6545,7 @@ function createRemoteEntry(player: PlayerState, name: string, serverTime: number
     sprite,
     crownSprite,
     gfx,
+    attackBar,
     label,
   };
 }
@@ -9989,7 +10036,7 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   for (const pid of remotePlayers.keys()) {
     if (!ids.has(pid)) {
       const e = remotePlayers.get(pid);
-      if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); }
+      if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); }
       remotePlayers.delete(pid);
     }
   }
@@ -10157,7 +10204,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false)
         }
         break;
       case "playerLeft":
-        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
+        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
       case "skill_card_offer":
         openOnlineSkillOffer(parsed.offer);
@@ -10544,10 +10591,14 @@ function drawActors(): void {
     const drawPosition = e.renderPosition;
     const activeVisual = isWorldRectActive(drawPosition.x, drawPosition.y, PLAYER_WIDTH, PLAYER_HEIGHT, VIEWPORT_CULLING_CONFIG.margin);
     e.gfx.visible = activeVisual;
+    e.attackBar.visible = activeVisual;
     e.label.visible = activeVisual;
     e.crownSprite.visible = activeVisual && crownAvailable && pid === leaderId;
     e.sprite.visible = activeVisual && playerExplorerAvailable && !(e.current.invulnerable > 0 && blinkHidden);
-    if (!activeVisual) continue;
+    if (!activeVisual) {
+      e.attackBar.clear();
+      continue;
+    }
     const nextTexture = hasCharacterAnimationAssets(characterId)
       ? playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs))
       : characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
@@ -10556,6 +10607,7 @@ function drawActors(): void {
     setScaleIfChanged(e.sprite, (e.current.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
     if (e.sprite.tint !== 0xffffff) e.sprite.tint = 0xffffff;
     drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition);
+    drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
     setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 16);
     setRoundedPositionIfChanged(e.crownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (pid === leaderId && !crownAvailable) drawCrown(e.gfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, col);
@@ -10574,6 +10626,7 @@ function drawActors(): void {
     setScaleIfChanged(localSprite, (localPlayer.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
     if (localSprite.tint !== 0xffffff) localSprite.tint = 0xffffff;
     drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition);
+    drawAttackRechargeBar(localAttackBar, localPlayer, drawPosition, elapsedMs);
     localCrownSprite.visible = crownAvailable && localPlayerId === leaderId;
     setRoundedPositionIfChanged(localCrownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (localPlayerId === leaderId && !crownAvailable)
