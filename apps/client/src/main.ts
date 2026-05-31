@@ -3408,6 +3408,12 @@ function loadChunk(cy: number, immediateRender = false): void {
   if (immediateRender) enqueueChunkRender(cy, true);
 }
 
+function ensureChunkLoaded(cy: number, immediateRender = false): GeneratedChunk | null {
+  if (cy < 0) return null;
+  if (!loadedChunks.has(cy)) loadChunk(cy, immediateRender);
+  return loadedChunks.get(cy) ?? null;
+}
+
 function shouldApplyClientWindZones(): boolean {
   return selectedMode !== "online";
 }
@@ -3899,12 +3905,23 @@ function destroyChunkVisuals(chunkY: number): void {
 }
 
 function getSpawnPos(chunkY = 0): { x: number; y: number } {
-  const chunk = loadedChunks.get(chunkY) ?? loadedChunks.get(0);
+  const spawnChunkY = Math.max(0, chunkY);
+  const chunk = ensureChunkLoaded(spawnChunkY, true) ?? ensureChunkLoaded(0, true);
   if (!chunk) return { x: WORLD_WIDTH / 2 - PLAYER_WIDTH / 2, y: -PLAYER_HEIGHT };
   return {
     x: (chunk.entry.x + Math.floor(chunk.entry.width / 2)) * TILE_SIZE - PLAYER_WIDTH / 2,
     y: (chunk.worldTileY + chunk.entry.y) * TILE_SIZE - PLAYER_HEIGHT,
   };
+}
+
+function updateLocalCheckpoint(player: PlayerState): void {
+  if (selectedMode !== "local" || player.health <= 0) return;
+  const chunkY = chunkYForWorldY(player.position.y);
+  const chunk = ensureChunkLoaded(chunkY);
+  if (chunkY <= player.checkpointChunkY || !isCheckpointChunk(chunkY, chunk ?? undefined)) return;
+  player.checkpointChunkY = chunkY;
+  checkpointCeremony(chunkY);
+  pushNotification("CHECKPOINT REACHED", PAL.portalGlow);
 }
 
 function chunkEntrySurfaceY(chunkY: number): number | null {
@@ -10719,6 +10736,7 @@ pixi.ticker.add((ticker) => {
 
       if (selectedMode === "local") {
         localPlayer = next;
+        updateLocalCheckpoint(localPlayer);
         simulateLocalEnemies(PHYSICS_STEP_SECONDS, tSec);
         collectLocalPickups();
       }
