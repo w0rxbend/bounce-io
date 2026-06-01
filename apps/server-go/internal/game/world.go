@@ -430,10 +430,19 @@ func cloneGeneratedChunk(chunk GeneratedChunk) GeneratedChunk {
 	for i := range chunk.Routes {
 		chunk.Routes[i].Nodes = cloneSlice(chunk.Routes[i].Nodes)
 	}
+	chunk.Hazards = cloneSlice(chunk.Hazards)
 	chunk.Relics = cloneSlice(chunk.Relics)
 	chunk.Enemies = cloneSlice(chunk.Enemies)
 	chunk.JumpPads = cloneSlice(chunk.JumpPads)
 	chunk.WindZones = cloneSlice(chunk.WindZones)
+	if chunk.Biome != nil {
+		biome := *chunk.Biome
+		chunk.Biome = &biome
+	}
+	if chunk.DifficultyMetrics != nil {
+		metrics := *chunk.DifficultyMetrics
+		chunk.DifficultyMetrics = &metrics
+	}
 	if chunk.Portal != nil {
 		portal := *chunk.Portal
 		chunk.Portal = &portal
@@ -477,19 +486,46 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 			tiles[(ChunkHeightTiles-1)*ChunkWidthTiles+x] = "solid"
 		}
 	}
+	hazards := []HazardSpawn{}
 	for _, platform := range platformRecords {
-		if chunkY < 2 || platform.Kind != "risk" || platform.Span.Y <= 1 {
+		if chunkY < 2 || (platform.Kind != "risk" && platform.Kind != "relic") || platform.Span.Route == "safe" || platform.Span.Y <= 1 {
 			continue
 		}
-		hazardChance := min(72, 14+chunkY*4)
+		metricsBiome := biomeMetadataForChunk(chunkY, regionIndex, plan.Profile)
+		archetype := archetypeForChunk(seed, plan.Profile, regionIndex, chunkY, IsCheckpointChunk(chunkY))
+		hazardChance := min(84, 10+chunkY*3+int(metricsBiome.Difficulty*24))
+		if platform.Kind == "relic" {
+			hazardChance -= 12
+		}
+		if archetype == "precisionChallenge" {
+			hazardChance += 12
+		}
 		roll := int(HashString("hazard:"+itoa(seedAsInt(seed))+":"+itoa(chunkY)+":"+itoa(platform.Span.X)+":"+itoa(platform.Span.Y)) % 100)
 		if roll >= hazardChance {
 			continue
 		}
 		hazardX := platform.Span.X + platform.Span.Width/2
+		if platform.Span.Width > 3 && roll%2 == 0 {
+			hazardX = platform.Span.X + 1
+		}
 		hazardY := platform.Span.Y - 1
 		if hazardX >= 0 && hazardX < ChunkWidthTiles && hazardY >= 0 && hazardY < ChunkHeightTiles && tiles[hazardY*ChunkWidthTiles+hazardX] == "empty" {
+			if hasSafePlatformAt(platformRecords, hazardX, platform.Span.Y) {
+				continue
+			}
 			tiles[hazardY*ChunkWidthTiles+hazardX] = "hazard"
+			hazards = append(hazards, HazardSpawn{
+				ID:        "hazard:" + itoa(chunkY) + ":" + itoa(len(hazards)),
+				Kind:      hazardKindForProfile(plan.Profile),
+				X:         hazardX,
+				Y:         hazardY,
+				Width:     1,
+				Height:    1,
+				Route:     platform.Kind,
+				BiomeID:   plan.Profile.ID,
+				Danger:    clampFloat(metricsBiome.Difficulty*0.82, 0.1, 1),
+				Telegraph: hazardTelegraphForProfile(plan.Profile),
+			})
 		}
 	}
 
@@ -520,29 +556,47 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 	}
 	windZones := windZonesForChunk(seed, chunkY, platformRecords)
 	portal := plan.PortalForChunk(chunkY)
+	biome := biomeMetadataForChunk(chunkY, regionIndex, plan.Profile)
+	archetype := archetypeForChunk(seed, plan.Profile, regionIndex, chunkY, IsCheckpointChunk(chunkY))
+	metrics := difficultyMetricsForChunk(platforms, routes, hazards, enemies, windZones, archetype, clampFloat(biome.Difficulty+0.08, 0.05, 1))
 
 	return GeneratedChunk{
-		Seed:        seed,
-		ChunkY:      chunkY,
-		Width:       ChunkWidthTiles,
-		Height:      ChunkHeightTiles,
-		WorldTileY:  -chunkY * ChunkHeightTiles,
-		RegionID:    plan.ID,
-		RegionIndex: plan.Index,
-		RegionName:  plan.Profile.Name,
-		Checkpoint:  IsCheckpointChunk(chunkY),
-		Tiles:       tiles,
-		Platforms:   platforms,
-		Entry:       entry,
-		Exit:        exit,
-		Portal:      portal,
-		Landmarks:   landmarks,
-		Routes:      routes,
-		Relics:      relics,
-		Enemies:     enemies,
-		JumpPads:    jumpPads,
-		WindZones:   windZones,
+		Seed:              seed,
+		ChunkY:            chunkY,
+		Width:             ChunkWidthTiles,
+		Height:            ChunkHeightTiles,
+		WorldTileY:        -chunkY * ChunkHeightTiles,
+		RegionID:          plan.ID,
+		RegionIndex:       plan.Index,
+		RegionName:        plan.Profile.Name,
+		Biome:             &biome,
+		DifficultyMetrics: &metrics,
+		Checkpoint:        IsCheckpointChunk(chunkY),
+		Tiles:             tiles,
+		Platforms:         platforms,
+		Entry:             entry,
+		Exit:              exit,
+		Portal:            portal,
+		Landmarks:         landmarks,
+		Routes:            routes,
+		Hazards:           hazards,
+		Relics:            relics,
+		Enemies:           enemies,
+		JumpPads:          jumpPads,
+		WindZones:         windZones,
 	}
+}
+
+func hasSafePlatformAt(platforms []plannedPlatform, x, y int) bool {
+	for _, platform := range platforms {
+		if platform.Span.Y != y || x < platform.Span.X || x >= platform.Span.X+platform.Span.Width {
+			continue
+		}
+		if platform.Kind == "safe" || platform.Kind == "portal-entry" || platform.Span.Route == "safe" {
+			return true
+		}
+	}
+	return false
 }
 
 func seedAsInt(seed uint32) int {
@@ -703,7 +757,19 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 	routeSpecs := buildRouteSpecs(profile)
 	routes := make([]RouteBranch, 0, len(routeSpecs))
 	for _, spec := range routeSpecs {
-		route := RouteBranch{ID: spec.ID, Kind: spec.Kind, Label: spec.Label, Hidden: spec.Hidden, Reward: spec.Reward, Nodes: []Vec2{}}
+		routeDifficulty := clampFloat(regionBaseDifficulty(regionIndex, profile), 0, 1)
+		route := RouteBranch{
+			ID:             spec.ID,
+			Kind:           spec.Kind,
+			Label:          spec.Label,
+			Hidden:         spec.Hidden,
+			Reward:         spec.Reward,
+			Nodes:          []Vec2{},
+			BiomeID:        profile.ID,
+			Difficulty:     clampFloat(routeDifficulty+routeDifficultyBonus(spec.Kind), 0, 1),
+			CheckpointSafe: spec.Kind == "safe" || spec.Kind == "recovery",
+			Recommended:    spec.Kind == "safe",
+		}
 		for local := 0; local < length; local++ {
 			chunkY := startChunkY + local
 			entryY := ChunkHeightTiles - 2
@@ -718,6 +784,8 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 			for layer, y := range routeRowsForSpec(spec) {
 				center := routeCenterForPlan(seed, profile, regionIndex, local, spec, layer+1)
 				width := spec.Width
+				archetype := archetypeForChunk(seed, profile, regionIndex, chunkY, IsCheckpointChunk(chunkY))
+				width = clampInt(width+archetypeWidthDelta(archetype, spec.Kind), 3, ChunkWidthTiles-2)
 				if spec.Kind == "safe" && (layer == 1 || layer == 3) {
 					width = min(profile.ContestWidth, width+2)
 				}
@@ -740,7 +808,7 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 	plan.placePortals()
 	plan.placeCollectibles()
 	plan.placeJumpPads(seed)
-	plan.placeEnemies()
+	plan.placeEnemies(seed)
 	return plan
 }
 
@@ -818,8 +886,198 @@ func routeCenterForPlan(seed uint32, profile worldRegionProfile, regionIndex, lo
 	case "celestial-rift":
 		center += scaleDesignOffset([]int{-7, 7, -4, 6, 0}[layer%5])
 	}
+	archetype := archetypeForChunk(seed, profile, regionIndex, RegionStartChunkY(regionIndex)+local, false)
+	center += archetypeCenterOffset(archetype, spec.Kind, routeRowForLayer(spec, layer), ChunkWidthTiles)
 	center += deterministicSigned(seed, regionIndex*37+local*11, layer+len(spec.ID), 2)
 	return clampInt(center, 3, ChunkWidthTiles-4)
+}
+
+func routeRowForLayer(spec routeSpec, layer int) int {
+	rows := routeRowsForSpec(spec)
+	if len(rows) == 0 {
+		return 0
+	}
+	index := clampInt(layer-1, 0, len(rows)-1)
+	return rows[index]
+}
+
+func routeDifficultyBonus(kind string) float64 {
+	switch kind {
+	case "risk":
+		return 0.18
+	case "relic":
+		return 0.10
+	case "recovery":
+		return -0.12
+	default:
+		return 0
+	}
+}
+
+func regionBaseDifficulty(regionIndex int, profile worldRegionProfile) float64 {
+	cycle := max(0, regionIndex/len(worldRegionProfiles))
+	localIndex := positiveMod(regionIndex, len(worldRegionProfiles))
+	base := 0.08 + float64(localIndex)*0.078 + float64(cycle)*0.06
+	if profile.ID == "floating-garden" {
+		base = 0.08
+	}
+	return clampFloat(base, 0, 1)
+}
+
+func biomeMetadataForChunk(chunkY, regionIndex int, profile worldRegionProfile) BiomeMetadata {
+	start := RegionStartChunkY(regionIndex)
+	length := RegionLengthForIndex(regionIndex)
+	local := clampInt(chunkY-start, 0, max(0, length-1))
+	localProgress := 1.0
+	if length > 1 {
+		localProgress = float64(local) / float64(length-1)
+	}
+	difficulty := clampFloat(regionBaseDifficulty(regionIndex, profile)+localProgress*0.08, 0, 1)
+	return BiomeMetadata{
+		ID:            profile.ID,
+		Name:          profile.Name,
+		Index:         regionIndex,
+		Cycle:         max(0, regionIndex/len(worldRegionProfiles)),
+		LocalChunkY:   local,
+		StartChunkY:   start,
+		EndChunkY:     start + length - 1,
+		LengthChunks:  length,
+		Difficulty:    difficulty,
+		RouteProfile:  routeProfileForProfile(profile),
+		HazardProfile: hazardProfileForProfile(profile),
+		WindProfile:   windProfileForProfile(profile),
+	}
+}
+
+func routeProfileForProfile(profile worldRegionProfile) string {
+	switch profile.ID {
+	case "void-expanse", "celestial-rift":
+		return "wide_split_high_risk"
+	case "arcane-nexus":
+		return "shortcut_lattice"
+	case "sky-canyons", "storm-islands":
+		return "wind_braided"
+	case "frozen-heights":
+		return "recovery_ledges"
+	default:
+		return "readable_braid"
+	}
+}
+
+func hazardProfileForProfile(profile worldRegionProfile) string {
+	switch profile.ID {
+	case "ember-peaks":
+		return "ember_edges"
+	case "frozen-heights":
+		return "icefall_edges"
+	case "arcane-nexus", "celestial-rift":
+		return "rune_pressure"
+	case "void-expanse":
+		return "crumbling_void"
+	default:
+		return "side_route_pressure"
+	}
+}
+
+func windProfileForProfile(profile worldRegionProfile) string {
+	switch profile.ID {
+	case "sky-canyons":
+		return "canyon_crosswinds"
+	case "void-expanse":
+		return "void_shear"
+	case "celestial-rift":
+		return "rift_currents"
+	default:
+		return "route_gusts"
+	}
+}
+
+func archetypeForChunk(seed uint32, profile worldRegionProfile, regionIndex, chunkY int, isCheckpoint bool) string {
+	biome := biomeMetadataForChunk(chunkY, regionIndex, profile)
+	if isCheckpoint || chunkY == 0 {
+		return "splitRoute"
+	}
+	roll := int(HashString("archetype:"+itoa(seedAsInt(seed))+":"+itoa(regionIndex)+":"+itoa(chunkY)) % 100)
+	switch {
+	case biome.Difficulty >= 0.50 && roll < 18+int(biome.Difficulty*10):
+		return "combatPlatform"
+	case biome.Difficulty >= 0.28 && roll < 34+int(biome.Difficulty*12):
+		return "gapChallenge"
+	case biome.Difficulty >= 0.28 && roll < 50+int(biome.Difficulty*10):
+		return "precisionChallenge"
+	case biome.Difficulty >= 0.28 && roll < 66+int(biome.Difficulty*8):
+		return "jumpPadRoute"
+	case roll < 80:
+		return "verticalShaft"
+	default:
+		return "splitRoute"
+	}
+}
+
+func archetypeCenterOffset(archetype, route string, row, width int) int {
+	if archetype == "gapChallenge" && (route == "risk" || route == "relic") {
+		if route == "risk" {
+			return width / 8
+		}
+		return -width / 10
+	}
+	if archetype == "verticalShaft" && route == "safe" {
+		if row == 13 || row == 4 {
+			return -4
+		}
+		return 4
+	}
+	if archetype == "jumpPadRoute" && route == "risk" {
+		return 3
+	}
+	if archetype == "combatPlatform" && (route == "risk" || route == "relic") {
+		if row <= 7 {
+			return -3
+		}
+		return 3
+	}
+	return 0
+}
+
+func archetypeWidthDelta(archetype, route string) int {
+	if archetype == "precisionChallenge" && (route == "risk" || route == "relic") {
+		return -1
+	}
+	if archetype == "combatPlatform" && route == "risk" {
+		return 1
+	}
+	if archetype == "gapChallenge" && route == "safe" {
+		return -1
+	}
+	return 0
+}
+
+func hazardKindForProfile(profile worldRegionProfile) string {
+	switch profile.ID {
+	case "frozen-heights":
+		return "fallingIcicle"
+	case "void-expanse":
+		return "crumblingPlatform"
+	case "arcane-nexus", "celestial-rift":
+		return "lightningRune"
+	case "sky-canyons", "storm-islands":
+		return "windGust"
+	default:
+		return "spikeTrap"
+	}
+}
+
+func hazardTelegraphForProfile(profile worldRegionProfile) string {
+	switch hazardKindForProfile(profile) {
+	case "lightningRune":
+		return "rune_glow"
+	case "windGust":
+		return "wind_line"
+	case "fallingIcicle", "crumblingPlatform":
+		return "edge_warning"
+	default:
+		return "open_tile"
+	}
 }
 
 func scaleDesignX(x int) int {
@@ -831,6 +1089,8 @@ func scaleDesignOffset(offset int) int {
 }
 
 func (p *RegionPlan) addPlatform(chunkY int, span PlatformSpan, routeID, kind string) {
+	span.Route = publicPlatformRoute(kind)
+	span.BiomeID = p.Profile.ID
 	for i, existing := range p.Platforms[chunkY] {
 		if existing.Span.Y == span.Y && rangesOverlapOrTouch(existing.Span, span) {
 			mergedLeft := min(existing.Span.X, span.X)
@@ -840,12 +1100,24 @@ func (p *RegionPlan) addPlatform(chunkY int, span PlatformSpan, routeID, kind st
 			if kind == "safe" || existing.Kind == "" {
 				existing.Kind = kind
 				existing.RouteID = routeID
+				existing.Span.Route = publicPlatformRoute(kind)
+				existing.Span.BiomeID = p.Profile.ID
 			}
 			p.Platforms[chunkY][i] = existing
 			return
 		}
 	}
 	p.Platforms[chunkY] = append(p.Platforms[chunkY], plannedPlatform{Span: span, RouteID: routeID, Kind: kind})
+}
+
+func publicPlatformRoute(kind string) string {
+	if kind == "portal-entry" || kind == "rest" {
+		return "safe"
+	}
+	if kind == "" {
+		return "safe"
+	}
+	return kind
 }
 
 func (p *RegionPlan) ensureReachability() {
@@ -1029,6 +1301,7 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 		return
 	}
 	platform := candidates[int((seed+uint32(p.Index*131))%uint32(len(candidates)))]
+	biome := biomeMetadataForChunk(jumpChunk, p.Index, p.Profile)
 	p.JumpPads[jumpChunk] = []JumpPadSpawn{{
 		ID:         "jumpPad:" + p.ID + ":shortcut",
 		X:          platform.Span.X + platform.Span.Width/2,
@@ -1036,24 +1309,43 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 		Multiplier: LevelDesign.JumpPadMultiplier,
 		LaunchX:    0.35,
 		LaunchY:    -1,
+		Placement: &PlacementMetadata{
+			BiomeID:    p.Profile.ID,
+			Route:      publicPlatformRoute(platform.Kind),
+			Purpose:    "shortcut",
+			Difficulty: biome.Difficulty,
+			Danger:     clampFloat(biome.Difficulty*0.6, 0, 1),
+			Readable:   true,
+		},
 	}}
 }
 
-func (p *RegionPlan) placeEnemies() {
+func (p *RegionPlan) placeEnemies(seed uint32) {
 	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
 		if chunkY == 0 {
 			continue
 		}
 		enemies := []EnemySpawn{}
-		maxEnemies := 1 + min(2, chunkY/8)
+		biome := biomeMetadataForChunk(chunkY, p.Index, p.Profile)
+		archetype := archetypeForChunk(seed, p.Profile, p.Index, chunkY, IsCheckpointChunk(chunkY))
+		maxEnemies := 1 + min(4, chunkY/8)
+		if archetype == "combatPlatform" {
+			maxEnemies += 2
+		}
 		for _, platform := range p.Platforms[chunkY] {
 			if len(enemies) >= maxEnemies || platform.Span.Width < 4 || platform.Span.Y <= 1 {
 				continue
 			}
-			if platform.Kind != "safe" && platform.Kind != "risk" {
+			if platform.Kind != "safe" && platform.Kind != "risk" && platform.Kind != "relic" {
 				continue
 			}
-			chance := 42 + min(38, chunkY*3)
+			chance := 34 + min(48, chunkY*3)
+			if platform.Kind == "risk" || platform.Kind == "relic" {
+				chance += 14
+			}
+			if archetype == "combatPlatform" {
+				chance += 18
+			}
 			roll := int(HashString("enemy:"+itoa(chunkY)+":"+itoa(platform.Span.X)+":"+itoa(platform.Span.Y)+":"+platform.Kind) % 100)
 			if roll >= chance && platform.Kind != "risk" {
 				continue
@@ -1063,6 +1355,14 @@ func (p *RegionPlan) placeEnemies() {
 				Kind: enemyKindForProgression(p.Profile.EnemyKind, chunkY, len(enemies)),
 				X:    platform.Span.X + platform.Span.Width/2,
 				Y:    platform.Span.Y - 1,
+				Placement: &PlacementMetadata{
+					BiomeID:    p.Profile.ID,
+					Route:      publicPlatformRoute(platform.Kind),
+					Purpose:    "pressure",
+					Difficulty: biome.Difficulty,
+					Danger:     clampFloat(float64(chance)/100, 0, 1),
+					Readable:   true,
+				},
 			})
 		}
 		p.Enemies[chunkY] = enemies
@@ -1119,6 +1419,10 @@ func windZonesForChunk(seed uint32, chunkY int, platforms []plannedPlatform) []W
 		if chunkY >= 18 && roll%3 == 0 {
 			axis = "vertical"
 		}
+		regionIndex := RegionIndexForChunkY(chunkY)
+		profile := RegionForChunkY(chunkY)
+		biome := biomeMetadataForChunk(chunkY, regionIndex, profile)
+		route := publicPlatformRoute(platform.Kind)
 		zones = append(zones, WindZoneSpawn{
 			ID:        "wind:" + itoa(chunkY) + ":" + itoa(len(zones)),
 			X:         x,
@@ -1128,9 +1432,96 @@ func windZonesForChunk(seed uint32, chunkY int, platforms []plannedPlatform) []W
 			Axis:      axis,
 			Direction: direction,
 			Strength:  strength,
+			Placement: &PlacementMetadata{
+				BiomeID:    profile.ID,
+				Route:      route,
+				Purpose:    "pressure",
+				Difficulty: biome.Difficulty,
+				Danger:     clampFloat(biome.Difficulty*0.55, 0, 1),
+				Readable:   true,
+			},
 		})
 	}
 	return zones
+}
+
+func difficultyMetricsForChunk(platforms []PlatformSpan, routes []RouteBranch, hazards []HazardSpawn, enemies []EnemySpawn, windZones []WindZoneSpawn, archetype string, target float64) DifficultyMetrics {
+	sorted := cloneSlice(platforms)
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].Y > sorted[i].Y {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+	verticalTotal := 0.0
+	horizontalTotal := 0.0
+	transitions := 0
+	staircaseTransitions := 0
+	for i := 1; i < len(sorted); i++ {
+		lower := sorted[i-1]
+		upper := sorted[i]
+		if upper.Y >= lower.Y {
+			continue
+		}
+		vertical := lower.Y - upper.Y
+		horizontal := math.Abs(platformCenterTiles(lower) - platformCenterTiles(upper))
+		verticalTotal += clampFloat(float64(vertical)/float64(MaxReachableVerticalGapTiles), 0, 1.5)
+		horizontalTotal += clampFloat(horizontal/float64(MaxReachableHorizontalGapTiles), 0, 1.5)
+		transitions++
+		lowerRoute := lower.Route
+		if lowerRoute == "" {
+			lowerRoute = "safe"
+		}
+		upperRoute := upper.Route
+		if upperRoute == "" {
+			upperRoute = "safe"
+		}
+		if (lowerRoute == "safe" || lowerRoute == "recovery") &&
+			(upperRoute == "safe" || upperRoute == "recovery") &&
+			vertical <= MaxReachableVerticalGapTiles &&
+			horizontal <= 1.5 {
+			staircaseTransitions++
+		}
+	}
+	routeKinds := map[string]struct{}{}
+	for _, route := range routes {
+		routeKinds[route.Kind] = struct{}{}
+	}
+	routeDiversity := clampFloat(float64(len(routeKinds)-1)/3, 0, 1)
+	recoveryPlatforms := 0
+	for _, platform := range platforms {
+		if platform.Route == "safe" || platform.Route == "recovery" {
+			recoveryPlatforms++
+		}
+	}
+	recoveryAvailability := clampFloat(float64(recoveryPlatforms)/math.Max(1, float64(len(platforms))), 0, 1)
+	verticalDifficulty := 0.0
+	horizontalDifficulty := routeDiversity * 0.2
+	staircaseRatio := 0.0
+	if transitions > 0 {
+		verticalDifficulty = clampFloat(verticalTotal/float64(transitions), 0, 1)
+		horizontalDifficulty = clampFloat(horizontalTotal/float64(transitions)+routeDiversity*0.2, 0, 1)
+		staircaseRatio = float64(staircaseTransitions) / float64(transitions)
+	}
+	hazardDifficulty := clampFloat((float64(len(hazards))+float64(len(windZones))*0.65)/4, 0, 1)
+	enemyPressure := clampFloat(float64(len(enemies))/5, 0, 1)
+	score := clampFloat(verticalDifficulty*0.24+horizontalDifficulty*0.26+hazardDifficulty*0.18+enemyPressure*0.18+(1-recoveryAvailability)*0.14, 0, 1)
+	return DifficultyMetrics{
+		Archetype:            archetype,
+		TargetDifficulty:     target,
+		Score:                score,
+		VerticalDifficulty:   verticalDifficulty,
+		HorizontalDifficulty: horizontalDifficulty,
+		HazardDifficulty:     hazardDifficulty,
+		EnemyPressure:        enemyPressure,
+		RecoveryAvailability: recoveryAvailability,
+		StaircaseRatio:       staircaseRatio,
+	}
+}
+
+func platformCenterTiles(platform PlatformSpan) float64 {
+	return float64(platform.X) + float64(platform.Width)/2
 }
 
 func platformFromCenter(center, y, width int) PlatformSpan {
@@ -1338,6 +1729,16 @@ func ApplyJumpPads(seed uint32, player PlayerState) (PlayerState, bool, JumpPadS
 }
 
 func clampInt(value, minValue, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func clampFloat(value, minValue, maxValue float64) float64 {
 	if value < minValue {
 		return minValue
 	}

@@ -6457,7 +6457,7 @@ function updatePortals(tSec: number): void {
 
 // ── Character drawing ─────────────────────────────────────────────────────────
 
-function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: number, position = s.position): void {
+function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: number, position = s.position, includeProceduralBody = true): void {
   g.clear();
   if (s.invulnerable > 0 && Math.floor(elapsed / 80) % 2 === 1) return;
 
@@ -6502,6 +6502,8 @@ function drawPlayerInto(g: Graphics, s: PlayerState, color: number, elapsed: num
       g.rect(x + PLAYER_WIDTH + 1, y + 4, 3, 3).fill({ color: PAL.portalGlow, alpha: shieldAlpha });
     }
   }
+
+  if (!includeProceduralBody) return;
 
   // Scarf (secondary motion — trails opposite to movement direction)
   const speed = Math.abs(s.velocity.x);
@@ -10766,6 +10768,7 @@ function drawActors(): void {
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
     const characterId = skinForPlayer(e.current, characterForRemote(e.colorIndex));
+    const hasCharacterSkin = hasCharacterAnimationAssets(characterId);
     const drawPosition = e.renderPosition;
     const activeVisual = isWorldRectActive(drawPosition.x, drawPosition.y, PLAYER_WIDTH, PLAYER_HEIGHT, VIEWPORT_CULLING_CONFIG.margin);
     e.gfx.visible = activeVisual;
@@ -10777,14 +10780,14 @@ function drawActors(): void {
       e.attackBar.clear();
       continue;
     }
-    const nextTexture = hasCharacterAnimationAssets(characterId)
+    const nextTexture = hasCharacterSkin
       ? playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs))
       : characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
     setSpriteTextureIfChanged(e.sprite, nextTexture);
     setRoundedPositionIfChanged(e.sprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT + 2);
     setScaleIfChanged(e.sprite, (e.current.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
     if (e.sprite.tint !== 0xffffff) e.sprite.tint = 0xffffff;
-    drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition);
+    drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition, !hasCharacterSkin);
     drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
     setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
     setRoundedPositionIfChanged(e.crownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
@@ -10796,14 +10799,15 @@ function drawActors(): void {
     const drawPosition = renderPos ?? localPlayer.position;
     localSprite.visible = playerExplorerAvailable && !(localPlayer.invulnerable > 0 && blinkHidden);
     const localSkinId = skinForPlayer(localPlayer);
-    const nextTexture = hasCharacterAnimationAssets(localSkinId)
+    const hasLocalSkin = hasCharacterAnimationAssets(localSkinId);
+    const nextTexture = hasLocalSkin
       ? playerAnimationTexture(localPlayer, elapsedMs, localSkinId) ?? assetTexture(fallbackPlayerAnimationAsset(localPlayer, elapsedMs))
       : characterRigs[localSkinId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
     setSpriteTextureIfChanged(localSprite, nextTexture);
     setRoundedPositionIfChanged(localSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT + 2);
     setScaleIfChanged(localSprite, (localPlayer.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
     if (localSprite.tint !== 0xffffff) localSprite.tint = 0xffffff;
-    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition);
+    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition, !hasLocalSkin);
     drawAttackRechargeBar(localAttackBar, localPlayer, drawPosition, elapsedMs);
     localCrownSprite.visible = crownAvailable && localPlayerId === leaderId;
     setRoundedPositionIfChanged(localCrownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);

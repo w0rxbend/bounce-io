@@ -116,6 +116,45 @@ test("chunks keep readable platform counts and multiple route branches", () => {
   assert.ok(routeTotal / chunkTotal >= 3.5, `average route branches should reflect safe/risk/relic/recovery choices, got ${routeTotal / chunkTotal}`);
 });
 
+test("chunks expose difficulty metrics and avoid mostly-staircase layouts", () => {
+  const archetypes = new Set<string>();
+  let staircaseTotal = 0;
+  let chunkTotal = 0;
+  let earlyScore = 0;
+  let lateScore = 0;
+  let earlyChunks = 0;
+  let lateChunks = 0;
+  let highStaircaseChunks = 0;
+
+  for (const seed of BALANCE_SEEDS) {
+    for (let chunkY = 0; chunkY < 60; chunkY++) {
+      const chunk = generateVerticalChunk({ seed, chunkY });
+      const metrics = chunk.difficultyMetrics;
+
+      assert.ok(metrics, `seed=${seed} chunk=${chunkY} missing difficulty metrics`);
+      assert.ok(metrics.score >= 0 && metrics.score <= 1, `seed=${seed} chunk=${chunkY} score out of range`);
+      assert.ok(metrics.targetDifficulty >= 0 && metrics.targetDifficulty <= 1, `seed=${seed} chunk=${chunkY} target out of range`);
+      if (metrics.staircaseRatio > 0.5) highStaircaseChunks++;
+
+      archetypes.add(metrics.archetype);
+      staircaseTotal += metrics.staircaseRatio;
+      chunkTotal++;
+      if (chunkY < 8) {
+        earlyScore += metrics.score;
+        earlyChunks++;
+      } else if (chunkY >= 32) {
+        lateScore += metrics.score;
+        lateChunks++;
+      }
+    }
+  }
+
+  assert.ok(archetypes.size >= 5, `generator should produce varied archetypes, got ${[...archetypes].join(", ")}`);
+  assert.ok(staircaseTotal / chunkTotal <= 0.20, `average staircase ratio should stay near the 20% target, got ${staircaseTotal / chunkTotal}`);
+  assert.ok(highStaircaseChunks / chunkTotal <= 0.20, `mostly-staircase chunks should be rare, got ${highStaircaseChunks}/${chunkTotal}`);
+  assert.ok(lateScore / lateChunks > earlyScore / earlyChunks, `late chunks should measure harder than early chunks`);
+});
+
 test("route generation consistently offers safe, risk, relic, and recovery beats", () => {
   for (const seed of BALANCE_SEEDS) {
     for (let chunkY = 0; chunkY < 50; chunkY++) {

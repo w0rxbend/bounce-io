@@ -13,12 +13,14 @@ import type {
   BiomeMetadata,
   EnemyKind,
   EnemySpawn,
+  DifficultyMetrics,
   GeneratedChunk,
   HazardKind,
   HazardSpawn,
   JumpPadSpawn,
   PlacementMetadata,
   PlatformSpan,
+  PlatformArchetype,
   RouteBranch,
   RouteKind as PublicRouteKind,
   TileKind,
@@ -180,6 +182,11 @@ interface PlannedPlatform {
   route: RouteKind;
 }
 
+interface ArchetypePlan {
+  archetype: PlatformArchetype;
+  targetDifficulty: number;
+}
+
 export const LEVEL_DESIGN_CONFIG = {
   targetPlatformDensity: 0.64,
   minVerticalGap: MAX_REACHABLE_VERTICAL_GAP_TILES * TILE_SIZE,
@@ -202,6 +209,46 @@ const SPARSE_BAND_ROWS = [13, 10, 7, 4] as const;
 const REST_BAND_ROW = 7;
 const MAX_ASSISTED_VERTICAL_GAP_TILES = MAX_REACHABLE_VERTICAL_GAP_TILES * 2;
 const MAX_ASSISTED_HORIZONTAL_GAP_TILES = MAX_REACHABLE_HORIZONTAL_GAP_TILES * 2;
+
+function chooseArchetype(
+  chunkY: number,
+  biome: BiomeMetadata,
+  rng: ReturnType<typeof createRng>,
+  isCheckpoint: boolean
+): ArchetypePlan {
+  const targetDifficulty = clamp(biome.difficulty + (isCheckpoint ? -0.18 : 0.08), 0.05, 1);
+  if (isCheckpoint || chunkY === 0) return { archetype: "splitRoute", targetDifficulty };
+
+  const roll = rng.nextFloat();
+  const canExpert = biome.difficulty >= 0.5;
+  const canMid = biome.difficulty >= 0.28;
+
+  if (canExpert && roll < 0.16 + biome.difficulty * 0.10) return { archetype: "combatPlatform", targetDifficulty };
+  if (canMid && roll < 0.30 + biome.difficulty * 0.12) return { archetype: "gapChallenge", targetDifficulty };
+  if (canMid && roll < 0.46 + biome.difficulty * 0.10) return { archetype: "precisionChallenge", targetDifficulty };
+  if (canMid && roll < 0.62 + biome.difficulty * 0.08) return { archetype: "jumpPadRoute", targetDifficulty };
+  if (roll < 0.76 + biome.difficulty * 0.06) return { archetype: "verticalShaft", targetDifficulty };
+  return { archetype: "splitRoute", targetDifficulty };
+}
+
+function archetypeCenterOffset(archetype: PlatformArchetype, route: RouteKind, row: number, width: number): number {
+  if (archetype === "gapChallenge" && (route === "risk" || route === "relic")) {
+    return route === "risk" ? Math.floor(width * 0.12) : -Math.floor(width * 0.10);
+  }
+  if (archetype === "verticalShaft" && route === "safe") {
+    return row === 13 || row === 4 ? -4 : 4;
+  }
+  if (archetype === "jumpPadRoute" && route === "risk") return 3;
+  if (archetype === "combatPlatform" && (route === "risk" || route === "relic")) return row <= 7 ? -3 : 3;
+  return 0;
+}
+
+function archetypeWidthDelta(archetype: PlatformArchetype, route: RouteKind): number {
+  if (archetype === "precisionChallenge" && (route === "risk" || route === "relic")) return -1;
+  if (archetype === "combatPlatform" && route === "risk") return 1;
+  if (archetype === "gapChallenge" && route === "safe") return -1;
+  return 0;
+}
 
 export function biomeProfileForChunkY(chunkY: number): BiomeGenerationProfile {
   return biomePlanForChunkY(chunkY).profile;
@@ -383,6 +430,73 @@ function hazardTelegraph(kind: HazardKind): HazardSpawn["telegraph"] {
   return "open_tile";
 }
 
+function platformDifficultyMetrics(
+  platforms: PlatformSpan[],
+  routes: RouteBranch[],
+  hazards: HazardSpawn[],
+  enemies: EnemySpawn[],
+  windZones: WindZoneSpawn[],
+  archetype: PlatformArchetype,
+  targetDifficulty: number
+): DifficultyMetrics {
+  const sorted = [...platforms].sort((a, b) => b.y - a.y);
+  let verticalTotal = 0;
+  let horizontalTotal = 0;
+  let transitions = 0;
+  let staircaseTransitions = 0;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const lower = sorted[i - 1]!;
+    const upper = sorted[i]!;
+    if (upper.y >= lower.y) continue;
+    const vertical = lower.y - upper.y;
+    const horizontal = Math.abs(platformCenter(lower) - platformCenter(upper));
+    verticalTotal += clamp(vertical / MAX_REACHABLE_VERTICAL_GAP_TILES, 0, 1.5);
+    horizontalTotal += clamp(horizontal / MAX_REACHABLE_HORIZONTAL_GAP_TILES, 0, 1.5);
+    transitions++;
+    const lowerRoute = lower.route ?? "safe";
+    const upperRoute = upper.route ?? "safe";
+    if (
+      (lowerRoute === "safe" || lowerRoute === "recovery") &&
+      (upperRoute === "safe" || upperRoute === "recovery") &&
+      vertical <= MAX_REACHABLE_VERTICAL_GAP_TILES &&
+      horizontal <= 1.5
+    ) {
+      staircaseTransitions++;
+    }
+  }
+
+  const routeDiversity = clamp((new Set(routes.map((route) => route.kind)).size - 1) / 3, 0, 1);
+  const recoveryPlatforms = platforms.filter((platform) => platform.route === "recovery" || platform.route === "safe").length;
+  const recoveryAvailability = clamp(recoveryPlatforms / Math.max(1, platforms.length), 0, 1);
+  const verticalDifficulty = clamp(transitions === 0 ? 0 : verticalTotal / transitions, 0, 1);
+  const horizontalDifficulty = clamp((transitions === 0 ? 0 : horizontalTotal / transitions) + routeDiversity * 0.2, 0, 1);
+  const hazardDifficulty = clamp((hazards.length + windZones.length * 0.65) / 4, 0, 1);
+  const enemyPressure = clamp(enemies.length / 5, 0, 1);
+  const staircaseRatio = transitions === 0 ? 0 : staircaseTransitions / transitions;
+  const score = clamp(
+    verticalDifficulty * 0.24 +
+      horizontalDifficulty * 0.26 +
+      hazardDifficulty * 0.18 +
+      enemyPressure * 0.18 +
+      (1 - recoveryAvailability) * 0.14,
+    0,
+    1
+  );
+
+  return {
+    archetype,
+    targetDifficulty,
+    score,
+    verticalDifficulty,
+    horizontalDifficulty,
+    hazardDifficulty,
+    enemyPressure,
+    recoveryAvailability,
+    staircaseRatio
+  };
+}
+
 // Sparse multi-path chunk generator.
 // Each chunk keeps the normal 3-tile vertical cadence for casual climbing, but
 // most bands now expose two route nodes instead of three dense same-row islands.
@@ -404,6 +518,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   const regionIndex = biomeMetadata.index;
   const difficulty = biomeMetadata.difficulty;
   const isCheckpoint = options.chunkY === biomeMetadata.startChunkY;
+  const archetypePlan = chooseArchetype(options.chunkY, biomeMetadata, rng, isCheckpoint);
 
   // Entry: center bottom. Chunk 0 gets a wider starting island, but not a
   // full-width row; keeping side air gaps prevents the first screen from
@@ -425,14 +540,14 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     const rowPlans: PlannedPlatform[] = [];
     if (row === REST_BAND_ROW) {
       const platformWidth = routeWidth("rest", row, rng, biome);
-      const center = routeCenter("rest", row, width, rng, biome);
+      const center = routeCenter("rest", row, width, rng, biome) + archetypeCenterOffset(archetypePlan.archetype, "rest", row, width);
       rowPlans.push({
         span: makePlatform(center - Math.floor(platformWidth / 2), row, platformWidth, width, "rest", biome.id),
         route: "rest"
       });
       if (options.chunkY > 0 && rng.nextFloat() < 0.72) {
         const recoveryWidth = routeWidth("recovery", row, rng, biome);
-        const recoveryCenter = routeCenter("recovery", row, width, rng, biome);
+        const recoveryCenter = routeCenter("recovery", row, width, rng, biome) + archetypeCenterOffset(archetypePlan.archetype, "recovery", row, width);
         rowPlans.push({
           span: makePlatform(recoveryCenter - Math.floor(recoveryWidth / 2), row, recoveryWidth, width, "recovery", biome.id),
           route: "recovery"
@@ -445,8 +560,8 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
       if (row === 4 && options.chunkY > 1 && rng.nextFloat() < 0.18 + biome.difficulty * 0.18) routes.push(sideRoute === "risk" ? "relic" : "risk");
 
       for (const route of routes) {
-        const platformWidth = routeWidth(route, row, rng, biome);
-        const center = routeCenter(route, row, width, rng, biome);
+        const platformWidth = clamp(routeWidth(route, row, rng, biome) + archetypeWidthDelta(archetypePlan.archetype, route), MIN_PLATFORM_WIDTH_TILES, MAX_PLATFORM_WIDTH_TILES);
+        const center = routeCenter(route, row, width, rng, biome) + archetypeCenterOffset(archetypePlan.archetype, route, row, width);
         rowPlans.push({
           span: makePlatform(center - Math.floor(platformWidth / 2), row, platformWidth, width, route, biome.id),
           route
@@ -487,7 +602,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     }
   }
 
-  if (!isCheckpoint && options.chunkY > 0 && rng.nextFloat() < Math.max(LEVEL_DESIGN_CONFIG.riskyShortcutChance, biome.jumpPadChance)) {
+  if (!isCheckpoint && options.chunkY > 0 && (archetypePlan.archetype === "jumpPadRoute" || rng.nextFloat() < Math.max(LEVEL_DESIGN_CONFIG.riskyShortcutChance, biome.jumpPadChance))) {
     const shortcutLaunch = plannedPlatforms.find((platform) => platform.route === "risk" && platform.span.y === 10)?.span;
     const shortcutTarget = plannedPlatforms.find((platform) => platform.span.y === 4 && platform.route !== "safe")?.span;
     if (shortcutLaunch && shortcutTarget && canReachPlatform(shortcutLaunch, shortcutTarget, true)) {
@@ -504,7 +619,8 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   // Hazard on sparse risk/relic platforms only, so the main route remains readable.
   for (const platform of plannedPlatforms) {
     if (isCheckpoint) continue;
-    if ((platform.route !== "risk" && platform.route !== "relic") || platform.span.y > 10 || rng.nextFloat() >= biome.hazardChance + difficulty * 0.12) continue;
+    const archetypeHazardBonus = archetypePlan.archetype === "precisionChallenge" ? 0.12 : archetypePlan.archetype === "combatPlatform" ? 0.08 : 0;
+    if ((platform.route !== "risk" && platform.route !== "relic") || platform.span.y > 10 || rng.nextFloat() >= biome.hazardChance + difficulty * 0.12 + archetypeHazardBonus) continue;
     const hazardX = platform.span.width <= 3
       ? platform.span.x + Math.floor(platform.span.width / 2)
       : platform.span.x + (rng.nextFloat() < 0.5 ? 1 : platform.span.width - 2);
@@ -603,7 +719,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     }
 
     const kindPool = biome.enemyKinds;
-    const maxEnemies = isCheckpoint ? 0 : Math.min(4, biome.maxEnemies + Math.floor(biomeMetadata.cycle / 2));
+    const maxEnemies = isCheckpoint ? 0 : Math.min(6, biome.maxEnemies + Math.floor(biomeMetadata.cycle / 2) + (archetypePlan.archetype === "combatPlatform" ? 2 : 0));
     let enemyIndex = 0;
 
     for (let i = 1; i < allPlatforms.length - 1 && enemyIndex < maxEnemies; i++) {
@@ -612,7 +728,8 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
       const center = platform.x + platform.width / 2;
       const isMainOrRiskLane = center > width * 0.32;
       const spawnRoll = rng.nextFloat();
-      const spawnChance = Math.min(0.34, 0.08 + difficulty * 0.16 + (plannedPlatforms.find((plan) => plan.span === platform)?.route === "risk" ? 0.08 : 0));
+      const plannedRoute = plannedPlatforms.find((plan) => plan.span === platform)?.route;
+      const spawnChance = Math.min(0.48, 0.08 + difficulty * 0.18 + (plannedRoute === "risk" || plannedRoute === "relic" ? 0.10 : 0) + (archetypePlan.archetype === "combatPlatform" ? 0.16 : 0));
       if (!isMainOrRiskLane || spawnRoll >= spawnChance) continue;
 
       const tileY = platform.y - 1;
@@ -623,7 +740,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
         kind,
         x: platform.x + Math.floor(platform.width / 2),
         y: tileY,
-        placement: placement(biomeMetadata, plannedPlatforms.find((plan) => plan.span === platform)?.route ?? "safe", "pressure", spawnChance)
+        placement: placement(biomeMetadata, plannedRoute ?? "safe", "pressure", spawnChance)
       });
       enemyIndex++;
     }
@@ -682,6 +799,15 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
         hidden: false
       }]
     : undefined;
+  const difficultyMetrics = platformDifficultyMetrics(
+    allPlatforms,
+    routes,
+    hazards,
+    enemies,
+    windZones,
+    archetypePlan.archetype,
+    archetypePlan.targetDifficulty
+  );
 
   return {
     seed: options.seed,
@@ -693,6 +819,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     regionIndex,
     regionName: biome.name,
     biome: biomeMetadata,
+    difficultyMetrics,
     checkpoint: isCheckpoint,
     tiles,
     platforms: allPlatforms,

@@ -280,10 +280,11 @@ type PlayerEntityFrame struct {
 }
 
 type EnemySpawn struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	X    int    `json:"x"`
-	Y    int    `json:"y"`
+	ID        string             `json:"id"`
+	Kind      string             `json:"kind"`
+	X         int                `json:"x"`
+	Y         int                `json:"y"`
+	Placement *PlacementMetadata `json:"placement,omitempty"`
 }
 
 type EnemyState struct {
@@ -434,32 +435,37 @@ type ChunkMessage struct {
 }
 
 type GeneratedChunk struct {
-	Seed        uint32          `json:"seed"`
-	ChunkY      int             `json:"chunkY"`
-	Width       int             `json:"width"`
-	Height      int             `json:"height"`
-	WorldTileY  int             `json:"worldTileY"`
-	RegionID    string          `json:"regionId"`
-	RegionIndex int             `json:"regionIndex"`
-	RegionName  string          `json:"regionName"`
-	Checkpoint  bool            `json:"checkpoint"`
-	Tiles       []string        `json:"tiles"`
-	Platforms   []PlatformSpan  `json:"platforms"`
-	Entry       PlatformSpan    `json:"entry"`
-	Exit        PlatformSpan    `json:"exit"`
-	Portal      *PortalSpawn    `json:"portal,omitempty"`
-	Landmarks   []LandmarkSpawn `json:"landmarks"`
-	Routes      []RouteBranch   `json:"routes"`
-	Relics      []RelicSpawn    `json:"relics"`
-	Enemies     []EnemySpawn    `json:"enemies"`
-	JumpPads    []JumpPadSpawn  `json:"jumpPads"`
-	WindZones   []WindZoneSpawn `json:"windZones"`
+	Seed              uint32             `json:"seed"`
+	ChunkY            int                `json:"chunkY"`
+	Width             int                `json:"width"`
+	Height            int                `json:"height"`
+	WorldTileY        int                `json:"worldTileY"`
+	RegionID          string             `json:"regionId"`
+	RegionIndex       int                `json:"regionIndex"`
+	RegionName        string             `json:"regionName"`
+	Biome             *BiomeMetadata     `json:"biome,omitempty"`
+	DifficultyMetrics *DifficultyMetrics `json:"difficultyMetrics,omitempty"`
+	Checkpoint        bool               `json:"checkpoint"`
+	Tiles             []string           `json:"tiles"`
+	Platforms         []PlatformSpan     `json:"platforms"`
+	Entry             PlatformSpan       `json:"entry"`
+	Exit              PlatformSpan       `json:"exit"`
+	Portal            *PortalSpawn       `json:"portal,omitempty"`
+	Landmarks         []LandmarkSpawn    `json:"landmarks"`
+	Routes            []RouteBranch      `json:"routes"`
+	Hazards           []HazardSpawn      `json:"hazards,omitempty"`
+	Relics            []RelicSpawn       `json:"relics"`
+	Enemies           []EnemySpawn       `json:"enemies"`
+	JumpPads          []JumpPadSpawn     `json:"jumpPads"`
+	WindZones         []WindZoneSpawn    `json:"windZones"`
 }
 
 type PlatformSpan struct {
-	X     int `json:"x"`
-	Y     int `json:"y"`
-	Width int `json:"width"`
+	X       int    `json:"x"`
+	Y       int    `json:"y"`
+	Width   int    `json:"width"`
+	Route   string `json:"route,omitempty"`
+	BiomeID string `json:"biomeId,omitempty"`
 }
 
 type RelicSpawn struct {
@@ -469,23 +475,74 @@ type RelicSpawn struct {
 }
 
 type JumpPadSpawn struct {
-	ID         string  `json:"id"`
-	X          int     `json:"x"`
-	Y          int     `json:"y"`
-	Multiplier float64 `json:"multiplier"`
-	LaunchX    float64 `json:"launchX,omitempty"`
-	LaunchY    float64 `json:"launchY,omitempty"`
+	ID         string             `json:"id"`
+	X          int                `json:"x"`
+	Y          int                `json:"y"`
+	Multiplier float64            `json:"multiplier"`
+	LaunchX    float64            `json:"launchX,omitempty"`
+	LaunchY    float64            `json:"launchY,omitempty"`
+	Placement  *PlacementMetadata `json:"placement,omitempty"`
 }
 
 type WindZoneSpawn struct {
+	ID        string             `json:"id"`
+	X         int                `json:"x"`
+	Y         int                `json:"y"`
+	Width     int                `json:"width"`
+	Height    int                `json:"height"`
+	Axis      string             `json:"axis,omitempty"`
+	Direction int                `json:"direction"`
+	Strength  float64            `json:"strength"`
+	Placement *PlacementMetadata `json:"placement,omitempty"`
+}
+
+type BiomeMetadata struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Index         int     `json:"index"`
+	Cycle         int     `json:"cycle"`
+	LocalChunkY   int     `json:"localChunkY"`
+	StartChunkY   int     `json:"startChunkY"`
+	EndChunkY     int     `json:"endChunkY"`
+	LengthChunks  int     `json:"lengthChunks"`
+	Difficulty    float64 `json:"difficulty"`
+	RouteProfile  string  `json:"routeProfile"`
+	HazardProfile string  `json:"hazardProfile"`
+	WindProfile   string  `json:"windProfile"`
+}
+
+type PlacementMetadata struct {
+	BiomeID    string  `json:"biomeId"`
+	Route      string  `json:"route"`
+	Purpose    string  `json:"purpose"`
+	Difficulty float64 `json:"difficulty"`
+	Danger     float64 `json:"danger"`
+	Readable   bool    `json:"readable"`
+}
+
+type DifficultyMetrics struct {
+	Archetype            string  `json:"archetype"`
+	TargetDifficulty     float64 `json:"targetDifficulty"`
+	Score                float64 `json:"score"`
+	VerticalDifficulty   float64 `json:"verticalDifficulty"`
+	HorizontalDifficulty float64 `json:"horizontalDifficulty"`
+	HazardDifficulty     float64 `json:"hazardDifficulty"`
+	EnemyPressure        float64 `json:"enemyPressure"`
+	RecoveryAvailability float64 `json:"recoveryAvailability"`
+	StaircaseRatio       float64 `json:"staircaseRatio"`
+}
+
+type HazardSpawn struct {
 	ID        string  `json:"id"`
+	Kind      string  `json:"kind"`
 	X         int     `json:"x"`
 	Y         int     `json:"y"`
 	Width     int     `json:"width"`
 	Height    int     `json:"height"`
-	Axis      string  `json:"axis,omitempty"`
-	Direction int     `json:"direction"`
-	Strength  float64 `json:"strength"`
+	Route     string  `json:"route"`
+	BiomeID   string  `json:"biomeId"`
+	Danger    float64 `json:"danger"`
+	Telegraph string  `json:"telegraph"`
 }
 
 type TriggerBox struct {
@@ -519,10 +576,14 @@ type LandmarkSpawn struct {
 }
 
 type RouteBranch struct {
-	ID     string `json:"id"`
-	Kind   string `json:"kind"`
-	Label  string `json:"label"`
-	Hidden bool   `json:"hidden"`
-	Reward int    `json:"reward"`
-	Nodes  []Vec2 `json:"nodes"`
+	ID             string  `json:"id"`
+	Kind           string  `json:"kind"`
+	Label          string  `json:"label"`
+	Hidden         bool    `json:"hidden"`
+	Reward         int     `json:"reward"`
+	Nodes          []Vec2  `json:"nodes"`
+	BiomeID        string  `json:"biomeId,omitempty"`
+	Difficulty     float64 `json:"difficulty,omitempty"`
+	CheckpointSafe bool    `json:"checkpointSafe,omitempty"`
+	Recommended    bool    `json:"recommended,omitempty"`
 }

@@ -95,6 +95,26 @@ export interface PlacementMetadata {
   readable: boolean;
 }
 
+export type PlatformArchetype =
+  | "splitRoute"
+  | "gapChallenge"
+  | "precisionChallenge"
+  | "verticalShaft"
+  | "jumpPadRoute"
+  | "combatPlatform";
+
+export interface DifficultyMetrics {
+  archetype: PlatformArchetype;
+  targetDifficulty: number;
+  score: number;
+  verticalDifficulty: number;
+  horizontalDifficulty: number;
+  hazardDifficulty: number;
+  enemyPressure: number;
+  recoveryAvailability: number;
+  staircaseRatio: number;
+}
+
 export interface EnemySpawn {
   id: EntityId;
   kind: EnemyKind;
@@ -220,6 +240,7 @@ export interface GeneratedChunk {
   regionIndex?: number;
   regionName?: string;
   biome?: BiomeMetadata;
+  difficultyMetrics?: DifficultyMetrics;
   checkpoint?: boolean;
   tiles: TileKind[];
   platforms: PlatformSpan[];

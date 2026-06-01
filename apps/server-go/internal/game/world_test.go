@@ -210,6 +210,55 @@ func TestRegionRoutesProvideSafeRiskRelicAndRecoveryOpportunities(t *testing.T) 
 	}
 }
 
+func TestChunksExposeDifficultyMetricsAndAvoidStaircases(t *testing.T) {
+	seed := HashString("demo")
+	archetypes := map[string]struct{}{}
+	staircaseTotal := 0.0
+	chunks := 0
+	earlyScore := 0.0
+	earlyChunks := 0
+	lateScore := 0.0
+	lateChunks := 0
+	highStaircaseChunks := 0
+
+	for chunkY := 0; chunkY < 60; chunkY++ {
+		chunk := GenerateChunk(seed, chunkY)
+		if chunk.DifficultyMetrics == nil {
+			t.Fatalf("chunk %d missing difficulty metrics", chunkY)
+		}
+		metrics := chunk.DifficultyMetrics
+		if metrics.Score < 0 || metrics.Score > 1 || metrics.TargetDifficulty < 0 || metrics.TargetDifficulty > 1 {
+			t.Fatalf("chunk %d metrics out of range: %#v", chunkY, metrics)
+		}
+		if metrics.StaircaseRatio > 0.5 {
+			highStaircaseChunks++
+		}
+		archetypes[metrics.Archetype] = struct{}{}
+		staircaseTotal += metrics.StaircaseRatio
+		chunks++
+		if chunkY < 8 {
+			earlyScore += metrics.Score
+			earlyChunks++
+		} else if chunkY >= 32 {
+			lateScore += metrics.Score
+			lateChunks++
+		}
+	}
+
+	if len(archetypes) < 5 {
+		t.Fatalf("expected varied route archetypes, got %#v", archetypes)
+	}
+	if staircaseTotal/float64(chunks) > 0.20 {
+		t.Fatalf("average staircase ratio should stay near 20%% target, got %.2f", staircaseTotal/float64(chunks))
+	}
+	if float64(highStaircaseChunks)/float64(chunks) > 0.20 {
+		t.Fatalf("mostly-staircase chunks should be rare, got %d/%d", highStaircaseChunks, chunks)
+	}
+	if lateScore/float64(lateChunks) <= earlyScore/float64(earlyChunks) {
+		t.Fatalf("late chunks should measure harder than early chunks: early=%.2f late=%.2f", earlyScore/float64(earlyChunks), lateScore/float64(lateChunks))
+	}
+}
+
 func TestBiomeProfilesIncreaseTraversalComplexity(t *testing.T) {
 	seed := HashString("demo")
 	starter := regionComplexityScore(seed, 0)
