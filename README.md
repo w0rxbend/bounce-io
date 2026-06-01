@@ -6,23 +6,17 @@
 
 ## Screenshots
 
-| Title Screen | Skin Selection |
-| --- | --- |
-| ![Bounce IO title screen](docs/screenshots/title-screen.png) | ![Bounce IO skin selection](docs/screenshots/skin-select.png) |
+| Title Screen | Mode Selection | Skin Selection |
+| --- | --- | --- |
+| ![Bounce IO title screen](docs/screenshots/Screenshot%20From%202026-06-02%2000-16-12.png) | ![Bounce IO mode selection](docs/screenshots/Screenshot%20From%202026-06-02%2000-16-21.png) | ![Bounce IO skin selection](docs/screenshots/Screenshot%20From%202026-06-02%2000-16-26.png) |
 
-| Floating Garden | Ancient Ruins |
+| Floating Garden Spawn | Floating Garden Climb |
 | --- | --- |
-| ![Floating Garden gameplay](docs/screenshots/floating-garden-gameplay.png) | ![Ancient Ruins gameplay](docs/screenshots/ancient-ruins-gameplay.png) |
+| ![Floating Garden spawn gameplay](docs/screenshots/Screenshot%20From%202026-06-02%2000-15-15.png) | ![Floating Garden climb gameplay](docs/screenshots/Screenshot%20From%202026-06-02%2000-15-50.png) |
 
 ## Game Overview
 
-| Title | Skin Selection |
-| --- | --- |
-| ![Bounce IO title screen](docs/screenshots/title-screen.png) | ![Bounce IO skin selection](docs/screenshots/skin-select.png) |
-
-| Floating Garden Gameplay | Ancient Ruins Gameplay |
-| --- | --- |
-| ![Floating Garden gameplay overview](docs/screenshots/floating-garden-gameplay.png) | ![Ancient Ruins gameplay overview](docs/screenshots/ancient-ruins-gameplay.png) |
+![Bounce IO gameplay overview](docs/screenshots/Screenshot%20From%202026-06-02%2000-15-15.png)
 
 Every match is a short vertical race for 1-8 players. The world is built from seeded chunks, so everyone climbs the same route while choosing between safer recovery lanes, central race lines, and narrow relic paths. Falling is not the end: checkpoints bring players back to their highest reached chunk, keeping the race tense without stopping the climb.
 
