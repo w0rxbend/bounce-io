@@ -6607,9 +6607,10 @@ function makeLabel(name: string): Text {
     text: name.slice(0, 12),
     style: {
       fill: PAL.uiParchment,
-      fontSize: 7,
+      fontSize: 14,
       fontFamily: "monospace",
-      stroke: { color: PAL.uiInk, width: 2 },
+      fontWeight: "900",
+      stroke: { color: PAL.uiInk, width: 3 },
     },
   });
   label.anchor.set(0.5, 0);
@@ -10785,7 +10786,7 @@ function drawActors(): void {
     if (e.sprite.tint !== 0xffffff) e.sprite.tint = 0xffffff;
     drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition);
     drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
-    setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 16);
+    setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
     setRoundedPositionIfChanged(e.crownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (pid === leaderId && !crownAvailable) drawCrown(e.gfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, col);
   }
