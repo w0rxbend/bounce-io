@@ -1697,26 +1697,26 @@ function midMountainDensity(
     const below = y - topY;
     if (below < -2 || below > 118) continue;
 
-    const left = platform.x * TILE_SIZE - 6;
-    const right = (platform.x + platform.width) * TILE_SIZE + 6;
+    const left = platform.x * TILE_SIZE - 16;
+    const right = (platform.x + platform.width) * TILE_SIZE + 16;
     const dx = x < left ? left - x : x > right ? x - right : 0;
-    const rootBand = clamp01(1 - Math.max(0, below) / 34) * clamp01(1 - dx / 20);
+    const rootBand = clamp01(1 - Math.max(0, below) / 40) * clamp01(1 - dx / 34);
     density = Math.max(density, rootBand);
 
     const center = platformCenterPx(platform);
     const leftRootX = platform.x * TILE_SIZE + TILE_SIZE * 0.45;
     const rightRootX = (platform.x + platform.width) * TILE_SIZE - TILE_SIZE * 0.45;
-    const rootHalfWidth = Math.max(12, platform.width * TILE_SIZE * 0.38 - Math.max(0, below) * 0.12);
+    const rootHalfWidth = Math.max(18, platform.width * TILE_SIZE * 0.56 - Math.max(0, below) * 0.08);
     const rootReach = clamp01(1 - Math.max(0, below) / 112);
     const centerRoot = clamp01(1 - Math.abs(x - center.x) / rootHalfWidth) * rootReach;
-    const leftRoot = clamp01(1 - Math.abs(x - leftRootX) / 15) * rootReach * 0.86;
-    const rightRoot = clamp01(1 - Math.abs(x - rightRootX) / 15) * rootReach * 0.86;
+    const leftRoot = clamp01(1 - Math.abs(x - leftRootX) / 24) * rootReach * 0.9;
+    const rightRoot = clamp01(1 - Math.abs(x - rightRootX) / 24) * rootReach * 0.9;
     density = Math.max(density, centerRoot, leftRoot, rightRoot);
   }
 
   for (const connection of connections) {
     const d = distanceToSegment(x, y, connection.ax, connection.ay, connection.bx, connection.by);
-    const t = clamp01(1 - d / connection.radius);
+    const t = clamp01(1 - d / (connection.radius * 1.35));
     density = Math.max(density, t * t * connection.strength);
   }
 
@@ -4449,7 +4449,7 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
   const mountainParticles: PixiParticle[] = [];
   const topY = baseTileY * TILE_SIZE;
   const chunkPixelHeight = chunk.height * TILE_SIZE;
-  const step = 5;
+  const step = 4;
 
   for (let localY = 0; localY < chunkPixelHeight; localY += step) {
     for (let x = 0; x < WORLD_WIDTH; x += step) {
@@ -4458,13 +4458,13 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
       const density = midMountainDensity(chunk, connections, sampleX, sampleY);
       const noise = midMountainNoise(chunk.chunkY, sampleX, sampleY, 313);
       const grain = (noise & 255) / 255;
-      const threshold = 0.18 + grain * 0.18;
+      const threshold = 0.1 + grain * 0.12;
       if (density <= threshold) continue;
 
       const edge = density < 0.44;
       const size = edge
-        ? (noise % 5 === 0 ? 3 : 4)
-        : (density > 0.84 && noise % 7 === 0 ? 7 : 5);
+        ? (noise % 5 === 0 ? 4 : 5)
+        : (density > 0.84 && noise % 7 === 0 ? 8 : 6);
       const jitter = edge ? 1 : 0;
       mountainParticles.push(new PixiParticle({
         texture: Texture.WHITE,
@@ -4486,7 +4486,7 @@ function composeMidMountainLayer(chunk: GeneratedChunk, target: Container, biome
         for (let i = 0; i < edgeChecks.length; i++) {
           const side = edgeChecks[i]!;
           const sideNoise = midMountainNoise(chunk.chunkY, sampleX + side.dx, sampleY + side.dy, 991 + i * 17);
-          if (sideNoise % 4 === 0) continue;
+          if (sideNoise % 7 === 0) continue;
           const neighborDensity = midMountainDensity(chunk, connections, sampleX + side.dx, sampleY + side.dy);
           if (neighborDensity > threshold + 0.08) continue;
           const speckNoise = midMountainNoise(chunk.chunkY, sampleX + side.ox, sampleY + side.oy, 1409 + i * 29);
