@@ -840,7 +840,7 @@ function altitude01(chunkY: number, start: number, end: number): number {
   return Math.max(0, Math.min(1, (chunkY - start) / Math.max(1, end - start)));
 }
 
-const CHARACTER_IDS = ["character1", "character2", "character3", "character4", "character5", "character6", "character7", "character8", "character9", "character10", "character11"] as const;
+const CHARACTER_IDS = ["character1", "character2", "character3", "character4", "character5", "character6", "character7", "character8", "character9", "character10", "character11", "character12", "character14"] as const;
 const CHARACTER_ANIMATION_NAMES = [
   "idle",
   "walk",
