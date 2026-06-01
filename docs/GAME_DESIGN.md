@@ -1,5 +1,17 @@
 # Bounce IO — Game Design
 
+## Overview
+
+| Title | Skin Selection |
+| --- | --- |
+| ![Bounce IO title screen](screenshots/title-screen.png) | ![Bounce IO skin selection](screenshots/skin-select.png) |
+
+| Floating Garden Gameplay | Ancient Ruins Gameplay |
+| --- | --- |
+| ![Floating Garden gameplay overview](screenshots/floating-garden-gameplay.png) | ![Ancient Ruins gameplay overview](screenshots/ancient-ruins-gameplay.png) |
+
+Bounce IO is a short-form vertical racing platformer for solo play or online rooms of up to 8 players. Racers climb seeded floating-island chunks, collect relics from risky paths, and use kicks or passive pushes to knock rivals off ledges while chasing the exit platform.
+
 ## Pillars
 
 - Competitive vertical race: every match is a short climb where position, tempo, and risk path choice matter more than elimination.

@@ -2,7 +2,7 @@
 
 **Bounce IO** is a fast browser platformer about racing upward through floating forest ruins. Pick a pixel-art racer, climb procedurally generated islands, grab relics from risky routes, and kick rivals off ledges before they beat you to the summit.
 
-> Live demo: [Play Bounce IO](TODO_LIVE_DEMO_URL)
+> Public test build: [Play Bounce IO](http://130.61.92.255:8081/)
 
 ## Screenshots
 
@@ -15,6 +15,14 @@
 | ![Floating Garden gameplay](docs/screenshots/floating-garden-gameplay.png) | ![Ancient Ruins gameplay](docs/screenshots/ancient-ruins-gameplay.png) |
 
 ## Game Overview
+
+| Title | Skin Selection |
+| --- | --- |
+| ![Bounce IO title screen](docs/screenshots/title-screen.png) | ![Bounce IO skin selection](docs/screenshots/skin-select.png) |
+
+| Floating Garden Gameplay | Ancient Ruins Gameplay |
+| --- | --- |
+| ![Floating Garden gameplay overview](docs/screenshots/floating-garden-gameplay.png) | ![Ancient Ruins gameplay overview](docs/screenshots/ancient-ruins-gameplay.png) |
 
 Every match is a short vertical race for 1-8 players. The world is built from seeded chunks, so everyone climbs the same route while choosing between safer recovery lanes, central race lines, and narrow relic paths. Falling is not the end: checkpoints bring players back to their highest reached chunk, keeping the race tense without stopping the climb.
 

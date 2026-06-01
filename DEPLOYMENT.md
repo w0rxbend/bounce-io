@@ -6,7 +6,7 @@ Build and run both services:
 docker compose up --build
 ```
 
-The frontend is served at http://localhost:8080. The backend runs on the private Compose network and is reached through the frontend's `/ws` nginx proxy.
+The frontend is served at http://localhost:8080. The current public test build is available at http://130.61.92.255:8081/. The backend runs on the private Compose network and is reached through the frontend's `/ws` nginx proxy.
 
 If the frontend port is already in use, override it:
 
