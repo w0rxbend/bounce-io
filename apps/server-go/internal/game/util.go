@@ -41,18 +41,23 @@ func sanitizeName(value string) string {
 	return string(out)
 }
 
+// sanitizeSkinID validates the client-supplied cosmetics string before it's
+// stored and rebroadcast. The server treats it as an opaque identifier (the
+// client encodes/decodes the per-body-part swatch selection — see
+// apps/client/src/cosmetics.ts); '.' is allowed since that's the field
+// separator used by that encoding.
 func sanitizeSkinID(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "character1"
+		return "default"
 	}
 	for _, r := range value {
-		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-') {
-			return "character1"
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.') {
+			return "default"
 		}
 	}
-	if len(value) > 24 {
-		return "character1"
+	if len(value) > 48 {
+		return "default"
 	}
 	return value
 }

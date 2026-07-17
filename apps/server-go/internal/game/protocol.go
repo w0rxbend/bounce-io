@@ -12,6 +12,11 @@ const (
 	CheckpointPortalWidthTiles     = 4
 	PlayerWidth                    = 14
 	PlayerHeight                   = 22
+	// PlayerCollisionCornerRadius mirrors PLAYER_COLLISION_CORNER_RADIUS in
+	// packages/shared/src/constants.ts: capsule-style rounded corners for
+	// ground/ceiling checks so the outer edge doesn't trigger a landing on
+	// its own, avoiding snags on tile corners and platform-edge slivers.
+	PlayerCollisionCornerRadius    = 3
 	PhysicsStepSeconds             = 1.0 / 60.0
 	MaxDeltaSeconds                = 1.0 / 15.0
 	MaxReachableVerticalGapTiles   = 3
@@ -147,6 +152,20 @@ type ClientSelectSkillCard struct {
 	Type    string `json:"type"`
 	OfferID string `json:"offerId"`
 	CardID  string `json:"cardId"`
+}
+
+type ClientEmote struct {
+	Type    string `json:"type"`
+	EmoteID string `json:"emoteId"`
+}
+
+// EmoteIDs mirrors packages/shared/src/types.ts EMOTE_IDS. Keep in sync.
+var EmoteIDs = map[string]struct{}{
+	"wave":  {},
+	"laugh": {},
+	"gg":    {},
+	"angry": {},
+	"heart": {},
 }
 
 type InputState struct {

@@ -1,5 +1,10 @@
 # Bounce IO Sprite Sheet Spec
 
+> **Player characters are now a bone rig, not a sprite sheet.** See
+> `docs/BODY_PART_SKIN_SPEC.md`. This document describes the retired
+> `playable_characters/characterN/` frame-animation system and the environment/HUD
+> procedural-drawing grammar that is still current.
+
 ## Current Approach: Procedural Pixel Art
 
 The game currently uses no sprite sheet atlases or external image assets. All visuals are drawn programmatically at runtime using PixiJS `Graphics` primitives (`rect`, `poly`, `circle`, `ellipse`) in `apps/client/src/main.ts`.

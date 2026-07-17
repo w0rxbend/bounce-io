@@ -78,6 +78,7 @@ type roomState struct {
 	enemies           map[string]EnemyState
 	collectibles      map[string]CollectibleState
 	jumpPadCooldowns  map[string]uint64
+	emoteCooldowns    map[string]uint64
 	pvpHitCooldowns   map[string]uint64
 	pvpCombat         map[string]*pvpCombatState
 	relicClaims       map[string]relicClaimState
@@ -379,12 +380,32 @@ type selectSkillCardCommand struct {
 	cardID   string
 }
 
+type emoteCommand struct {
+	playerID string
+	emoteID  string
+}
+
 func (cmd pickupCollectibleCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
 	if sess == nil || !sess.connected || sess.spectator {
 		return
 	}
 	s.tryPickupCollectible(sess, cmd.collectibleID)
+}
+
+func (cmd emoteCommand) apply(s *roomState) {
+	sess := s.sessions[cmd.playerID]
+	if sess == nil || !sess.connected || sess.spectator {
+		return
+	}
+	if _, ok := EmoteIDs[cmd.emoteID]; !ok {
+		return
+	}
+	if !s.canEmote(cmd.playerID) {
+		return
+	}
+	s.markEmoted(cmd.playerID)
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_EMOTE", "playerId": cmd.playerID, "emoteId": cmd.emoteID})
 }
 
 func (cmd selectSkillCardCommand) apply(s *roomState) {
@@ -576,6 +597,13 @@ func (r *Room) PickupCollectible(playerID, collectibleID string) {
 	}
 }
 
+func (r *Room) Emote(playerID, emoteID string) {
+	select {
+	case r.commands <- emoteCommand{playerID: playerID, emoteID: emoteID}:
+	default:
+	}
+}
+
 func (r *Room) SelectSkillCard(playerID, offerID, cardID string) {
 	select {
 	case r.commands <- selectSkillCardCommand{playerID: playerID, offerID: offerID, cardID: cardID}:
@@ -620,6 +648,7 @@ func (r *Room) loop() {
 		enemies:           map[string]EnemyState{},
 		collectibles:      map[string]CollectibleState{},
 		jumpPadCooldowns:  map[string]uint64{},
+		emoteCooldowns:    map[string]uint64{},
 		pvpHitCooldowns:   map[string]uint64{},
 		pvpCombat:         map[string]*pvpCombatState{},
 		relicClaims:       map[string]relicClaimState{},
@@ -692,6 +721,24 @@ func (s *roomState) markJumpPadTriggered(playerID, padID string) {
 		cooldownTicks = 1
 	}
 	s.jumpPadCooldowns[s.jumpPadCooldownKey(playerID, padID)] = s.tick + cooldownTicks
+}
+
+func (s *roomState) canEmote(playerID string) bool {
+	if s.emoteCooldowns == nil {
+		s.emoteCooldowns = map[string]uint64{}
+	}
+	return s.emoteCooldowns[playerID] <= s.tick
+}
+
+func (s *roomState) markEmoted(playerID string) {
+	if s.emoteCooldowns == nil {
+		s.emoteCooldowns = map[string]uint64{}
+	}
+	cooldownTicks := uint64(math.Ceil(1.0 * float64(s.room.cfg.TickRate)))
+	if cooldownTicks < 1 {
+		cooldownTicks = 1
+	}
+	s.emoteCooldowns[playerID] = s.tick + cooldownTicks
 }
 
 func (s *roomState) effectiveTickRate() int {

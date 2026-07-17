@@ -9,6 +9,13 @@ export const CHECKPOINT_PORTAL_WIDTH_TILES = 4;
 export const PLAYER_WIDTH = 14;
 export const PLAYER_HEIGHT = 22;
 
+// Capsule-style corner rounding for ground/ceiling and wall collision checks:
+// the outer `PLAYER_COLLISION_CORNER_RADIUS` px of the hitbox's edges don't
+// count toward triggering a landing/wall stop on their own, which avoids
+// snagging on tile corners and platform-edge slivers. Mirrored in the Go
+// server as PlayerCollisionCornerRadius (apps/server-go/internal/game/world.go).
+export const PLAYER_COLLISION_CORNER_RADIUS = 3;
+
 export const PHYSICS_STEP_SECONDS = 1 / 60;
 export const MAX_DELTA_SECONDS = 1 / 15;
 

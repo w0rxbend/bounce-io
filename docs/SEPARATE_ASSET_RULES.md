@@ -2,9 +2,15 @@
 
 The project now treats gameplay art as individual transparent PNG files. Do not generate sprite atlases, tilemap sheets, or combined character sheets for runtime gameplay assets.
 
+> **Playable characters no longer use this pipeline.** Players are rendered as a
+> procedurally-posed bone rig with flat-color per-body-part cosmetics — see
+> `docs/BODY_PART_SKIN_SPEC.md`. The folder contract below and
+> `tools/generate-separated-assets.py`'s character export are retired/unused, kept only
+> for historical reference and in case per-part sprite art is added later.
+
 ## Folder Contract
 
-- `apps/client/public/assets/playable_characters/<character>/`
+- `apps/client/public/assets/playable_characters/<character>/` (retired, see above)
   - `main_body.png`
   - `idle_body.png`
   - `idle_frame1.png` through `idle_frame4.png`

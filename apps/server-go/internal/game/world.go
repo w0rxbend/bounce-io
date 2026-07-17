@@ -356,14 +356,22 @@ func stepKick(phase string, timer, cooldown float64, kicked bool, dt float64, co
 	}
 }
 
+// capsuleHorizontalOverlap reports whether the player's hitbox, with its
+// outer PlayerCollisionCornerRadius trimmed off each side (capsule-style
+// rounded corners), overlaps the horizontal span [spanLeft, spanRight].
+// Mirrors insetTileRange in packages/shared/src/physics.ts.
+func capsuleHorizontalOverlap(playerX, spanLeft, spanRight float64) bool {
+	left := playerX + PlayerCollisionCornerRadius
+	right := playerX + float64(PlayerWidth) - PlayerCollisionCornerRadius
+	return right > spanLeft && left < spanRight
+}
+
 func landingSurfaceY(seed uint32, player PlayerState, drop bool, previousBottom float64) (float64, bool) {
 	if player.Velocity.Y <= 0 {
 		return 0, false
 	}
 
 	bottom := player.Position.Y + float64(PlayerHeight)
-	left := player.Position.X
-	right := player.Position.X + float64(PlayerWidth)
 	best := math.Inf(1)
 
 	centerChunkY := ChunkYForWorldY(player.Position.Y)
@@ -373,7 +381,7 @@ func landingSurfaceY(seed uint32, player PlayerState, drop bool, previousBottom 
 			top := float64((chunk.WorldTileY + platform.Y) * TileSize)
 			platformLeft := float64(platform.X * TileSize)
 			platformRight := float64((platform.X + platform.Width) * TileSize)
-			if right <= platformLeft || left >= platformRight {
+			if !capsuleHorizontalOverlap(player.Position.X, platformLeft, platformRight) {
 				continue
 			}
 			if bottom < top || previousBottom > top+0.001 {

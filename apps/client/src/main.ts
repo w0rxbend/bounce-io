@@ -19,6 +19,7 @@ import {
   PROTOCOL_VERSION,
   RECONCILIATION_TOLERANCE_PX,
   TILE_SIZE,
+  EMOTE_IDS,
 } from "@skybound/shared";
 import {
   addPlayerXp,
@@ -41,8 +42,22 @@ import {
   skillStacks,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
-import type { CollectibleKind, CollectibleState, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
+import type { CollectibleKind, CollectibleState, EmoteId, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
+import { createBodyRig, poseBodyRig, type BodyPoseState, type BodyRig } from "./bodyRig";
+import {
+  BODY_PART_SLOTS,
+  cosmeticsForColorIndex,
+  cosmeticsToPalette,
+  decodeCosmetics,
+  DEFAULT_COSMETICS,
+  encodeCosmetics,
+  PART_SWATCHES,
+  SWATCH_IDS,
+  type BodyPartSlot,
+  type PartSwatchId,
+  type PlayerCosmetics,
+} from "./cosmetics";
 import { MenuSplashBackground } from "./MenuSplashBackground";
 import "./styles.css";
 
@@ -397,13 +412,6 @@ const ASSET_URLS = {
   enemyArmoredBrute: "/assets/environment/enemies/armored_brute_1.png",
   enemyWindSpirit: "/assets/environment/enemies/wind_spirit_1.png",
   enemyPortalBlue: "/assets/environment/enemies/portal_blue_1.png",
-  playerExplorer: "/assets/playable_characters/character1/main_body.png",
-  playerIdle: "/assets/playable_characters/character1/idle_frame1.png",
-  playerRun1: "/assets/playable_characters/character1/running_frame2.png",
-  playerRun2: "/assets/playable_characters/character1/running_frame5.png",
-  playerJump: "/assets/playable_characters/character1/jumping_frame1.png",
-  playerFall: "/assets/playable_characters/character1/falling_frame1.png",
-  playerKick: "/assets/playable_characters/character1/kick_frame2.png",
   relicPink0: "/assets/environment/collectibles/relic_pink_frame1.png",
   relicPink1: "/assets/environment/collectibles/relic_pink_frame2.png",
   relicPink2: "/assets/environment/collectibles/relic_pink_frame3.png",
@@ -840,58 +848,6 @@ function altitude01(chunkY: number, start: number, end: number): number {
   return Math.max(0, Math.min(1, (chunkY - start) / Math.max(1, end - start)));
 }
 
-const CHARACTER_IDS = ["character1", "character2", "character3", "character4", "character5", "character6", "character7", "character8", "character9", "character10", "character11", "character12", "character14"] as const;
-const CHARACTER_ANIMATION_NAMES = [
-  "idle",
-  "walk",
-  "walk_left",
-  "walk_right",
-  "run",
-  "jump_fall",
-  "kick_push",
-  "punch",
-  "hit",
-  "taking_damage",
-  "shoot_fire",
-  "hit_death_special"
-] as const;
-const CHARACTER_SPRITE_SCALE = 0.72;
-const CHARACTER_ANCHOR_Y = 0.96;
-
-type CharacterId = typeof CHARACTER_IDS[number];
-type CharacterAnimationName = typeof CHARACTER_ANIMATION_NAMES[number];
-
-interface CharacterRuntimeAnimation {
-  textures: Texture[];
-  durationMs: number;
-}
-
-interface CharacterRig {
-  main: Texture;
-  animations: Partial<Record<CharacterAnimationName, CharacterRuntimeAnimation>>;
-  anchorY: number;
-}
-
-const CHARACTER_ANIMATION_URLS = Object.fromEntries(CHARACTER_IDS.map((id) => [id, {
-  main: `/assets/playable_characters/${id}/main_body.png`,
-  idle: frameUrls(id, "idle", 4),
-  walk: frameUrls(id, "walking", 6),
-  walk_left: frameUrls(id, "walking_left", 6),
-  walk_right: frameUrls(id, "walking_right", 6),
-  run: frameUrls(id, "running", 6),
-  jump_fall: [...frameUrls(id, "jumping", 2), ...frameUrls(id, "falling", 2)],
-  kick_push: frameUrls(id, "kick", 3),
-  punch: frameUrls(id, "punching", 3),
-  hit: frameUrls(id, "hitting", 3),
-  taking_damage: frameUrls(id, "taking_damage", 2),
-  shoot_fire: frameUrls(id, "shooting", 4),
-  hit_death_special: frameUrls(id, "lying_dead", 2),
-}])) as Record<CharacterId, { main: string } & Record<CharacterAnimationName, string[]>>;
-
-function frameUrls(characterId: CharacterId, animation: string, count: number): string[] {
-  return Array.from({ length: count }, (_, i) => `/assets/playable_characters/${characterId}/${animation}_frame${i + 1}.png`);
-}
-
 // ── HTML shell ────────────────────────────────────────────────────────────────
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -1023,53 +979,6 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
 }
 
 const pixelAssets = await loadPixelAssets();
-const characterRigs = await loadCharacterRigs();
-
-async function loadCharacterRigs(): Promise<Partial<Record<CharacterId, CharacterRig>>> {
-  const rigs: Partial<Record<CharacterId, CharacterRig>> = {};
-  await Promise.all(CHARACTER_IDS.map(async (id) => {
-    const spec = CHARACTER_ANIMATION_URLS[id];
-    try {
-      const main = await Assets.load<Texture>(spec.main);
-      const animations: Partial<Record<CharacterAnimationName, CharacterRuntimeAnimation>> = {};
-      await Promise.all(CHARACTER_ANIMATION_NAMES.map(async (name) => {
-        const textures = await loadTextureSequence(spec[name]);
-        if (textures.length > 0) {
-          animations[name] = { textures, durationMs: durationForCharacterAnimation(name) };
-        }
-      }));
-      rigs[id] = { main, animations, anchorY: CHARACTER_ANCHOR_Y };
-    } catch (err) {
-      console.warn(`Could not load character rig ${id}`, err);
-    }
-  }));
-  return rigs;
-}
-
-async function loadTextureSequence(urls: string[]): Promise<Texture[]> {
-  const textures = await Promise.all(urls.map(async (url) => {
-    try {
-      return await Assets.load<Texture>(url);
-    } catch (err) {
-      console.warn(`Could not load character frame ${url}`, err);
-      return null;
-    }
-  }));
-  return textures.filter((texture): texture is Texture => !!texture && texture !== Texture.EMPTY);
-}
-
-function durationForCharacterAnimation(name: CharacterAnimationName): number {
-  if (name === "run") return 82;
-  if (name === "walk") return 115;
-  if (name === "walk_left" || name === "walk_right") return 115;
-  if (name === "idle") return 180;
-  if (name === "punch" || name === "hit") return 72;
-  if (name === "taking_damage") return 95;
-  if (name === "shoot_fire") return 85;
-  if (name === "kick_push") return 95;
-  if (name === "hit_death_special") return 180;
-  return 120;
-}
 
 function assetTexture(key: AssetKey): Texture {
   return pixelAssets[key] ?? Texture.EMPTY;
@@ -1113,13 +1022,6 @@ function chooseAsset(keys: AssetKey[], seed: number, fallback: AssetKey): AssetK
   return available[Math.abs(seed) % available.length]!;
 }
 
-function makeCharacterSprite(characterId: CharacterId): Sprite {
-  const s = new Sprite(characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer"));
-  s.roundPixels = true;
-  disableDisplayEvents(s);
-  return s;
-}
-
 function setSpriteTextureIfChanged(sprite: Sprite, texture: Texture): void {
   if (sprite.texture !== texture) sprite.texture = texture;
 }
@@ -1136,79 +1038,13 @@ function setScaleIfChanged(sprite: Sprite, x: number, y: number): void {
   if (sprite.scale.y !== y) sprite.scale.y = y;
 }
 
-function hasPlayerAnimationAssets(): boolean {
-  return hasCharacterAnimationAssets("character1") || (hasAsset("playerIdle") && hasAsset("playerRun1") && hasAsset("playerJump") && hasAsset("playerFall") && hasAsset("playerKick"));
-}
-
-function hasCharacterAnimationAssets(characterId: CharacterId): boolean {
-  const rig = characterRigs[characterId];
-  return !!rig?.animations.idle && !!rig.animations.run && !!rig.animations.jump_fall && !!rig.animations.kick_push;
-}
-
-function playerSpriteScale(): number {
-  return hasPlayerAnimationAssets() ? CHARACTER_SPRITE_SCALE : 1;
-}
-
-function playerSpriteAnchorY(): number {
-  return hasPlayerAnimationAssets() ? CHARACTER_ANCHOR_Y : 1;
-}
-
-function characterAnimationTexture(characterId: CharacterId, name: CharacterAnimationName, elapsed: number): Texture | null {
-  const rig = characterRigs[characterId] ?? characterRigs.character1;
-  const animation = rig?.animations[name];
-  if (!animation || animation.textures.length === 0) return null;
-  const frame = Math.floor(elapsed / animation.durationMs) % animation.textures.length;
-  return animation.textures[frame] ?? null;
-}
-
-function characterAnimationTextureAtProgress(characterId: CharacterId, name: CharacterAnimationName, progress: number): Texture | null {
-  const rig = characterRigs[characterId] ?? characterRigs.character1;
-  const animation = rig?.animations[name];
-  if (!animation || animation.textures.length === 0) return null;
-  const frame = Math.min(animation.textures.length - 1, Math.floor(clamp01(progress) * animation.textures.length));
-  return animation.textures[frame] ?? null;
-}
-
-function characterForRemote(colorIndex: number): CharacterId {
-  return CHARACTER_IDS[colorIndex % CHARACTER_IDS.length]!;
-}
-
-function playerAnimationTexture(s: PlayerState, elapsed: number, characterId: CharacterId = "character1"): Texture | null {
-  if (!hasCharacterAnimationAssets(characterId)) return null;
-  if (s.kickPhase === "active") {
-    const hitProgress = KICK_ACTIVE_SECONDS > 0 ? s.kickTimer / KICK_ACTIVE_SECONDS : 1;
-    return characterAnimationTextureAtProgress(characterId, "hit", hitProgress) ??
-      characterAnimationTextureAtProgress(characterId, "shoot_fire", hitProgress) ??
-      characterAnimationTextureAtProgress(characterId, "kick_push", hitProgress);
-  }
-  if (s.kickPhase === "windup") {
-    const windupProgress = KICK_WINDUP_SECONDS > 0 ? s.kickTimer / KICK_WINDUP_SECONDS : 1;
-    return characterAnimationTextureAtProgress(characterId, "punch", windupProgress) ??
-      characterAnimationTextureAtProgress(characterId, "kick_push", windupProgress);
-  }
-  if (s.kickPhase !== "idle") {
-    const recoveryProgress = KICK_RECOVERY_SECONDS > 0 ? s.kickTimer / KICK_RECOVERY_SECONDS : 1;
-    return characterAnimationTextureAtProgress(characterId, "kick_push", recoveryProgress);
-  }
-  if (s.invulnerable > 0) return characterAnimationTexture(characterId, "taking_damage", elapsed) ?? characterAnimationTexture(characterId, "hit_death_special", elapsed) ?? characterAnimationTexture(characterId, "idle", elapsed);
-  if (!s.grounded) return characterAnimationTexture(characterId, "jump_fall", elapsed);
-
-  const speed = Math.abs(s.velocity.x);
-  if (speed > 115) return characterAnimationTexture(characterId, "run", elapsed);
-  if (speed > 28) {
-    const directionalWalk = s.facing < 0 ? "walk_left" : "walk_right";
-    return characterAnimationTexture(characterId, directionalWalk, elapsed) ??
-      characterAnimationTexture(characterId, "walk", elapsed) ??
-      characterAnimationTexture(characterId, "run", elapsed);
-  }
-  return characterAnimationTexture(characterId, "idle", elapsed);
-}
-
-function fallbackPlayerAnimationAsset(s: PlayerState, elapsed: number): AssetKey {
-  if (s.kickPhase === "active" || s.kickPhase === "windup") return "playerKick";
-  if (!s.grounded) return s.velocity.y < -20 ? "playerJump" : "playerFall";
-  if (Math.abs(s.velocity.x) > 28) return Math.floor(elapsed / 95) % 2 === 0 ? "playerRun1" : "playerRun2";
-  return "playerIdle";
+function bodyRigPoseForPlayer(s: PlayerState): { state: BodyPoseState; speedFactor: number; verticalSign: -1 | 0 | 1 } {
+  const speedFactor = Math.min(1, Math.abs(s.velocity.x) / 150);
+  if (s.kickPhase !== "idle") return { state: "kick_push", speedFactor, verticalSign: 0 };
+  if (s.invulnerable > 0) return { state: "hit", speedFactor, verticalSign: 0 };
+  if (!s.grounded) return { state: "jump_fall", speedFactor, verticalSign: s.velocity.y < 0 ? -1 : 1 };
+  if (Math.abs(s.velocity.x) > 28) return { state: "run", speedFactor, verticalSign: 0 };
+  return { state: "idle", speedFactor, verticalSign: 0 };
 }
 
 function coinFrameAsset(frame: number): AssetKey {
@@ -2714,15 +2550,68 @@ interface RemoteEntry {
   current: PlayerState;
   renderPosition: { x: number; y: number };
   colorIndex: number;
-  sprite: Sprite;
+  bodyRig: BodyRig;
+  appliedCosmeticsKey: string;
   crownSprite: Sprite;
   gfx: Graphics;
   attackBar: Graphics;
   label: Text;
+  emoteText: Text;
 }
 const remotePlayers  = new Map<string, RemoteEntry>();
 const playerNames    = new Map<string, string>();
 let   playerColorIdx = 1; // 0 = local (gold)
+
+// ── Emotes / reactions ──────────────────────────────────────────────────────
+const EMOTE_GLYPHS: Record<EmoteId, string> = {
+  wave: "👋",
+  laugh: "😂",
+  gg: "🎉",
+  angry: "😠",
+  heart: "❤️",
+};
+const EMOTE_DISPLAY_MS = 2200;
+const EMOTE_FADE_MS = 400;
+const EMOTE_LOCAL_COOLDOWN_MS = 1000;
+const emoteExpiresAtMs = new Map<string, number>();
+const LOCAL_EMOTE_KEY = "__local__";
+let lastLocalEmoteAtMs = -Infinity;
+
+function makeEmoteText(): Text {
+  const text = new Text({
+    text: "",
+    style: { fontSize: 20, fontFamily: "monospace" },
+  });
+  text.anchor.set(0.5, 1);
+  text.visible = false;
+  disableDisplayEvents(text);
+  return text;
+}
+
+function spawnEmoteBubble(playerId: string, emoteId: string, text: Text): void {
+  const glyph = EMOTE_GLYPHS[emoteId as EmoteId];
+  if (!glyph) return;
+  text.text = glyph;
+  text.visible = true;
+  text.alpha = 1;
+  emoteExpiresAtMs.set(playerId, elapsedMs + EMOTE_DISPLAY_MS);
+}
+
+function updateEmoteText(playerId: string, text: Text, x: number, y: number): void {
+  const expiresAt = emoteExpiresAtMs.get(playerId);
+  if (expiresAt === undefined) {
+    if (text.visible) text.visible = false;
+    return;
+  }
+  const remaining = expiresAt - elapsedMs;
+  if (remaining <= 0) {
+    text.visible = false;
+    emoteExpiresAtMs.delete(playerId);
+    return;
+  }
+  text.alpha = remaining < EMOTE_FADE_MS ? remaining / EMOTE_FADE_MS : 1;
+  setRoundedPositionIfChanged(text, x, y);
+}
 
 interface PredEntry { seq: number; input: PlayerInput; state: PlayerState }
 const predBuf: PredEntry[] = [];
@@ -2757,7 +2646,7 @@ type ClientMode = "local" | "online-player" | "online-spectator";
 let appState: AppState = "mainMenu";
 let selectedMode: GameMode | null = null;
 let clientMode: ClientMode = "local";
-let selectedSkinId: CharacterId | null = normalizeCharacterId(localStorage.getItem("bounceSkinId"));
+let selectedCosmetics: PlayerCosmetics = decodeCosmetics(localStorage.getItem("bounceCosmetics"));
 let nickname = localStorage.getItem("bounceNickname") ?? "";
 let currentRoomId = "demo";
 let spectatorSessionId: string | null = null;
@@ -2813,11 +2702,7 @@ let focusedMenuIndex = -1;
 let pendingFocusId: string | null = null;
 let menuActivationLockedUntil = 0;
 let nicknameCaretGfx: Graphics | null = null;
-let menuSplashBackground: MenuSplashBackground<CharacterId> | null = null;
-
-function normalizeCharacterId(value: unknown): CharacterId {
-  return CHARACTER_IDS.includes(value as CharacterId) ? value as CharacterId : "character1";
-}
+let menuSplashBackground: MenuSplashBackground<PartSwatchId> | null = null;
 
 function isSpectatorMode(): boolean {
   return clientMode === "online-spectator";
@@ -2836,22 +2721,15 @@ function destroyMenu(): void {
 function ensureMenuSplashBackground(): void {
   if (menuSplashBackground?.destroyed) menuSplashBackground = null;
   if (!menuSplashBackground) {
-    menuSplashBackground = new MenuSplashBackground<CharacterId>({
-      skinIds: CHARACTER_IDS,
-      selectedSkinId: currentSkinId,
-      makeActorSprite: makeCharacterSprite,
-      getActorTexture: (skinId, state, elapsed) => {
-        if (state === "hit") return characterAnimationTexture(skinId, "hit", elapsed) ?? characterAnimationTexture(skinId, "punch", elapsed);
-        if (state === "jump") return characterAnimationTexture(skinId, "jump_fall", elapsed);
-        if (state === "run") return characterAnimationTexture(skinId, "run", elapsed);
-        return characterAnimationTexture(skinId, "idle", elapsed);
-      },
+    menuSplashBackground = new MenuSplashBackground<PartSwatchId>({
+      skinIds: SWATCH_IDS,
+      selectedSkinId: () => currentCosmetics().torso,
     });
     menuSplashLayer.addChild(menuSplashBackground);
   }
   menuSplashLayer.visible = true;
   menuSplashBackground.layout(pixi.screen.width, pixi.screen.height);
-  menuSplashBackground.setSelectedSkinId(currentSkinId());
+  menuSplashBackground.setSelectedSkinId(currentCosmetics().torso);
 }
 
 function destroyMenuSplashBackground(): void {
@@ -2888,26 +2766,25 @@ function setAppState(next: AppState): void {
   }
 }
 
-function setSelectedSkin(skinId: CharacterId): void {
-  selectedSkinId = skinId;
-  localStorage.setItem("bounceSkinId", skinId);
-  menuSplashBackground?.setSelectedSkinId(skinId);
+function setSelectedCosmetics(cosmetics: PlayerCosmetics): void {
+  selectedCosmetics = cosmetics;
+  localStorage.setItem("bounceCosmetics", encodeCosmetics(cosmetics));
+  menuSplashBackground?.setSelectedSkinId(cosmetics.torso);
   menuDirty = true;
-  console.info("[BounceIO] Skin selected", selectedSkinId);
+  console.info("[BounceIO] Cosmetics selected", selectedCosmetics);
 }
 
-function currentSkinId(): CharacterId {
-  if (!selectedSkinId) selectedSkinId = "character1";
-  return selectedSkinId;
+function currentCosmetics(): PlayerCosmetics {
+  return selectedCosmetics;
 }
 
-function applySkinId(player: PlayerState, skinId: CharacterId): PlayerState {
-  player.skinId = skinId;
+function applyCosmetics(player: PlayerState, cosmetics: PlayerCosmetics): PlayerState {
+  player.skinId = encodeCosmetics(cosmetics);
   return player;
 }
 
-function skinForPlayer(player: PlayerState | null | undefined, fallback: CharacterId = currentSkinId()): CharacterId {
-  return normalizeCharacterId(player?.skinId ?? fallback);
+function cosmeticsForPlayer(player: PlayerState | null | undefined, fallback: PlayerCosmetics = currentCosmetics()): PlayerCosmetics {
+  return player?.skinId ? decodeCosmetics(player.skinId) : fallback;
 }
 
 interface NetworkMetrics {
@@ -3101,18 +2978,17 @@ let cloudDriftMid   = 0;
 let cloudDriftFront = 0;
 
 // Pre-allocated persistent graphics for local player
-const localSprite = makeCharacterSprite(currentSkinId());
 const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
 const localAttackBar = new Graphics();
+const localEmoteText = makeEmoteText();
+const localBodyRig: BodyRig = createBodyRig();
 disableDisplayEvents(localGfx);
 disableDisplayEvents(localAttackBar);
-localSprite.anchor.set(0.5, playerSpriteAnchorY());
-localSprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.62 : 0;
 localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
-localGfx.alpha = hasPlayerAnimationAssets() ? 0.12 : 1;
-localLayer.addChild(localSprite, localGfx, localAttackBar, localCrownSprite);
+localGfx.alpha = 1;
+localLayer.addChild(localGfx, localAttackBar, localCrownSprite, localEmoteText, localBodyRig.root);
 
 interface DisplayTreeStats {
   total: number;
@@ -3283,7 +3159,20 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.code === "F2") respawnLocal();
   if (e.code === "F3") regenerateWorld();
+  const emoteIndex = EMOTE_DIGIT_CODES.indexOf(e.code);
+  if (emoteIndex >= 0) triggerLocalEmote(emoteIndex);
 });
+
+const EMOTE_DIGIT_CODES = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"];
+
+function triggerLocalEmote(index: number): void {
+  const emoteId = EMOTE_IDS[index];
+  if (!emoteId || !localPlayer) return;
+  if (elapsedMs - lastLocalEmoteAtMs < EMOTE_LOCAL_COOLDOWN_MS) return;
+  lastLocalEmoteAtMs = elapsedMs;
+  spawnEmoteBubble(LOCAL_EMOTE_KEY, emoteId, localEmoteText);
+  sendWsMessage({ type: "emote", emoteId }, "input");
+}
 window.addEventListener("keyup", (e) => { held[e.code] = false; });
 
 type FrameInput = Omit<PlayerInput, "sequence">;
@@ -3775,13 +3664,15 @@ function clearWorldChunks(): void {
 
 function clearRemotePlayers(): void {
   for (const e of remotePlayers.values()) {
-    e.sprite.destroy();
+    e.bodyRig.root.destroy({ children: true });
     e.crownSprite.destroy();
     e.gfx.destroy();
     e.attackBar.destroy();
     e.label.destroy();
+    e.emoteText.destroy();
   }
   remotePlayers.clear();
+  emoteExpiresAtMs.clear();
 }
 
 function resetGameSession(mode: GameMode): void {
@@ -3891,7 +3782,7 @@ function resetGameSession(mode: GameMode): void {
 interface StartGameOptions {
   mode: GameMode;
   nickname?: string;
-  skinId: CharacterId;
+  skinId: string;
   spectator?: boolean;
   roomId?: string;
 }
@@ -3909,7 +3800,7 @@ async function enterGameScene(options: {
   const startOptions: StartGameOptions = {
     mode: options.mode,
     nickname: options.nickname,
-    skinId: normalizeCharacterId(options.skinId ?? currentSkinId()),
+    skinId: options.skinId ?? encodeCosmetics(currentCosmetics()),
     spectator: options.spectator,
     roomId: options.roomId,
   };
@@ -3929,7 +3820,7 @@ async function startGame(options: StartGameOptions): Promise<void> {
   selectedMode = options.mode;
   clientMode = options.mode === "local" ? "local" : options.spectator ? "online-spectator" : "online-player";
   currentRoomId = options.roomId?.trim() || (options.spectator ? "auto" : "demo");
-  setSelectedSkin(options.skinId);
+  setSelectedCosmetics(decodeCosmetics(options.skinId));
 
   if (options.mode === "local") {
     console.info("[BounceIO] Starting local game", { skinId: options.skinId });
@@ -4038,9 +3929,9 @@ function respawnLocal(): void {
   const { x, y } = getSpawnPos(checkpointChunkY);
   if (localPlayer) {
     respawnPlayerState(localPlayer, x, y, checkpointChunkY);
-    applySkinId(localPlayer, skinForPlayer(localPlayer));
+    applyCosmetics(localPlayer, cosmeticsForPlayer(localPlayer));
   } else {
-    localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), currentSkinId());
+    localPlayer = applyCosmetics(createPlayerState(localPlayerId, x, y), currentCosmetics());
   }
   snapLocalVisualToSimulation();
   resetLocalPrediction();
@@ -6622,30 +6513,31 @@ function makeLabel(name: string): Text {
 
 function createRemoteEntry(player: PlayerState, name: string, serverTime: number, tick = 0): RemoteEntry {
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
-  const sprite = makeCharacterSprite(skinForPlayer(player, characterForRemote(ci)));
+  const cosmetics = cosmeticsForPlayer(player, cosmeticsForColorIndex(ci));
+  const bodyRig = createBodyRig(cosmeticsToPalette(cosmetics));
   const crownSprite = makeSprite("crown");
-  sprite.anchor.set(0.5, playerSpriteAnchorY());
-  sprite.alpha = hasPlayerAnimationAssets() ? 1 : hasAsset("playerExplorer") ? 0.54 : 0;
-  sprite.tint = 0xffffff;
   crownSprite.anchor.set(0.5, 1);
   crownSprite.visible = false;
   const gfx = new Graphics();
   const attackBar = new Graphics();
   disableDisplayEvents(gfx);
   disableDisplayEvents(attackBar);
-  gfx.alpha = hasPlayerAnimationAssets() ? 0.16 : 1;
+  gfx.alpha = 1;
   const label = makeLabel(name);
-  remoteLayer.addChild(sprite, gfx, attackBar, crownSprite, label);
+  const emoteText = makeEmoteText();
+  remoteLayer.addChild(bodyRig.root, gfx, attackBar, crownSprite, label, emoteText);
   return {
     states: [{ state: clonePlayerState(player), t: serverTime, tick }],
     current: clonePlayerState(player),
     renderPosition: { x: player.position.x, y: player.position.y },
     colorIndex: ci,
-    sprite,
+    bodyRig,
+    appliedCosmeticsKey: encodeCosmetics(cosmetics),
     crownSprite,
     gfx,
     attackBar,
     label,
+    emoteText,
   };
 }
 
@@ -8372,9 +8264,9 @@ function chunkLocalCoordinates(player: PlayerState | null): { chunkX: number; ch
 }
 
 function inspectRenderedEntityCount(): number {
-  let rendered = localPlayer && (localSprite.visible || localGfx.visible) ? 1 : 0;
+  let rendered = localPlayer && (localBodyRig.root.visible || localGfx.visible) ? 1 : 0;
   for (const remote of remotePlayers.values()) {
-    if (remote.sprite.visible || remote.gfx.visible || remote.label.visible) rendered++;
+    if (remote.bodyRig.root.visible || remote.gfx.visible || remote.label.visible) rendered++;
   }
   for (const enemy of enemyEntries.values()) {
     if (enemy.sprite.visible || enemy.hp.visible) rendered++;
@@ -8421,7 +8313,7 @@ function collectInspectionStats(): InspectionStats {
     }
   }
   for (const remote of remotePlayers.values()) {
-    if (!(remote.sprite.visible || remote.gfx.visible || remote.label.visible)) invisibleUpdatingEntities++;
+    if (!(remote.bodyRig.root.visible || remote.gfx.visible || remote.label.visible)) invisibleUpdatingEntities++;
   }
   for (const enemy of enemyEntries.values()) {
     if (!(enemy.sprite.visible || enemy.hp.visible)) invisibleUpdatingEntities++;
@@ -8493,7 +8385,7 @@ function drawInspectionVisualOverlay(stats: InspectionStats): void {
     drawInspectionRect(localRender.x, localRender.y, PLAYER_WIDTH, PLAYER_HEIGHT, 0xffffff, 0.55, 1);
   }
   for (const remote of remotePlayers.values()) {
-    const visible = remote.sprite.visible || remote.gfx.visible || remote.label.visible;
+    const visible = remote.bodyRig.root.visible || remote.gfx.visible || remote.label.visible;
     const x = remote.renderPosition.x;
     const y = remote.renderPosition.y;
     if (visible) drawInspectionRect(x, y, PLAYER_WIDTH, PLAYER_HEIGHT, 0x7db7ff, 0.88, 1);
@@ -8848,9 +8740,9 @@ function updateDebug(): void {
   for (const chunkY of loadedChunks.keys()) {
     if (isChunkActive(chunkY, 0)) visibleChunks++;
   }
-  let renderedEntities = localPlayer && (localSprite.visible || localGfx.visible) ? 1 : 0;
+  let renderedEntities = localPlayer && (localBodyRig.root.visible || localGfx.visible) ? 1 : 0;
   for (const remote of remotePlayers.values()) {
-    if (remote.sprite.visible || remote.gfx.visible) renderedEntities++;
+    if (remote.bodyRig.root.visible || remote.gfx.visible) renderedEntities++;
   }
   for (const enemy of enemyEntries.values()) {
     if (enemy.sprite.visible || enemy.hp.visible) renderedEntities++;
@@ -9546,56 +9438,72 @@ function makeModeCard(title: string, body: string, w: number, h: number, onClick
   return card;
 }
 
+const BODY_PART_SLOT_LABELS: Record<BodyPartSlot, string> = {
+  head: "HEAD",
+  torso: "TORSO",
+  arms: "ARMS",
+  legs: "LEGS",
+};
+
 function renderSkinSelect(sw: number, sh: number): void {
-  const title = menuText("Select Skin", 29, MENU_COLORS.gold, "900");
+  const title = menuText("Customize Look", 29, MENU_COLORS.gold, "900");
   title.anchor.set(0.5);
   title.x = Math.round(sw / 2);
-  title.y = Math.round(sh * 0.14);
-  const cols = sw < 620 ? 2 : 4;
-  const cardW = sw < 620 ? 116 : 130;
-  const cardH = 118;
-  const gap = 12;
-  const rows = Math.ceil(CHARACTER_IDS.length / cols);
-  const gridW = cols * cardW + (cols - 1) * gap;
-  const startX = Math.round(sw / 2 - gridW / 2);
-  const startY = Math.round(sh * 0.24);
-  const cards: Container[] = [];
-  CHARACTER_IDS.forEach((skinId, index) => {
-    const card = makeSkinCard(skinId, cardW, cardH);
-    card.x = startX + (index % cols) * (cardW + gap);
-    card.y = startY + Math.floor(index / cols) * (cardH + gap);
-    cards.push(card);
-  });
+  title.y = Math.round(sh * 0.1);
+  const cosmetics = currentCosmetics();
+
+  const island = new Graphics();
+  const previewCx = Math.round(sw / 2);
+  const previewIslandY = Math.round(sh * 0.2);
+  drawMenuIsland(island, previewCx - 44, previewIslandY, 88, 30);
+  const previewRig = createBodyRig(cosmeticsToPalette(cosmetics));
+  previewRig.root.x = previewCx;
+  previewRig.root.y = previewIslandY;
+  previewRig.root.scale.set(1.9);
+  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
+
+  const rowW = Math.min(sw - 48, 360);
+  const startX = Math.round(sw / 2 - rowW / 2);
+  const rowGap = 46;
+  let rowY = Math.round(sh * 0.4);
+  const swatchButtons: Container[] = [];
+  for (const slot of BODY_PART_SLOTS) {
+    const label = menuText(BODY_PART_SLOT_LABELS[slot], 13, MENU_COLORS.parchment, "900");
+    label.anchor.set(0, 0.5);
+    label.x = startX;
+    label.y = rowY;
+    menuLayer.addChild(label);
+    const swatchSize = 26;
+    const swatchGap = 6;
+    const swatchAreaX = startX + 66;
+    const available = rowW - 66;
+    const perRow = Math.max(4, Math.floor((available + swatchGap) / (swatchSize + swatchGap)));
+    SWATCH_IDS.forEach((swatchId, index) => {
+      const selected = cosmetics[slot] === swatchId;
+      const btn = makePixelButton("", swatchSize, swatchSize, () => {
+        setSelectedCosmetics({ ...currentCosmetics(), [slot]: swatchId });
+      }, selected, { id: `swatch-${slot}-${swatchId}`, selected });
+      const swatch = new Graphics().rect(4, 4, swatchSize - 8, swatchSize - 8).fill(PART_SWATCHES[swatchId]);
+      btn.addChild(swatch);
+      btn.x = swatchAreaX + (index % perRow) * (swatchSize + swatchGap);
+      btn.y = rowY - swatchSize / 2 + Math.floor(index / perRow) * (swatchSize + swatchGap);
+      swatchButtons.push(btn);
+    });
+    const rowsUsed = Math.ceil(SWATCH_IDS.length / perRow);
+    rowY += swatchSize + (rowsUsed - 1) * (swatchSize + swatchGap) + rowGap - swatchSize;
+  }
+
   const continueText = selectedMode === "online" ? "NICKNAME" : "START";
   const cont = makePixelButton(continueText, 172, 48, () => {
     if (selectedMode === "online") setAppState("onlineNickname");
-    else void enterGameScene({ mode: "local", skinId: currentSkinId() });
+    else void enterGameScene({ mode: "local", skinId: encodeCosmetics(currentCosmetics()) });
   }, false, { id: selectedMode === "online" ? "nickname" : "start", disabled: gameStartInFlight });
   cont.x = Math.round(sw / 2 - 86);
-  cont.y = Math.min(sh - 70, startY + rows * (cardH + gap) + 16);
+  cont.y = Math.min(sh - 70, rowY + 12);
   const back = makePixelButton("BACK", 112, 40, () => setAppState("modeSelect"), false, { id: "back", disabled: gameStartInFlight });
   back.x = 18;
   back.y = 18;
-  menuLayer.addChild(title, ...cards, cont, back);
-}
-
-function makeSkinCard(skinId: CharacterId, w: number, h: number): Container {
-  const selected = skinId === selectedSkinId;
-  const card = makePixelButton("", w, h, () => setSelectedSkin(skinId), selected, { id: `skin-${skinId}`, selected, bob: selected });
-  const island = new Graphics();
-  drawMenuIsland(island, Math.round(w / 2 - 44), 62, 88, 30);
-  const sprite = makeCharacterSprite(skinId);
-  sprite.anchor.set(0.5, 1);
-  sprite.x = Math.round(w / 2);
-  sprite.y = 78;
-  sprite.scale.set(1.22);
-  sprite.alpha = hasCharacterAnimationAssets(skinId) ? 1 : 0.85;
-  const label = menuText(skinId.replace("character", "Skin "), 12, selected ? MENU_COLORS.gold : 0xd7f0cc, "900");
-  label.anchor.set(0.5);
-  label.x = Math.round(w / 2);
-  label.y = h - 26;
-  card.addChild(island, sprite, label);
-  return card;
+  menuLayer.addChild(title, island, previewRig.root, ...swatchButtons, cont, back);
 }
 
 function renderOnlineNickname(sw: number, sh: number): void {
@@ -9611,11 +9519,11 @@ function renderOnlineNickname(sw: number, sh: number): void {
   title.y = py + 42;
   const preview = new Graphics();
   drawMenuIsland(preview, px + panelW - 102, py + 61, 70, 28);
-  const sprite = makeCharacterSprite(currentSkinId());
-  sprite.anchor.set(0.5, 1);
-  sprite.x = px + panelW - 67;
-  sprite.y = py + 80;
-  sprite.scale.set(0.92);
+  const previewRig = createBodyRig(cosmeticsToPalette(currentCosmetics()));
+  previewRig.root.x = px + panelW - 67;
+  previewRig.root.y = py + 80;
+  previewRig.root.scale.set(1.6);
+  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
   const label = menuText("Nickname", 12, 0xd7f0cc, "900");
   label.x = px + 44;
   label.y = py + 82;
@@ -9653,7 +9561,7 @@ function renderOnlineNickname(sw: number, sh: number): void {
   hint.anchor.set(0.5);
   hint.x = Math.round(sw / 2);
   hint.y = inputY + inputH + 22;
-  menuLayer.addChild(panel, inputFrame, title, preview, sprite, label, hint, nicknameCaretGfx, join, back);
+  menuLayer.addChild(panel, inputFrame, title, preview, previewRig.root, label, hint, nicknameCaretGfx, join, back);
   if (validation) menuLayer.addChild(validation);
 }
 
@@ -9669,11 +9577,11 @@ function renderConnecting(sw: number, sh: number): void {
   panel.rect(px + panelW / 2 - 48, py + 64, 22, 28).fill(0x293a47);
   panel.circle(px + panelW / 2 - 37, py + 63, 18).fill(0x432a75);
   panel.circle(px + panelW / 2 - 37, py + 63, 9).fill(MENU_COLORS.rune);
-  const sprite = makeCharacterSprite(currentSkinId());
-  sprite.anchor.set(0.5, 1);
-  sprite.x = Math.round(px + panelW / 2 - 90);
-  sprite.y = py + 132;
-  sprite.scale.set(1.05);
+  const previewRig = createBodyRig(cosmeticsToPalette(currentCosmetics()));
+  previewRig.root.x = Math.round(px + panelW / 2 - 90);
+  previewRig.root.y = py + 132;
+  previewRig.root.scale.set(1.8);
+  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
   const label = menuText(connectingMessage, 22, MENU_COLORS.gold, "900");
   label.anchor.set(0.5);
   label.x = Math.round(sw / 2);
@@ -9682,7 +9590,7 @@ function renderConnecting(sw: number, sh: number): void {
   connectingDotsText.anchor.set(0.5);
   connectingDotsText.x = Math.round(sw / 2);
   connectingDotsText.y = py + 176;
-  menuLayer.addChild(panel, sprite, label, connectingDotsText);
+  menuLayer.addChild(panel, previewRig.root, label, connectingDotsText);
 }
 
 function renderMenu(): void {
@@ -9734,7 +9642,7 @@ function handleMenuCanvasPointerDown(event: PointerEvent): void {
 
 async function joinOnlineGame(value: string): Promise<void> {
   try {
-    await enterGameScene({ mode: "online", nickname: value.trim(), skinId: currentSkinId() });
+    await enterGameScene({ mode: "online", nickname: value.trim(), skinId: encodeCosmetics(currentCosmetics()) });
   } catch (err) {
     menuErrorText = err instanceof Error ? err.message : "Could not connect.";
     setAppState("onlineNickname");
@@ -10040,6 +9948,13 @@ function handleMatchEvents(events: MatchEvent[]): void {
         const visual = collectibleVisual(ev2.pickupType);
         pushNotification(visual.notification, visual.color);
       }
+    } else if (ev2.type === "PLAYER_EMOTE") {
+      if (ev2.playerId === localPlayerId) {
+        spawnEmoteBubble(LOCAL_EMOTE_KEY, ev2.emoteId, localEmoteText);
+      } else {
+        const remote = remotePlayers.get(ev2.playerId);
+        if (remote) spawnEmoteBubble(ev2.playerId, ev2.emoteId, remote.emoteText);
+      }
     } else if (ev2.type === "PLAYER_KICK_HIT") {
       const target = ev2.targetId === localPlayerId
         ? localPlayer
@@ -10203,8 +10118,9 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   for (const pid of remotePlayers.keys()) {
     if (!ids.has(pid)) {
       const e = remotePlayers.get(pid);
-      if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); }
+      if (e) { e.bodyRig.root.destroy({ children: true }); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); e.emoteText.destroy(); }
       remotePlayers.delete(pid);
+      emoteExpiresAtMs.delete(pid);
     }
   }
   return performance.now() - entityStart;
@@ -10234,7 +10150,7 @@ function rejectConnect(message: string): void {
   connectReject = null;
 }
 
-function connectRoom(name: string, skinId: CharacterId, preserveSession = false, roomId = "demo", spectator = false): Promise<void> {
+function connectRoom(name: string, skinId: string, preserveSession = false, roomId = "demo", spectator = false): Promise<void> {
   if (ws && ws.readyState === WebSocket.CONNECTING) return Promise.reject(new Error("Connection already in progress."));
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
   reconnectEnabled = true;
@@ -10317,7 +10233,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false,
         }
         if (!spectator && !parsed.spectator && localPlayerId) {
           const { x, y } = getSpawnPos();
-          localPlayer = applySkinId(createPlayerState(localPlayerId, x, y), skinId);
+          localPlayer = applyCosmetics(createPlayerState(localPlayerId, x, y), decodeCosmetics(skinId));
         }
         serverTick = 0; lastSnapshotSeq = -1;
         snapLocalVisualToSimulation();
@@ -10331,7 +10247,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false,
         localPlayerId = parsed.playerId; matchPhase = parsed.matchPhase;
         registerBinaryEntityId(parsed.playerId);
         serverTick = 0; lastSnapshotSeq = -1;
-        localPlayer = applySkinId(clonePlayerState(parsed.playerState), skinForPlayer(parsed.playerState, skinId)); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
+        localPlayer = applyCosmetics(clonePlayerState(parsed.playerState), cosmeticsForPlayer(parsed.playerState, decodeCosmetics(skinId))); snapLocalVisualToSimulation(); resetLocalPrediction(); cameraSnap = true;
         if (loadedChunks.size === 0) for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
         console.info("[BounceIO] Joined online game");
         setAppState("game");
@@ -10384,7 +10300,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false,
         }
         break;
       case "playerLeft":
-        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.sprite.destroy(); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
+        { const name2 = playerNames.get(parsed.playerId) ?? "Player"; const e = remotePlayers.get(parsed.playerId); if (e) { e.bodyRig.root.destroy({ children: true }); e.crownSprite.destroy(); e.gfx.destroy(); e.attackBar.destroy(); e.label.destroy(); e.emoteText.destroy(); } remotePlayers.delete(parsed.playerId); playerNames.delete(parsed.playerId); emoteExpiresAtMs.delete(parsed.playerId); pushNotification(`${name2} left`, PAL.uiGray); }
         break;
       case "skill_card_offer":
         if (!isSpectatorMode()) openOnlineSkillOffer(parsed.offer);
@@ -10437,7 +10353,7 @@ function connectRoom(name: string, skinId: CharacterId, preserveSession = false,
   return connectPromise;
 }
 
-function schedReconn(name: string, skinId: CharacterId, roomId: string, spectator: boolean): void {
+function schedReconn(name: string, skinId: string, roomId: string, spectator: boolean): void {
   if (reconnTimeout) return;
   reconnTimeout = setTimeout(() => {
     reconnTimeout = null;
@@ -10615,7 +10531,7 @@ function updateRemotePlayer(s: PlayerState, serverTime: number, tick: number): v
 function playerStateFromSnapshotEntity(entity: SnapshotEntity): PlayerState {
   const existing = remotePlayers.get(entity.id)?.current;
   const player = existing ? clonePlayerState(existing) : createPlayerState(entity.id, entity.position.x, entity.position.y);
-  player.skinId = normalizeCharacterId(entity.skinId ?? player.skinId);
+  player.skinId = entity.skinId ?? player.skinId;
   player.position = { x: entity.position.x, y: entity.position.y };
   player.velocity = { x: entity.velocity.x, y: entity.velocity.y };
   player.facing = entity.facing;
@@ -10637,7 +10553,7 @@ function playerStateFromSnapshotEntity(entity: SnapshotEntity): PlayerState {
 function playerStateFromEntityFrame(frame: PlayerEntityFrame, base?: PlayerState | null): PlayerState {
   const existing = base ?? remotePlayers.get(frame.id)?.current;
   const player = existing ? clonePlayerState(existing) : createPlayerState(frame.id, frame.x, frame.y);
-  player.skinId = normalizeCharacterId(frame.s || player.skinId);
+  player.skinId = frame.s || player.skinId;
   player.position = { x: frame.x, y: frame.y };
   player.velocity = { x: frame.vx, y: frame.vy };
   player.facing = frame.f;
@@ -10748,11 +10664,21 @@ function drawCrown(g: Graphics, cx: number, cy: number, color: number): void {
 
 // ── Draw actors ───────────────────────────────────────────────────────────────
 
+function ensureRemoteRigCosmetics(e: RemoteEntry): void {
+  const cosmetics = cosmeticsForPlayer(e.current, cosmeticsForColorIndex(e.colorIndex));
+  const key = encodeCosmetics(cosmetics);
+  if (key === e.appliedCosmeticsKey) return;
+  const parent = e.bodyRig.root.parent;
+  const index = parent?.getChildIndex(e.bodyRig.root) ?? -1;
+  e.bodyRig.root.destroy({ children: true });
+  e.bodyRig = createBodyRig(cosmeticsToPalette(cosmetics));
+  e.appliedCosmeticsKey = key;
+  if (parent && index >= 0) parent.addChildAt(e.bodyRig.root, Math.min(index, parent.children.length));
+}
+
 function drawActors(): void {
   interpRemotes(Math.min(pixi.ticker.deltaMS / 1000, 1 / 30));
   const crownAvailable = hasAsset("crown");
-  const playerExplorerAvailable = hasAsset("playerExplorer");
-  const spriteScale = playerSpriteScale();
   const blinkHidden = Math.floor(elapsedMs / 80) % 2 === 1;
 
   // Find leader (highest world height = lowest y position)
@@ -10767,57 +10693,52 @@ function drawActors(): void {
 
   for (const [pid, e] of remotePlayers) {
     const col = PLAYER_COLORS[e.colorIndex % PLAYER_COLORS.length]!;
-    const characterId = skinForPlayer(e.current, characterForRemote(e.colorIndex));
-    const hasCharacterSkin = hasCharacterAnimationAssets(characterId);
     const drawPosition = e.renderPosition;
     const activeVisual = isWorldRectActive(drawPosition.x, drawPosition.y, PLAYER_WIDTH, PLAYER_HEIGHT, VIEWPORT_CULLING_CONFIG.margin);
     e.gfx.visible = activeVisual;
     e.attackBar.visible = activeVisual;
     e.label.visible = activeVisual;
     e.crownSprite.visible = activeVisual && crownAvailable && pid === leaderId;
-    e.sprite.visible = activeVisual && playerExplorerAvailable && !(e.current.invulnerable > 0 && blinkHidden);
+    e.bodyRig.root.visible = activeVisual && !(e.current.invulnerable > 0 && blinkHidden);
     if (!activeVisual) {
       e.attackBar.clear();
+      e.emoteText.visible = false;
       continue;
     }
-    const nextTexture = hasCharacterSkin
-      ? playerAnimationTexture(e.current, elapsedMs, characterId) ?? assetTexture(fallbackPlayerAnimationAsset(e.current, elapsedMs))
-      : characterRigs[characterId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
-    setSpriteTextureIfChanged(e.sprite, nextTexture);
-    setRoundedPositionIfChanged(e.sprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT + 2);
-    setScaleIfChanged(e.sprite, (e.current.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
-    if (e.sprite.tint !== 0xffffff) e.sprite.tint = 0xffffff;
-    drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition, !hasCharacterSkin);
+    ensureRemoteRigCosmetics(e);
+    setRoundedPositionIfChanged(e.bodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
+    e.bodyRig.root.scale.x = e.current.facing < 0 ? -1 : 1;
+    const pose = bodyRigPoseForPlayer(e.current);
+    poseBodyRig(e.bodyRig, pose.state, elapsedMs, pose.speedFactor, pose.verticalSign);
+    drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
     setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
     setRoundedPositionIfChanged(e.crownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (pid === leaderId && !crownAvailable) drawCrown(e.gfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, col);
+    updateEmoteText(pid, e.emoteText, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 46);
   }
 
   if (localPlayer) {
     const renderPos = getLocalRenderPosition();
     const drawPosition = renderPos ?? localPlayer.position;
-    localSprite.visible = playerExplorerAvailable && !(localPlayer.invulnerable > 0 && blinkHidden);
-    const localSkinId = skinForPlayer(localPlayer);
-    const hasLocalSkin = hasCharacterAnimationAssets(localSkinId);
-    const nextTexture = hasLocalSkin
-      ? playerAnimationTexture(localPlayer, elapsedMs, localSkinId) ?? assetTexture(fallbackPlayerAnimationAsset(localPlayer, elapsedMs))
-      : characterRigs[localSkinId]?.main ?? characterRigs.character1?.main ?? assetTexture("playerExplorer");
-    setSpriteTextureIfChanged(localSprite, nextTexture);
-    setRoundedPositionIfChanged(localSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT + 2);
-    setScaleIfChanged(localSprite, (localPlayer.facing < 0 ? -1 : 1) * spriteScale, spriteScale);
-    if (localSprite.tint !== 0xffffff) localSprite.tint = 0xffffff;
-    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition, !hasLocalSkin);
+    localBodyRig.root.visible = !(localPlayer.invulnerable > 0 && blinkHidden);
+    setRoundedPositionIfChanged(localBodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
+    localBodyRig.root.scale.x = localPlayer.facing < 0 ? -1 : 1;
+    const pose = bodyRigPoseForPlayer(localPlayer);
+    poseBodyRig(localBodyRig, pose.state, elapsedMs, pose.speedFactor, pose.verticalSign);
+    drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(localAttackBar, localPlayer, drawPosition, elapsedMs);
     localCrownSprite.visible = crownAvailable && localPlayerId === leaderId;
     setRoundedPositionIfChanged(localCrownSprite, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 10);
     if (localPlayerId === leaderId && !crownAvailable)
       drawCrown(localGfx, Math.round(drawPosition.x + PLAYER_WIDTH / 2), Math.round(drawPosition.y) - 12, PLAYER_COLORS[0]!);
+    updateEmoteText(LOCAL_EMOTE_KEY, localEmoteText, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
   } else {
-    localSprite.visible = false;
+    localBodyRig.root.visible = false;
     localCrownSprite.visible = false;
     localGfx.clear();
     localAttackBar.clear();
+    localEmoteText.visible = false;
   }
 }
 
@@ -10864,7 +10785,7 @@ if (initialSpectatorRequested) {
     spectator: true,
     roomId: initialSpectatorRoomId || undefined,
     nickname: "Spectator",
-    skinId: currentSkinId(),
+    skinId: encodeCosmetics(currentCosmetics()),
   }).catch((err) => {
     showSpectatorError(err instanceof Error ? err.message : "Could not open spectator mode.");
   });

@@ -345,6 +345,8 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 			s.handlePickupCollectible(client, data)
 		case "select_skill_card":
 			s.handleSelectSkillCard(client, data)
+		case "emote":
+			s.handleEmote(client, data)
 		case "ping":
 			var ping ClientPing
 			if json.Unmarshal(data, &ping) == nil {
@@ -473,6 +475,20 @@ func (s *Server) handlePickupCollectible(client *Client, data []byte) {
 		return
 	}
 	room.PickupCollectible(playerID, msg.CollectibleID)
+}
+
+func (s *Server) handleEmote(client *Client, data []byte) {
+	room, playerID, _ := client.Session()
+	if room == nil || playerID == "" {
+		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: "NOT_JOINED", Message: "send join first"})
+		return
+	}
+	var msg ClientEmote
+	if err := json.Unmarshal(data, &msg); err != nil || msg.EmoteID == "" {
+		s.logParseError(client, nil, "PARSE_ERROR", err)
+		return
+	}
+	room.Emote(playerID, msg.EmoteID)
 }
 
 func (s *Server) defaultJoinRoomID() string {

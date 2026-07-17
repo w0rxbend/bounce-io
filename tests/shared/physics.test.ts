@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COYOTE_TIME_SECONDS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
+import { COYOTE_TIME_SECONDS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PLAYER_COLLISION_CORNER_RADIUS, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
 import { generateVerticalChunk } from "../../packages/shared/src/generation.js";
 import { applyCollectible, applyDamage, applyHazardHit, applyJumpPad, applyPlayerInteractions, applyWindZones, createPlayerState, rectsOverlap, respawnPlayerState, stepEnemyBehavior, stepPlayer } from "../../packages/shared/src/physics.js";
 import type { EnemyState, GeneratedChunk, JumpPadSpawn, TileMap } from "../../packages/shared/src/types.js";
@@ -50,6 +50,28 @@ test("player falls onto solid tiles and becomes grounded", () => {
   assert.equal(player.grounded, true);
   assert.equal(player.velocity.y, 0);
   assert.equal(player.position.y, 4 * TILE_SIZE - 22);
+});
+
+test("capsule corner rounding: player does not land on a sub-radius platform-edge sliver", () => {
+  // Only tile column 5 is solid; the player's hitbox only overlaps it by 1px
+  // (less than PLAYER_COLLISION_CORNER_RADIUS), so the rounded corner should
+  // ignore it and let the player fall through instead of snagging on it.
+  const sliverTileX = 5;
+  const map: TileMap = {
+    isSolid: (x, y) => x === sliverTileX && y >= 4
+  };
+  assert.ok(PLAYER_COLLISION_CORNER_RADIUS > 1, "test assumes a corner radius greater than the 1px overlap");
+  let player = createPlayerState("p1", sliverTileX * TILE_SIZE - (PLAYER_WIDTH - 1), 2 * TILE_SIZE);
+
+  for (let i = 0; i < 30; i += 1) {
+    player = stepPlayer(player, {
+      left: false, right: false, jumpPressed: false, jumpHeld: false,
+      drop: false, kick: false, sequence: i
+    }, map, 1 / 60).player;
+  }
+
+  assert.equal(player.grounded, false, "a 1px corner overlap must not be enough to land");
+  assert.ok(player.position.y > 4 * TILE_SIZE, "player should have fallen past the sliver tile row");
 });
 
 test("horizontal movement resolves against wall tiles", () => {

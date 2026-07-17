@@ -279,6 +279,9 @@ export interface EnemyState {
 
 export type KickPhase = "idle" | "windup" | "active" | "recovery";
 
+export const EMOTE_IDS = ["wave", "laugh", "gg", "angry", "heart"] as const;
+export type EmoteId = typeof EMOTE_IDS[number];
+
 export interface PlayerInput {
   left: boolean;
   right: boolean;
@@ -380,6 +383,7 @@ export type MatchEventType =
   | "CHECKPOINT_REACHED"
   | "PLAYER_KICK_STARTED"
   | "PLAYER_KICK_HIT"
+  | "PLAYER_EMOTE"
   | "ENEMY_HIT"
   | "ENEMY_KILLED"
   | "JUMP_PAD_TRIGGERED"
@@ -406,6 +410,7 @@ export type MatchEventPayload =
   | { type: "CHECKPOINT_REACHED";   playerId: PlayerId; chunkY: number }
   | { type: "PLAYER_KICK_STARTED";  playerId: PlayerId }
   | { type: "PLAYER_KICK_HIT";      playerId: PlayerId; targetId: PlayerId }
+  | { type: "PLAYER_EMOTE";         playerId: PlayerId; emoteId: EmoteId }
   | { type: "ENEMY_HIT";            playerId: PlayerId; enemyId: EntityId; x: number; y: number; damage: number }
   | { type: "ENEMY_KILLED";         playerId: PlayerId; enemyId: EntityId; x: number; y: number; drops: CollectibleState[]; xpGranted?: number }
   | { type: "JUMP_PAD_TRIGGERED";   playerId: PlayerId; padId: EntityId; x: number; y: number; multiplier: number }

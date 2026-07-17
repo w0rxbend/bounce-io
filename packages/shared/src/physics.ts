@@ -39,6 +39,7 @@ import {
   PLAYER_BASE_JUMP_POWER,
   PLAYER_BASE_KNOCKBACK_RESISTANCE,
   PLAYER_BASE_MOVEMENT_SPEED,
+  PLAYER_COLLISION_CORNER_RADIUS,
   PLAYER_HEIGHT,
   PLAYER_MAX_HEALTH,
   PLAYER_MAX_PUSH_VELOCITY,
@@ -155,6 +156,15 @@ function tileRange(min: number, max: number): [number, number] {
   ];
 }
 
+// Capsule-style rounded corners: shrinks [min, max] by `inset` on each side
+// before computing the tile range, so the outer edge doesn't trigger a
+// ground/ceiling stop on its own. See PLAYER_COLLISION_CORNER_RADIUS.
+function insetTileRange(min: number, max: number, inset: number): [number, number] {
+  const insetMin = min + inset;
+  const insetMax = Math.max(insetMin, max - inset);
+  return tileRange(insetMin, insetMax);
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -248,7 +258,7 @@ function resolveVertical(
   player.position.y += dy;
   player.grounded = false;
   const rect = playerRect(player);
-  const [left, right] = tileRange(rect.x, rect.x + rect.width);
+  const [left, right] = insetTileRange(rect.x, rect.x + rect.width, PLAYER_COLLISION_CORNER_RADIUS);
 
   if (dy > 0) {
     const bottom = Math.floor((rect.y + rect.height - 0.001) / TILE_SIZE);

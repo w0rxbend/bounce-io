@@ -1,6 +1,6 @@
 import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { SkillCardOffer } from "./skills.js";
-import type { CollectibleState, EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
+import type { CollectibleState, EmoteId, EnemyState, GeneratedChunk, MatchEvent, PlayerId, PlayerInput, PlayerState, RelicId, RoomPhase, SessionToken } from "./types.js";
 
 export type SnapshotEntity = {
   id: PlayerId;
@@ -90,6 +90,10 @@ export type ClientMessage =
       type: "select_skill_card";
       offerId: string;
       cardId: string;
+    }
+  | {
+      type: "emote";
+      emoteId: EmoteId;
     };
 
 export type ServerMessage =

@@ -41,6 +41,7 @@ The first player to reach the exit platform at the top wins. If time runs out, p
 | `Space` / `W` | Jump |
 | `S` | Drop through one-way platforms |
 | `F` | Kick |
+| `1`-`5` | Reactions (wave, laugh, gg, angry, heart) |
 | `I` | Toggle inspection overlay |
 | `F1` | Toggle debug overlay |
 | `Shift+F1` | Toggle world/chunk debug overlay |
