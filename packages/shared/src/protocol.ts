@@ -94,6 +94,10 @@ export type ClientMessage =
   | {
       type: "emote";
       emoteId: EmoteId;
+    }
+  | {
+      type: "chat";
+      text: string;
     };
 
 export type ServerMessage =
@@ -130,6 +134,8 @@ export type ServerMessage =
       enemies?: EnemyState[];
       collectibles?: CollectibleState[];
       collectedRelics: RelicId[];
+      revealedChests: string[];
+      openedChests: string[];
       events: MatchEvent[];
       lastProcessedSeq: Record<PlayerId, number>;
     }
@@ -144,6 +150,8 @@ export type ServerMessage =
       type: "relicState";
       serverTime: number;
       collectedRelics: RelicId[];
+      revealedChests: string[];
+      openedChests: string[];
     }
   | {
       type: "matchPhase";

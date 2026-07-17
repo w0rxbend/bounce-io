@@ -1,5 +1,9 @@
 import { Application, Assets, Container, Graphics, Particle as PixiParticle, ParticleContainer, Point, Rectangle, Sprite, Text, Texture, TextureStyle, UPDATE_PRIORITY, type RendererPreference } from "pixi.js";
 import {
+  CHEST_COIN_MAX,
+  CHEST_COIN_MIN,
+  CHEST_RESPAWN_SECONDS,
+  CHEST_XP_VALUE,
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   CHECKPOINT_PORTAL_WIDTH_TILES,
@@ -44,7 +48,7 @@ import {
 import { isServerMessage } from "@skybound/shared";
 import type { CollectibleKind, CollectibleState, EmoteId, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
-import { createBodyRig, poseBodyRig, type BodyPoseState, type BodyRig } from "./bodyRig";
+import { createBodyRig, poseBodyRig, type BodyRig, type PoseParams } from "./bodyRig";
 import {
   BODY_PART_SLOTS,
   cosmeticsForColorIndex,
@@ -857,10 +861,12 @@ appRoot.innerHTML = `
   <main class="shell">
     <section class="game-wrap"></section>
     <input id="nickname-input" class="nickname-input" value="" maxlength="16" aria-label="Player nickname" autocomplete="off" spellcheck="false"/>
+    <input id="chat-input" class="chat-input" value="" maxlength="240" aria-label="Chat message" autocomplete="off" spellcheck="false" placeholder="Press Enter to chat, Esc to cancel"/>
     </main>`;
 
 const gameWrap  = appRoot.querySelector<HTMLElement>(".game-wrap")!;
 const nicknameInput = appRoot.querySelector<HTMLInputElement>("#nickname-input")!;
+const chatInput = appRoot.querySelector<HTMLInputElement>("#chat-input")!;
 
 function setSpectatorDocumentMode(enabled: boolean): void {
   document.documentElement.classList.toggle("spectator-mode", enabled);
@@ -1038,13 +1044,17 @@ function setScaleIfChanged(sprite: Sprite, x: number, y: number): void {
   if (sprite.scale.y !== y) sprite.scale.y = y;
 }
 
-function bodyRigPoseForPlayer(s: PlayerState): { state: BodyPoseState; speedFactor: number; verticalSign: -1 | 0 | 1 } {
+function bodyRigPoseForPlayer(s: PlayerState): Omit<PoseParams, "elapsedMs"> {
   const speedFactor = Math.min(1, Math.abs(s.velocity.x) / 150);
-  if (s.kickPhase !== "idle") return { state: "kick_push", speedFactor, verticalSign: 0 };
-  if (s.invulnerable > 0) return { state: "hit", speedFactor, verticalSign: 0 };
-  if (!s.grounded) return { state: "jump_fall", speedFactor, verticalSign: s.velocity.y < 0 ? -1 : 1 };
-  if (Math.abs(s.velocity.x) > 28) return { state: "run", speedFactor, verticalSign: 0 };
-  return { state: "idle", speedFactor, verticalSign: 0 };
+  if (s.kickPhase === "windup" || s.kickPhase === "active" || s.kickPhase === "recovery") {
+    const duration = attackPhaseDuration(s.kickPhase);
+    const progress = duration > 0 ? clamp01(1 - s.kickTimer / duration) : 1;
+    return { state: "idle", speedFactor, verticalVelocity: 0, kick: { phase: s.kickPhase, progress } };
+  }
+  if (s.invulnerable > 0) return { state: "hit", speedFactor, verticalVelocity: 0 };
+  if (!s.grounded) return { state: "jump_fall", speedFactor, verticalVelocity: s.velocity.y };
+  if (Math.abs(s.velocity.x) > 28) return { state: "run", speedFactor, verticalVelocity: 0 };
+  return { state: "idle", speedFactor, verticalVelocity: 0 };
 }
 
 function coinFrameAsset(frame: number): AssetKey {
@@ -2484,6 +2494,14 @@ const chunkHazardTelegraphs = new Map<number, HazardTelegraph[]>();
 const tileMap        = createMultiChunkTileMap(loadedChunks);
 const pendingChunkRenders = new Set<number>();
 const collectedRelics = new Set<string>();
+// Chest state, shared between local (self-simulated) and online (server-
+// synced via CHEST_* match events and the periodic revealedChests/
+// openedChests snapshot lists) modes — see collectLocalChests and
+// handleMatchEvents's CHEST_REVEALED/CHEST_OPENED/CHEST_RESET branches.
+const revealedChests = new Set<string>();
+const openedChests = new Set<string>();
+const chestOpenedAtMs = new Map<string, number>();
+const CHEST_RESPAWN_MS = CHEST_RESPAWN_SECONDS * 1000;
 const dynamicCollectibles = new Map<string, CollectibleState>();
 const pendingPickupCollectibles = new Set<string>();
 const localDefeatedEnemies = new Set<string>();
@@ -2570,7 +2588,7 @@ const EMOTE_GLYPHS: Record<EmoteId, string> = {
   angry: "😠",
   heart: "❤️",
 };
-const EMOTE_DISPLAY_MS = 2200;
+const EMOTE_DISPLAY_MS = 30_000;
 const EMOTE_FADE_MS = 400;
 const EMOTE_LOCAL_COOLDOWN_MS = 1000;
 const emoteExpiresAtMs = new Map<string, number>();
@@ -2611,6 +2629,48 @@ function updateEmoteText(playerId: string, text: Text, x: number, y: number): vo
   }
   text.alpha = remaining < EMOTE_FADE_MS ? remaining / EMOTE_FADE_MS : 1;
   setRoundedPositionIfChanged(text, x, y);
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+// A persistent history panel (capacity-limited, not time-based fading) —
+// messages stay put until pushed out by newer ones, like a real chat log.
+interface ChatLogEntry { name: string; text: string; local: boolean }
+const CHAT_LOG_MAX = 8;
+const chatLog: ChatLogEntry[] = [];
+let chatOpen = false;
+
+function openChat(): void {
+  if (chatOpen || appState !== "game" || isSpectatorMode()) return;
+  chatOpen = true;
+  held["KeyA"] = false;
+  held["KeyD"] = false;
+  held["Space"] = false;
+  chatInput.value = "";
+  chatInput.style.display = "block";
+  chatInput.focus();
+}
+
+function closeChat(): void {
+  chatOpen = false;
+  chatInput.style.display = "none";
+  chatInput.blur();
+}
+
+function sendChatMessage(): void {
+  const text = chatInput.value.trim();
+  closeChat();
+  if (!text) return;
+  // Optimistic local echo: the server (see handleMatchEvents' CHAT_MESSAGE
+  // branch, which skips re-adding the sender's own message) is what makes
+  // remote players see it, but local/offline mode has no server round-trip
+  // at all — without this, sending while not connected showed nothing.
+  pushChatMessage(nickname || "You", text, true);
+  sendWsMessage({ type: "chat", text }, "input");
+}
+
+function pushChatMessage(name: string, text: string, local: boolean): void {
+  chatLog.push({ name, text, local });
+  while (chatLog.length > CHAT_LOG_MAX) chatLog.shift();
 }
 
 interface PredEntry { seq: number; input: PlayerInput; state: PlayerState }
@@ -2745,6 +2805,7 @@ function setAppState(next: AppState): void {
   menuDirty = true;
   nicknameInputFrame = null;
   nicknameInput.style.display = "none";
+  if (chatOpen && next !== "game") closeChat();
   setSpectatorDocumentMode(isSpectatorMode());
   const showMenu = next !== "game" && !isSpectatorMode();
   if (showMenu && !menuLayer.parent) pixi.stage.addChild(menuLayer);
@@ -3159,11 +3220,14 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.code === "F2") respawnLocal();
   if (e.code === "F3") regenerateWorld();
+  if (e.code === "Enter") { openChat(); e.preventDefault(); }
   const emoteIndex = EMOTE_DIGIT_CODES.indexOf(e.code);
   if (emoteIndex >= 0) triggerLocalEmote(emoteIndex);
 });
 
-const EMOTE_DIGIT_CODES = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5"];
+// Scales automatically with EMOTE_IDS — emote N is always bound to digit
+// key N (Digit1-Digit9), so adding a 6th, 7th... emote just works.
+const EMOTE_DIGIT_CODES = EMOTE_IDS.map((_, i) => `Digit${i + 1}`);
 
 function triggerLocalEmote(index: number): void {
   const emoteId = EMOTE_IDS[index];
@@ -3649,6 +3713,8 @@ function clearWorldChunks(): void {
   decorationLayer.removeChildren();
   for (const a of relicAnims.values()) a.container.destroy({ children: true });
   relicAnims.clear();
+  for (const a of chestAnims.values()) a.container.destroy({ children: true });
+  chestAnims.clear();
   for (const a of portalAnims.values()) a.container.destroy({ children: true });
   portalAnims.clear();
   for (const a of jumpPadAnims.values()) a.container.destroy({ children: true });
@@ -3678,7 +3744,13 @@ function clearRemotePlayers(): void {
 function resetGameSession(mode: GameMode): void {
   clearWorldChunks();
   clearRemotePlayers();
+  chatLog.length = 0;
+  if (chatOpen) closeChat();
   collectedRelics.clear();
+  relicRespawnAtMs.clear();
+  revealedChests.clear();
+  openedChests.clear();
+  chestOpenedAtMs.clear();
   dynamicCollectibles.clear();
   pendingPickupCollectibles.clear();
   localDefeatedEnemies.clear();
@@ -4301,6 +4373,13 @@ function renderChunk(chunk: GeneratedChunk): void {
 
   for (const rel of chunk.relics) {
     if (!collectedRelics.has(rel.id)) spawnRelicAnim(rel.id, rel.x, baseTileY + rel.y);
+  }
+
+  for (const chest of chunk.chests) {
+    const state: ChestVisualState = openedChests.has(chest.id)
+      ? "opened"
+      : revealedChests.has(chest.id) ? "revealed" : "hidden";
+    spawnChestAnim(chest.id, chest.x, baseTileY + chest.y, state);
   }
 
   for (const pad of chunk.jumpPads) {
@@ -6058,6 +6137,92 @@ function spawnStateCollectibleAnim(collectible: CollectibleState): void {
   );
 }
 
+// ── Treasure chest animations ──────────────────────────────────────────────
+// hidden: a foliage mound covering the chest (its normal, undiscovered
+// state). revealed: a kick nearby uncovers the chest itself. opened: the
+// player has collected its reward — lid tipped back, empty until it
+// respawns hidden again (see chestRespawnSeconds on the server / the local
+// mirror below).
+type ChestVisualState = "hidden" | "revealed" | "opened";
+interface ChestAnim {
+  container: Container;
+  gfx: Graphics;
+  state: ChestVisualState;
+  worldX: number;
+  worldY: number;
+}
+const chestAnims = new Map<string, ChestAnim>();
+
+function drawChestGraphic(gfx: Graphics, state: ChestVisualState): void {
+  gfx.clear();
+  if (state === "hidden") {
+    gfx.ellipse(0, 3, 9, 5).fill(0x2d5528);
+    gfx.ellipse(-4, 1, 4, 3).fill(0x86b94a);
+    gfx.ellipse(3, 0, 4, 3).fill(0x5d7f32);
+    gfx.ellipse(0, -2, 3, 2).fill(0x9dbb52);
+    return;
+  }
+  gfx.rect(-8, -3, 16, 7).fill(0x8a5a2b);
+  gfx.rect(-8, -3, 16, 2).fill(0x6b4522);
+  gfx.rect(-8, 2, 16, 2).fill(0x5c3a1a);
+  if (state === "revealed") {
+    gfx.rect(-1.5, -2, 3, 6).fill(0xf2c94c);
+    gfx.circle(0, -2, 1.4).fill(0xf2c94c);
+  } else {
+    gfx.rect(-7, -9, 14, 4).fill(0x6b4522);
+    gfx.rect(-3, -1, 6, 3).fill(0xffe58a);
+  }
+}
+
+function spawnChestAnim(id: string, tileX: number, tileY: number, initialState: ChestVisualState): void {
+  if (chestAnims.has(id)) return;
+  const worldX = tileX * TILE_SIZE + TILE_SIZE / 2;
+  const worldY = tileY * TILE_SIZE + TILE_SIZE / 2 + COLLECTIBLE_PLATFORM_Y_OFFSET;
+  const container = new Container();
+  const gfx = new Graphics();
+  container.addChild(gfx);
+  container.x = worldX;
+  container.y = worldY;
+  relicLayer.addChild(container);
+  drawChestGraphic(gfx, initialState);
+  chestAnims.set(id, { container, gfx, state: initialState, worldX, worldY });
+}
+
+function setChestState(id: string, state: ChestVisualState): void {
+  const anim = chestAnims.get(id);
+  if (!anim) return;
+  anim.state = state;
+  drawChestGraphic(anim.gfx, state);
+  if (state === "revealed") {
+    spawnRing(anim.worldX, anim.worldY, 0x86b94a);
+    spawnWorldPulse(anim.worldX, anim.worldY, 0x9dbb52, 40, 0.4, 2);
+  } else if (state === "opened") {
+    spawnRing(anim.worldX, anim.worldY, 0xf2c94c);
+    spawnWorldPulse(anim.worldX, anim.worldY, 0xffe58a, 56, 0.5, 3);
+    spawnFloatingText(anim.worldX, anim.worldY - 14, "TREASURE!", 0xf2c94c);
+  }
+}
+
+// Reconciles the full revealed/opened chest lists the server sends on join
+// and with every snapshot (mirrors the collectedRelics reconciliation
+// pattern) — this is what makes a late-joining or newly-scrolled-in client
+// see a chest's correct state instead of defaulting to hidden.
+function syncChestLists(revealedIds: string[], openedIds: string[]): void {
+  for (const id of revealedIds) {
+    if (!revealedChests.has(id)) {
+      revealedChests.add(id);
+      setChestState(id, "revealed");
+    }
+  }
+  for (const id of openedIds) {
+    if (!openedChests.has(id)) {
+      revealedChests.delete(id);
+      openedChests.add(id);
+      setChestState(id, "opened");
+    }
+  }
+}
+
 function spawnCollectibleAuraSparks(anim: RelicAnim, tSec: number, bob: number, pulse: number): void {
   if (elapsedMs - anim.lastParticleMs < 95 / Math.max(0.1, activePerformanceConfig().collectibleSparkScale)) return;
   anim.lastParticleMs = elapsedMs;
@@ -7175,7 +7340,7 @@ function openNextLocalSkillOffer(): void {
   const offerId = `local:${localPlayer.id}:${level}:${localSkillOfferSerial++}`;
   const offer = generateSkillCardOffer(localPlayer, offerId, `${serverSeed}:${offerId}:${elapsedMs | 0}`);
   if (!offer) return;
-  skillCardModal.open(offer, (_offer, card) => {
+  skillCardModal.open(offer, localPlayer.coins, (_offer, card) => {
     if (!localPlayer) return;
     if (applySkillToPlayer(localPlayer, card.id)) {
       levelUpFeedback(localPlayer);
@@ -7186,7 +7351,7 @@ function openNextLocalSkillOffer(): void {
 
 function openOnlineSkillOffer(offer: SkillCardOffer): void {
   if (offer.playerId !== localPlayerId) return;
-  skillCardModal.open(offer, (selectedOffer, card) => {
+  skillCardModal.open(offer, localPlayer?.coins ?? 0, (selectedOffer, card) => {
     sendWsMessage({ type: "select_skill_card", offerId: selectedOffer.offerId, cardId: card.id }, "critical");
   });
 }
@@ -7231,6 +7396,11 @@ function collectLocalCollectible(id: string, kind: CollectibleKind, x: number, y
   pushNotification(visual.notification, visual.color);
 }
 
+// Mirrors relicRespawnSeconds in apps/server-go/internal/game/room.go —
+// local (offline) mode has no server, so it tracks its own respawn timers.
+const RELIC_RESPAWN_MS = 300_000;
+const relicRespawnAtMs = new Map<string, number>();
+
 function collectLocalPickups(): void {
   if (!localPlayer || selectedMode !== "local") return;
   const px = localPlayer.position.x + PLAYER_WIDTH / 2;
@@ -7243,11 +7413,18 @@ function collectLocalPickups(): void {
     const chunk = loadedChunks.get(chunkY);
     if (!chunk) continue;
     for (const relic of chunk.relics) {
-      if (collectedRelics.has(relic.id)) continue;
       const x = relic.x * TILE_SIZE + TILE_SIZE / 2;
       const y = (chunk.worldTileY + relic.y) * TILE_SIZE + TILE_SIZE / 2;
+      if (collectedRelics.has(relic.id)) {
+        const respawnAt = relicRespawnAtMs.get(relic.id);
+        if (respawnAt === undefined || elapsedMs < respawnAt) continue;
+        collectedRelics.delete(relic.id);
+        relicRespawnAtMs.delete(relic.id);
+        spawnCollectibleAnim(relic.id, collectibleKindForRelicId(relic.id), x, y + COLLECTIBLE_PLATFORM_Y_OFFSET);
+      }
       if (Math.hypot(px - x, py - y) > radius) continue;
       collectLocalCollectible(relic.id, collectibleKindForRelicId(relic.id), x, y, GAME_REWARD_CONFIG.xpCollectibleValue, 1);
+      relicRespawnAtMs.set(relic.id, elapsedMs + RELIC_RESPAWN_MS);
     }
   }
 
@@ -7263,6 +7440,79 @@ function collectLocalPickups(): void {
       collectible.xpValue,
       collectible.type === "coin" ? 1 : 0
     );
+  }
+}
+
+// Mirrors kickHitsPoint in apps/server-go/internal/game/world.go — same
+// rect math as localPlayerKickHitsEnemy, against a fixed world point
+// instead of an enemy's bounds.
+function localPlayerKickHitsPoint(player: PlayerState, x: number, y: number): boolean {
+  if (player.kickPhase !== "active") return false;
+  const hitRange = Math.max(20, player.hitRange);
+  const rangeX = player.facing > 0 ? player.position.x : player.position.x - hitRange;
+  return rangeX < x + 12 &&
+    rangeX + PLAYER_WIDTH + hitRange > x - 12 &&
+    player.position.y - 4 < y + 12 &&
+    player.position.y + PLAYER_HEIGHT + 4 > y - 12;
+}
+
+function openLocalChest(chestId: string, worldX: number, worldY: number): void {
+  if (!localPlayer) return;
+  ensurePlayerSkillState(localPlayer);
+  const n = rewardHash(`${chestId}:${elapsedMs | 0}`);
+  const coins = CHEST_COIN_MIN + (n % (CHEST_COIN_MAX - CHEST_COIN_MIN + 1));
+  const beforeLevel = localPlayer.level;
+  grantLocalXp(localPlayer, Math.round(CHEST_XP_VALUE * localPlayer.xpGainMultiplier));
+  if (localPlayer.level > beforeLevel) {
+    levelUpFeedback(localPlayer);
+    queueLocalLevelChoices(localPlayer, beforeLevel);
+  }
+  localPlayer.coins += coins;
+  revealedChests.delete(chestId);
+  openedChests.add(chestId);
+  chestOpenedAtMs.set(chestId, elapsedMs + CHEST_RESPAWN_MS);
+  setChestState(chestId, "opened");
+  pushNotification(`TREASURE! +${coins} coins`, PAL.coinGold);
+}
+
+// Mirrors checkChestInteraction in apps/server-go/internal/game/room.go —
+// local (offline) mode has no server, so it drives the same hidden ->
+// revealed (kick) -> opened (walk up) -> hidden-again (respawn) lifecycle
+// itself.
+function collectLocalChests(): void {
+  if (!localPlayer || selectedMode !== "local") return;
+  const px = localPlayer.position.x + PLAYER_WIDTH / 2;
+  const py = localPlayer.position.y + PLAYER_HEIGHT / 2;
+  const radius = Math.max(GAME_REWARD_CONFIG.pickupRadius, localPlayer.pickupRadius);
+  const centerChunkY = chunkYForWorldY(localPlayer.position.y);
+
+  for (let chunkY = Math.max(0, centerChunkY - 1); chunkY <= centerChunkY + 1; chunkY += 1) {
+    const chunk = loadedChunks.get(chunkY);
+    if (!chunk) continue;
+    for (const chest of chunk.chests) {
+      const worldX = chest.x * TILE_SIZE + TILE_SIZE / 2;
+      const worldY = (chunk.worldTileY + chest.y) * TILE_SIZE + TILE_SIZE / 2;
+
+      if (openedChests.has(chest.id)) {
+        const respawnAt = chestOpenedAtMs.get(chest.id);
+        if (respawnAt === undefined || elapsedMs < respawnAt) continue;
+        openedChests.delete(chest.id);
+        chestOpenedAtMs.delete(chest.id);
+        setChestState(chest.id, "hidden");
+        continue;
+      }
+
+      if (!revealedChests.has(chest.id)) {
+        if (localPlayerKickHitsPoint(localPlayer, worldX, worldY)) {
+          revealedChests.add(chest.id);
+          setChestState(chest.id, "revealed");
+        }
+        continue;
+      }
+
+      if (Math.hypot(px - worldX, py - worldY) > radius) continue;
+      openLocalChest(chest.id, worldX, worldY);
+    }
   }
 }
 
@@ -7489,6 +7739,20 @@ function formatHudStat(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+const HEART_ROW_MAX = 10;
+
+// Zelda/Dishonored-style heart row: filled/empty heart emoji instead of a
+// numeric HP bar. Falls back to a compact "heart x N/M" once max HP grows
+// past what's readable as individual icons (skill stacking can push it well
+// beyond the base cap).
+function heartRow(hp: number, hpMax: number): string {
+  const roundedMax = Math.max(1, Math.round(hpMax));
+  const roundedHp = Math.max(0, Math.round(hp));
+  if (roundedMax > HEART_ROW_MAX) return `❤️ ${roundedHp}/${roundedMax}`;
+  const full = Math.min(roundedMax, roundedHp);
+  return "❤️".repeat(full) + "\u{1F90D}".repeat(roundedMax - full);
+}
+
 class PlayerStatsHud {
   readonly container = new Container();
   private readonly panel = new Graphics();
@@ -7499,7 +7763,7 @@ class PlayerStatsHud {
   });
   private readonly hpText = new Text({
     text: "",
-    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    style: { fontFamily: "monospace", fontSize: hudPx(13) },
   });
   private readonly shieldText = new Text({
     text: "",
@@ -7517,18 +7781,28 @@ class PlayerStatsHud {
     text: "",
     style: { fill: PAL.hazardGlow, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
+  private readonly coinText = new Text({
+    text: "",
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  // Kick/attack cooldown — updated every frame outside the statsKey memo
+  // below since it changes continuously while recharging.
+  private readonly cooldownBar = new Graphics();
   private layoutKey = "";
   private statsKey = "";
+  private cooldownBarX = 0;
+  private cooldownBarY = 0;
+  private cooldownBarW = 0;
 
   constructor() {
-    this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.shieldText, this.xpText, this.levelText, this.atkText);
+    this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.shieldText, this.xpText, this.levelText, this.atkText, this.coinText, this.cooldownBar);
     disableDisplayEvents(this.container);
   }
 
   update(player: PlayerState, screenWidth: number): void {
     const width = hudPx(screenWidth < 520 ? 222 : 286);
     const hasShield = hudStatNumber(player.maxShield, 0) > 0;
-    const height = hudPx(hasShield ? 148 : 120);
+    const height = hudPx(hasShield ? 176 : 148);
     const x = hudPx(10);
     const y = hudPx(10);
     const layoutKey = `${width}|${height}|${x}|${y}`;
@@ -7553,6 +7827,11 @@ class PlayerStatsHud {
       this.levelText.y = hudPx(14);
       this.atkText.x = rightX;
       this.atkText.y = hudPx(hasShield ? 101 : 73);
+      this.coinText.x = leftX;
+      this.coinText.y = hudPx(hasShield ? 122 : 94);
+      this.cooldownBarX = hudPx(18);
+      this.cooldownBarY = hudPx(hasShield ? 150 : 122);
+      this.cooldownBarW = width - hudPx(36);
       this.statsKey = "";
     }
 
@@ -7561,44 +7840,50 @@ class PlayerStatsHud {
     const level = Math.max(1, Math.floor(hudStatNumber(player.level, 1)));
     const attack = Math.max(0, hudStatNumber(player.damage, PLAYER_BASE_DAMAGE));
     const xp = Math.max(0, Math.floor(hudStatNumber(player.relics, 0)));
+    const coins = Math.max(0, Math.floor(hudStatNumber(player.coins, 0)));
     const shieldMax = Math.max(0, hudStatNumber(player.maxShield, 0));
     const shield = Math.max(0, Math.min(shieldMax, hudStatNumber(player.shield, 0)));
     const skillCount = player.selectedSkills ? Object.values(player.selectedSkills).reduce((sum, stacks) => sum + Math.max(0, Math.floor(stacks)), 0) : 0;
     const xpNeeded = xpRequiredForLevel(level);
     const xpProgress = Math.min(xp, xpNeeded);
-    const statsKey = `${hp}|${hpMax}|${shield}|${shieldMax}|${level}|${attack}|${xpProgress}|${xpNeeded}|${xp}|${skillCount}`;
+
+    this.updateCooldownBar(player);
+
+    const statsKey = `${hp}|${hpMax}|${shield}|${shieldMax}|${level}|${attack}|${xpProgress}|${xpNeeded}|${xp}|${skillCount}|${coins}`;
     if (statsKey === this.statsKey) return;
     this.statsKey = statsKey;
 
-    const hpRatio = Math.max(0, Math.min(1, hp / hpMax));
     const xpRatio = Math.max(0, Math.min(1, xpProgress / xpNeeded));
     const statBarW = width - hudPx(36);
     const barX = hudPx(18);
     this.bars.clear();
-    this.bars.rect(barX, hudPx(56), statBarW, hudPx(8)).fill(PAL.hazardRed);
-    this.bars.rect(barX, hudPx(56), Math.round(statBarW * hpRatio), hudPx(8)).fill(hpRatio < 0.34 ? PAL.coinGold : PAL.canopyLight);
-    this.bars.rect(barX, hudPx(59), Math.round(statBarW * hpRatio), 1).fill({ color: PAL.hazardGlow, alpha: 0.38 });
+    // Slim diegetic-style sliver bars (Dishonored-esque) instead of boxy
+    // stat bars; HP itself is shown as a heart row below, not a bar.
     if (shieldMax > 0) {
       const shieldRatio = Math.max(0, Math.min(1, shield / shieldMax));
-      this.bars.rect(barX, hudPx(87), statBarW, hudPx(7)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-      this.bars.rect(barX, hudPx(87), Math.round(statBarW * shieldRatio), hudPx(7)).fill(PAL.portalGlow);
-      this.bars.rect(barX, hudPx(90), Math.round(statBarW * shieldRatio), 1).fill({ color: 0xffffff, alpha: 0.34 });
+      this.bars.rect(barX, hudPx(87), statBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.85 });
+      this.bars.rect(barX, hudPx(87), Math.round(statBarW * shieldRatio), hudPx(4)).fill(PAL.portalGlow);
     }
     const xpBarY = hudPx(hasShield ? 118 : 90);
-    this.bars.rect(barX, xpBarY, statBarW, hudPx(7)).fill({ color: PAL.stoneShadow, alpha: 0.9 });
-    this.bars.rect(barX, xpBarY, Math.round(statBarW * xpRatio), hudPx(7)).fill(PAL.portalBlue);
-    this.bars.rect(width - hudPx(106), hudPx(34), hudPx(84), hudPx(18)).fill(0x06100a);
-    this.bars.rect(width - hudPx(101), hudPx(38), hudPx(74), hudPx(10)).fill({ color: PAL.mossGreen, alpha: 0.86 });
-    this.bars.rect(width - hudPx(88), hudPx(hasShield ? 78 : 50), hudPx(8), hudPx(8)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(84), hudPx(hasShield ? 73 : 45), hudPx(4), hudPx(17)).fill(PAL.hazardGlow);
-    this.bars.rect(width - hudPx(78), hudPx(hasShield ? 83 : 55), hudPx(9), hudPx(4)).fill(PAL.hazardGlow);
+    this.bars.rect(barX, xpBarY, statBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.85 });
+    this.bars.rect(barX, xpBarY, Math.round(statBarW * xpRatio), hudPx(4)).fill(PAL.portalBlue);
 
-    this.hpText.text = `HP ${Math.ceil(hp)}/${Math.ceil(hpMax)}`;
+    this.hpText.text = heartRow(hp, hpMax);
     this.shieldText.visible = shieldMax > 0;
     this.shieldText.text = shieldMax > 0 ? `SH ${Math.ceil(shield)}/${Math.ceil(shieldMax)}` : "";
     this.xpText.text = `XP ${xpProgress}/${xpNeeded}`;
     this.levelText.text = `LVL ${level}`;
     this.atkText.text = skillCount > 0 ? `ATK ${formatHudStat(attack)} S${skillCount}` : `ATK ${formatHudStat(attack)}`;
+    this.coinText.text = `\u{1FA99} ${coins}`;
+  }
+
+  private updateCooldownBar(player: PlayerState): void {
+    const state = attackRechargeProgress(player);
+    this.cooldownBar.clear();
+    if (!state.visible) return;
+    const h = hudPx(4);
+    this.cooldownBar.rect(this.cooldownBarX, this.cooldownBarY, this.cooldownBarW, h).fill({ color: PAL.stoneShadow, alpha: 0.85 });
+    this.cooldownBar.rect(this.cooldownBarX, this.cooldownBarY, Math.round(this.cooldownBarW * state.progress), h).fill(state.color);
   }
 
   reset(): void {
@@ -7606,6 +7891,7 @@ class PlayerStatsHud {
     this.layoutKey = "";
     this.panel.clear();
     this.bars.clear();
+    this.cooldownBar.clear();
   }
 
   destroy(): void {
@@ -7638,7 +7924,8 @@ function skillCardShortDescription(card: SkillCard): string {
 
 function skillCardTooltipText(card: SkillCard): string {
   const nextStack = Math.min(card.maxStacks, card.currentStacks + 1);
-  return `${card.description} Stack ${card.currentStacks} to ${nextStack}/${card.maxStacks}. ${card.rarity.toUpperCase()} ${card.category.toUpperCase()}.`;
+  const costPart = card.coinCost > 0 ? ` Costs ${card.coinCost} coins.` : " Free.";
+  return `${card.description} Stack ${card.currentStacks} to ${nextStack}/${card.maxStacks}. ${card.rarity.toUpperCase()} ${card.category.toUpperCase()}.${costPart}`;
 }
 
 interface SkillCardView {
@@ -7647,6 +7934,7 @@ interface SkillCardView {
   icon: Graphics;
   stateGfx: Graphics;
   texts: Text[];
+  costText: Text;
   card: SkillCard;
   index: number;
   hover: boolean;
@@ -7658,6 +7946,7 @@ interface SkillCardView {
   width: number;
   height: number;
   selectedAtMs: number;
+  deniedAtMs: number;
 }
 
 class SkillCardModal {
@@ -7667,6 +7956,10 @@ class SkillCardModal {
   private readonly title = new Text({
     text: "LEVEL UP",
     style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 22, fontWeight: "900", stroke: { color: PAL.uiInk, width: 3 } },
+  });
+  private readonly coinSubtitle = new Text({
+    text: "",
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 11, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
   private readonly tooltipBg = new Graphics();
   private readonly tooltipText = new Text({
@@ -7681,31 +7974,49 @@ class SkillCardModal {
   private closeAtMs = 0;
   private screenWidth = 1;
   private screenHeight = 1;
+  private coins = 0;
 
   constructor() {
     this.container.visible = false;
     this.container.eventMode = "passive";
     this.container.zIndex = 10_000;
-    this.container.addChild(this.shade, this.panel, this.title, this.tooltipBg, this.tooltipText);
+    this.container.addChild(this.shade, this.panel, this.title, this.coinSubtitle, this.tooltipBg, this.tooltipText);
   }
 
   get active(): boolean {
     return !!this.offer;
   }
 
-  open(offer: SkillCardOffer, onSelect: (offer: SkillCardOffer, card: SkillCard) => void): void {
+  open(offer: SkillCardOffer, coins: number, onSelect: (offer: SkillCardOffer, card: SkillCard) => void): void {
     this.destroyCards();
     this.offer = offer;
     this.onSelect = onSelect;
     this.focusedIndex = 0;
     this.selectedCardId = null;
     this.closeAtMs = 0;
+    this.coins = coins;
+    this.coinSubtitle.text = `\u{1FA99} ${coins} — common cards are free, rare/epic cost coins`;
     this.container.visible = true;
     offer.cards.forEach((card, index) => this.cards.push(this.createCard(card, index)));
     for (const item of this.cards) this.container.addChild(item.root);
     this.container.addChild(this.tooltipBg, this.tooltipText);
     this.layout(pixi.screen.width, pixi.screen.height);
     this.redrawCards();
+  }
+
+  // Called every frame (see the main update loop) so affordability reflects
+  // coins picked up while the offer is open, not just a stale open-time
+  // snapshot.
+  setCoins(coins: number): void {
+    if (coins === this.coins) return;
+    this.coins = coins;
+    if (!this.offer) return;
+    this.coinSubtitle.text = `\u{1FA99} ${coins} — common cards are free, rare/epic cost coins`;
+    this.redrawCards();
+  }
+
+  private canAfford(card: SkillCard): boolean {
+    return card.coinCost <= this.coins;
   }
 
   close(): void {
@@ -7739,6 +8050,7 @@ class SkillCardModal {
       openNextLocalSkillOffer();
       return;
     }
+    if (this.cards.some((item) => nowMs - item.deniedAtMs < 420)) this.redrawCards();
     for (let i = 0; i < this.cards.length; i += 1) {
       const item = this.cards[i]!;
       const selectedProgress = item.selected ? Math.min(1, Math.max(0, (nowMs - item.selectedAtMs) / 260)) : 0;
@@ -7767,6 +8079,9 @@ class SkillCardModal {
     this.title.anchor.set(0.5);
     this.title.x = Math.round(screenWidth / 2);
     this.title.y = panelY + 34;
+    this.coinSubtitle.anchor.set(0.5);
+    this.coinSubtitle.x = Math.round(screenWidth / 2);
+    this.coinSubtitle.y = panelY + 54;
 
     const cardW = screenWidth < 560 ? Math.floor((panelW - 34) / 3) : 178;
     const cardH = screenHeight < 430 ? 198 : 226;
@@ -7792,6 +8107,11 @@ class SkillCardModal {
     const item = this.cards[index];
     if (!this.offer || !item || this.selectedCardId) return false;
     e?.preventDefault();
+    if (!this.canAfford(item.card)) {
+      item.deniedAtMs = performance.now();
+      this.redrawCards();
+      return true;
+    }
     item.selected = true;
     item.pressed = false;
     item.selectedAtMs = performance.now();
@@ -7823,13 +8143,17 @@ class SkillCardModal {
       new Text({ text: `STACK ${card.currentStacks} > ${Math.min(card.maxStacks, card.currentStacks + 1)}/${card.maxStacks}`, style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
       new Text({ text: `${index + 1}`, style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
     ];
+    const costText = new Text({
+      text: card.coinCost > 0 ? `\u{1FA99} ${card.coinCost}` : "FREE",
+      style: { fill: card.coinCost > 0 ? PAL.coinGold : PAL.mossBright, fontFamily: "monospace", fontSize: 10, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+    });
     stateGfx.zIndex = 20;
     root.sortableChildren = true;
-    root.addChild(bg, icon, ...texts, stateGfx);
+    root.addChild(bg, icon, ...texts, costText, stateGfx);
     root.eventMode = "static";
     root.cursor = "pointer";
     root.label = `skill-card-${card.id}`;
-    const item: SkillCardView = { root, bg, icon, stateGfx, texts, card, index, hover: false, focus: false, pressed: false, selected: false, baseX: 0, baseY: 0, width: 178, height: 226, selectedAtMs: 0 };
+    const item: SkillCardView = { root, bg, icon, stateGfx, texts, costText, card, index, hover: false, focus: false, pressed: false, selected: false, baseX: 0, baseY: 0, width: 178, height: 226, selectedAtMs: 0, deniedAtMs: 0 };
     root.on("pointerover", () => {
       if (this.selectedCardId) return;
       item.hover = true;
@@ -7903,10 +8227,12 @@ class SkillCardModal {
   private drawCard(item: SkillCardView, w: number, h: number): void {
     const rarity = SKILL_RARITY_COLORS[item.card.rarity];
     const active = item.hover || item.focus || item.selected;
+    const affordable = this.canAfford(item.card);
+    const denied = performance.now() - item.deniedAtMs < 420;
     item.bg.clear();
     item.bg.rect(4, 5, w, h).fill({ color: 0x000000, alpha: 0.48 });
     item.bg.rect(0, 0, w, h).fill(rarity.fill);
-    item.bg.rect(3, 3, w - 6, h - 6).fill({ color: 0x101c14, alpha: 0.94 });
+    item.bg.rect(3, 3, w - 6, h - 6).fill({ color: 0x101c14, alpha: affordable ? 0.94 : 0.75 });
     item.bg.rect(0, 0, w, 4).fill(rarity.border);
     item.bg.rect(0, h - 4, w, 4).fill(rarity.border);
     item.bg.rect(0, 0, 4, h).fill(rarity.border);
@@ -7914,7 +8240,12 @@ class SkillCardModal {
     for (let i = 0; i < SKILL_RARITY_PIPS[item.card.rarity]; i += 1) {
       item.bg.rect(w - 18 - i * 10, 12, 6, 10).fill(i === 0 ? rarity.glow : rarity.border);
     }
-    if (active) {
+    if (!affordable) {
+      item.bg.rect(3, 3, w - 6, h - 6).fill({ color: 0x000000, alpha: 0.4 });
+    }
+    if (denied) {
+      item.bg.rect(4, 4, w - 8, h - 8).stroke({ color: PAL.hazardRed, alpha: 0.9, width: 3 });
+    } else if (active) {
       item.bg.rect(6, 6, w - 12, h - 12).stroke({ color: item.selected ? rarity.glow : PAL.portalGlow, alpha: item.selected ? 0.95 : 0.72, width: item.selected ? 3 : 2 });
       item.bg.rect(10, 10, w - 20, h - 20).stroke({ color: rarity.glow, alpha: 0.28, width: 1 });
     }
@@ -7929,8 +8260,8 @@ class SkillCardModal {
     }
     item.icon.clear();
     const iconColor = skillCategoryColor(item.card.category);
-    item.icon.circle(30, 30, 18).fill({ color: iconColor, alpha: 0.28 });
-    item.icon.circle(30, 30, 14).stroke({ color: iconColor, alpha: 0.95, width: 2 });
+    item.icon.circle(30, 30, 18).fill({ color: iconColor, alpha: affordable ? 0.28 : 0.12 });
+    item.icon.circle(30, 30, 14).stroke({ color: iconColor, alpha: affordable ? 0.95 : 0.4, width: 2 });
     item.icon.rect(22, 28, 16, 4).fill(iconColor);
     item.icon.rect(28, 22, 4, 16).fill(iconColor);
     const [iconText, name, desc, meta, stack, hotkey] = item.texts;
@@ -7948,6 +8279,11 @@ class SkillCardModal {
     stack.y = h - 30;
     hotkey.x = w - 54;
     hotkey.y = 13;
+    item.costText.text = item.card.coinCost > 0 ? `\u{1FA99} ${item.card.coinCost}` : "FREE";
+    item.costText.style.fill = item.card.coinCost === 0 ? PAL.mossBright : affordable ? PAL.coinGold : PAL.hazardRed;
+    item.costText.x = w - 60;
+    item.costText.y = h - 30;
+    for (const t of item.texts) t.alpha = affordable ? 1 : 0.55;
   }
 
   private destroyCards(): void {
@@ -7965,6 +8301,12 @@ let hudPhaseTxt: Text;
 let playerStatsHud: PlayerStatsHud | null = null;
 const hudRowTexts: Text[] = [];
 const hudLegendTexts: Text[] = [];
+const hudEmoteBarTexts: Text[] = [];
+let hudEmoteBarGfx: Graphics;
+const hudChatTexts: Text[] = [];
+let hudChatGfx: Graphics;
+let hudChatTitle: Text;
+let lastChatLayoutKey = "";
 let spectatorOverlayText: Text | null = null;
 let lastHudRegion: number | null = null;
 let lastHudLayoutKey = "";
@@ -7985,6 +8327,12 @@ function destroyGameHud(): void {
   hudPhaseTxt.destroy();
   hudRowTexts.splice(0).forEach((txt) => txt.destroy());
   hudLegendTexts.splice(0).forEach((txt) => txt.destroy());
+  hudEmoteBarTexts.splice(0).forEach((txt) => txt.destroy());
+  hudEmoteBarGfx.destroy();
+  hudChatTexts.splice(0).forEach((txt) => txt.destroy());
+  hudChatGfx.destroy();
+  hudChatTitle.destroy();
+  lastChatLayoutKey = "";
   hudBuilt = false;
   lastHudLayoutKey = "";
   lastScoreboardKey = "";
@@ -8034,7 +8382,7 @@ function ensureHud(): void {
     hudLayer.addChild(txt);
   }
 
-  const tips = ["HOW TO PLAY", "A/D MOVE", "SPACE JUMP", "S DROP", "F KICK"];
+  const tips = ["HOW TO PLAY", "A/D MOVE", "SPACE JUMP", "S DROP", "F KICK", "1-5 EMOTES", "ENTER CHAT"];
   for (const tip of tips) {
     const isTitle = tip === tips[0];
     const txt = new Text({
@@ -8042,6 +8390,35 @@ function ensureHud(): void {
       style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: hudPx(isTitle ? 12 : 10), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
     });
     hudLegendTexts.push(txt);
+    hudLayer.addChild(txt);
+  }
+
+  hudEmoteBarGfx = new Graphics();
+  hudLayer.addChild(hudEmoteBarGfx);
+  EMOTE_IDS.forEach((emoteId, i) => {
+    const txt = new Text({
+      text: `${i + 1} ${EMOTE_GLYPHS[emoteId]}`,
+      style: { fontFamily: "monospace", fontSize: hudPx(14), fontWeight: "900" },
+    });
+    txt.anchor.set(0.5, 0.5);
+    hudEmoteBarTexts.push(txt);
+    hudLayer.addChild(txt);
+  });
+
+  hudChatGfx = new Graphics();
+  hudChatTitle = new Text({
+    text: "CHAT",
+    style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: hudPx(11), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  hudLayer.addChild(hudChatGfx, hudChatTitle);
+  for (let i = 0; i < CHAT_LOG_MAX; i++) {
+    const txt = new Text({
+      text: "",
+      style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(10), fontWeight: "700", stroke: { color: PAL.uiInk, width: 2 } },
+    });
+    txt.anchor.set(0, 0);
+    txt.visible = false;
+    hudChatTexts.push(txt);
     hudLayer.addChild(txt);
   }
 }
@@ -8095,7 +8472,7 @@ function updateHud(tSec: number): void {
   const leaderboardX = Math.max(hudPx(10), pixi.screen.width - leaderboardW - hudPx(12));
   const leaderboardY = hudPx(10);
   const legendW = hudPx(Math.min(250, Math.max(190, Math.floor(pixi.screen.width * 0.28))));
-  const legendH = hudPx(104);
+  const legendH = hudPx(140);
   const legendX = Math.max(hudPx(10), pixi.screen.width - legendW - hudPx(12));
   const legendY = Math.max(leaderboardY + leaderboardH + hudPx(14), pixi.screen.height - legendH - hudPx(12));
   const layoutKey = `${pixi.screen.width}|${pixi.screen.height}|${leaderboardW}|${leaderboardH}|${legendW}`;
@@ -8113,6 +8490,21 @@ function updateHud(tSec: number): void {
       tip.x = legendX + hudPx(16);
       tip.y = legendY + hudPx(18 + i * 18);
     }
+
+    // Emote bar: shows every available emote next to the number key that
+    // triggers it, bottom-center of the screen — a visible menu of what's
+    // available rather than a blind keyboard shortcut.
+    const slotW = hudPx(34);
+    const barW = slotW * hudEmoteBarTexts.length + hudPx(12);
+    const barH = hudPx(30);
+    const barX = Math.round(pixi.screen.width / 2 - barW / 2);
+    const barY = pixi.screen.height - barH - hudPx(12);
+    hudEmoteBarGfx.clear();
+    drawHudPanel(hudEmoteBarGfx, barX, barY, barW, barH);
+    hudEmoteBarTexts.forEach((txt, i) => {
+      txt.x = barX + hudPx(6) + slotW * i + slotW / 2;
+      txt.y = barY + barH / 2;
+    });
   }
 
   const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}|${leaderboardW}`;
@@ -8137,6 +8529,39 @@ function updateHud(tSec: number): void {
 
   if (hudLegendTexts[0]!.text !== "HOW TO PLAY") hudLegendTexts[0]!.text = "HOW TO PLAY";
   hudLegendTexts[0]!.style.fill = PAL.coinGold;
+
+  // Chat history panel: bottom-left, a real persistent log (bounded by
+  // CHAT_LOG_MAX, not a time-based fade) — oldest message on top, like any
+  // normal chat window. Only takes up screen space once something's been
+  // said, so it doesn't clutter the HUD before anyone's typed anything.
+  const chatW = hudPx(Math.min(320, Math.max(220, Math.floor(pixi.screen.width * 0.3))));
+  const chatLineGap = hudPx(14);
+  const chatH = hudPx(30) + CHAT_LOG_MAX * chatLineGap;
+  const chatX = hudPx(10);
+  const chatY = pixi.screen.height - chatH - hudPx(12);
+  const chatLayoutKey = `${chatW}|${chatH}|${chatX}|${chatY}|${chatLog.length > 0}`;
+  if (chatLayoutKey !== lastChatLayoutKey) {
+    lastChatLayoutKey = chatLayoutKey;
+    hudChatGfx.clear();
+    if (chatLog.length > 0) drawHudPanel(hudChatGfx, chatX, chatY, chatW, chatH);
+    hudChatTitle.x = chatX + hudPx(12);
+    hudChatTitle.y = chatY + hudPx(10);
+  }
+  hudChatGfx.visible = chatLog.length > 0;
+  hudChatTitle.visible = chatLog.length > 0;
+  for (let i = 0; i < hudChatTexts.length; i++) {
+    const txt = hudChatTexts[i]!;
+    const entry = chatLog[i];
+    if (!entry) {
+      txt.visible = false;
+      continue;
+    }
+    txt.visible = true;
+    txt.text = `${entry.name}: ${entry.text}`;
+    txt.style.fill = entry.local ? PAL.coinGold : PAL.uiParchment;
+    txt.x = chatX + hudPx(12);
+    txt.y = chatY + hudPx(30) + i * chatLineGap;
+  }
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -9460,7 +9885,7 @@ function renderSkinSelect(sw: number, sh: number): void {
   previewRig.root.x = previewCx;
   previewRig.root.y = previewIslandY;
   previewRig.root.scale.set(1.9);
-  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
+  poseBodyRig(previewRig, { state: "idle", elapsedMs, speedFactor: 0, verticalVelocity: 0 });
 
   const rowW = Math.min(sw - 48, 360);
   const startX = Math.round(sw / 2 - rowW / 2);
@@ -9523,7 +9948,7 @@ function renderOnlineNickname(sw: number, sh: number): void {
   previewRig.root.x = px + panelW - 67;
   previewRig.root.y = py + 80;
   previewRig.root.scale.set(1.6);
-  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
+  poseBodyRig(previewRig, { state: "idle", elapsedMs, speedFactor: 0, verticalVelocity: 0 });
   const label = menuText("Nickname", 12, 0xd7f0cc, "900");
   label.x = px + 44;
   label.y = py + 82;
@@ -9581,7 +10006,7 @@ function renderConnecting(sw: number, sh: number): void {
   previewRig.root.x = Math.round(px + panelW / 2 - 90);
   previewRig.root.y = py + 132;
   previewRig.root.scale.set(1.8);
-  poseBodyRig(previewRig, "idle", elapsedMs, 0, 0);
+  poseBodyRig(previewRig, { state: "idle", elapsedMs, speedFactor: 0, verticalVelocity: 0 });
   const label = menuText(connectingMessage, 22, MENU_COLORS.gold, "900");
   label.anchor.set(0.5);
   label.x = Math.round(sw / 2);
@@ -9847,6 +10272,8 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
     enemies,
     collectibles,
     collectedRelics: [],
+    revealedChests: [],
+    openedChests: [],
     events: [],
     lastProcessedSeq,
   };
@@ -9955,6 +10382,34 @@ function handleMatchEvents(events: MatchEvent[]): void {
         const remote = remotePlayers.get(ev2.playerId);
         if (remote) spawnEmoteBubble(ev2.playerId, ev2.emoteId, remote.emoteText);
       }
+    } else if (ev2.type === "CHAT_MESSAGE") {
+      // The sender already sees their own message via sendChatMessage's
+      // optimistic local echo — only remote senders' messages get added here.
+      if (ev2.playerId !== localPlayerId) {
+        const name = playerNames.get(ev2.playerId) ?? "?";
+        pushChatMessage(name, ev2.text, false);
+      }
+    } else if (ev2.type === "COLLECTIBLE_RESPAWNED") {
+      // Server-authoritative relic respawn (see relicRespawnSeconds in
+      // room.go) — drop it from the "already collected" cache and redraw
+      // its pickup animation, since the chunk itself was already loaded
+      // and won't naturally re-spawn it on its own.
+      collectedRelics.delete(ev2.collectibleId);
+      spawnCollectibleAnim(ev2.collectibleId, collectibleKindForRelicId(ev2.collectibleId), ev2.x, ev2.y + COLLECTIBLE_PLATFORM_Y_OFFSET);
+    } else if (ev2.type === "CHEST_REVEALED") {
+      revealedChests.add(ev2.chestId);
+      setChestState(ev2.chestId, "revealed");
+    } else if (ev2.type === "CHEST_OPENED") {
+      revealedChests.delete(ev2.chestId);
+      openedChests.add(ev2.chestId);
+      setChestState(ev2.chestId, "opened");
+      const remote = remotePlayers.get(ev2.playerId);
+      if (remote && ev2.playerId !== localPlayerId) remote.current.coins += ev2.coins;
+      if (ev2.playerId === localPlayerId) pushNotification(`TREASURE! +${ev2.coins} coins`, PAL.coinGold);
+    } else if (ev2.type === "CHEST_RESET") {
+      revealedChests.delete(ev2.chestId);
+      openedChests.delete(ev2.chestId);
+      setChestState(ev2.chestId, "hidden");
     } else if (ev2.type === "PLAYER_KICK_HIT") {
       const target = ev2.targetId === localPlayerId
         ? localPlayer
@@ -10086,6 +10541,7 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   serverTick = parsed.tick; matchPhase = parsed.matchPhase;
   // Reconcile full collected set so late-joiners see correct coin state
   for (const id of parsed.collectedRelics) collectedRelics.add(id);
+  syncChestLists(parsed.revealedChests, parsed.openedChests);
   syncAuthoritativeCollectibles(parsed.collectibles ?? []);
   handleMatchEvents(parsed.events);
   const fullPlayerIds = new Set<string>();
@@ -10262,6 +10718,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         break;
       case "relicState":
         for (const id of parsed.collectedRelics) collectedRelics.add(id);
+        syncChestLists(parsed.revealedChests, parsed.openedChests);
         break;
       case "chunk": {
         const chunkY = parsed.chunk.chunkY;
@@ -10646,20 +11103,42 @@ function interpRemotes(dt: number): void {
   }
 }
 
-// Draw a small pixel-art crown above a player position
+// Draw a small pixel-art crown above a player position — three shaded gold
+// points (taller center point), a gem-studded band, and a dark outline for
+// readability against any background. Mirrors the look of the crown_1.png
+// asset used when it's loaded; this is the procedural fallback for when
+// that asset isn't available.
 function drawCrown(g: Graphics, cx: number, cy: number, color: number): void {
-  // Base band
-  g.rect(cx - 5, cy - 2, 10, 4).fill(PAL.coinGold);
-  g.rect(cx - 5, cy - 2, 10, 1).fill(PAL.coinGlow);
-  // Three points
-  g.rect(cx - 5, cy - 6, 2, 4).fill(PAL.coinGold);
-  g.rect(cx - 1, cy - 8, 2, 6).fill(PAL.coinGold);
-  g.rect(cx + 3, cy - 6, 2, 4).fill(PAL.coinGold);
-  // Gem on top middle point
-  g.rect(cx, cy - 8, 1, 2).fill(color);
-  // Dark outline
-  g.rect(cx - 6, cy - 9, 1, 8).fill({ color: PAL.uiInk, alpha: 0.5 });
-  g.rect(cx + 5,  cy - 9, 1, 8).fill({ color: PAL.uiInk, alpha: 0.5 });
+  const gold = PAL.coinGold;
+  const goldLight = PAL.coinGlow;
+  const goldShadow = 0xb3841b;
+  const ink = PAL.uiInk;
+
+  // Ink silhouette first (1px larger than each shape on every side), then
+  // the shaded gold fills paint over its interior, leaving a clean border.
+  g.rect(cx - 6, cy - 3, 12, 5).fill(ink); // band
+  g.rect(cx - 6, cy - 6, 4, 5).fill(ink);  // left point
+  g.rect(cx - 2, cy - 8, 4, 7).fill(ink);  // center point
+  g.rect(cx + 2, cy - 6, 4, 5).fill(ink);  // right point
+
+  // Band
+  g.rect(cx - 5, cy - 2, 10, 3).fill(gold);
+  g.rect(cx - 5, cy - 2, 10, 1).fill(goldLight);
+  g.rect(cx - 5, cy, 10, 1).fill(goldShadow);
+
+  // Three points (center tallest), each with a light-left/shadow-right edge
+  g.rect(cx - 5, cy - 5, 2, 3).fill(gold);
+  g.rect(cx - 5, cy - 5, 1, 3).fill(goldLight);
+  g.rect(cx - 1, cy - 7, 2, 5).fill(gold);
+  g.rect(cx - 1, cy - 7, 1, 5).fill(goldLight);
+  g.rect(cx, cy - 7, 1, 5).fill(goldShadow);
+  g.rect(cx + 3, cy - 5, 2, 3).fill(gold);
+  g.rect(cx + 4, cy - 5, 1, 3).fill(goldShadow);
+
+  // Gem inset in the band, jewel accented with the caller's color plus a
+  // small highlight glint.
+  g.rect(cx - 1, cy - 2, 2, 2).fill(color);
+  g.rect(cx - 1, cy - 2, 1, 1).fill({ color: 0xffffff, alpha: 0.55 });
 }
 
 // ── Draw actors ───────────────────────────────────────────────────────────────
@@ -10709,7 +11188,7 @@ function drawActors(): void {
     setRoundedPositionIfChanged(e.bodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
     e.bodyRig.root.scale.x = e.current.facing < 0 ? -1 : 1;
     const pose = bodyRigPoseForPlayer(e.current);
-    poseBodyRig(e.bodyRig, pose.state, elapsedMs, pose.speedFactor, pose.verticalSign);
+    poseBodyRig(e.bodyRig, { ...pose, elapsedMs });
     drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
     setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
@@ -10725,7 +11204,7 @@ function drawActors(): void {
     setRoundedPositionIfChanged(localBodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
     localBodyRig.root.scale.x = localPlayer.facing < 0 ? -1 : 1;
     const pose = bodyRigPoseForPlayer(localPlayer);
-    poseBodyRig(localBodyRig, pose.state, elapsedMs, pose.speedFactor, pose.verticalSign);
+    poseBodyRig(localBodyRig, { ...pose, elapsedMs });
     drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(localAttackBar, localPlayer, drawPosition, elapsedMs);
     localCrownSprite.visible = crownAvailable && localPlayerId === leaderId;
@@ -10767,6 +11246,17 @@ nicknameInput.addEventListener("keydown", (e) => {
     void joinOnlineGame(nicknameInput.value.trim());
   }
   e.stopPropagation();
+});
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    sendChatMessage();
+  } else if (e.key === "Escape") {
+    closeChat();
+  }
+  e.stopPropagation();
+});
+chatInput.addEventListener("blur", () => {
+  if (chatOpen) closeChat();
 });
 window.addEventListener("resize", () => {
   menuDirty = true;
@@ -10913,6 +11403,7 @@ pixi.ticker.add((ticker) => {
         updateLocalCheckpoint(localPlayer);
         simulateLocalEnemies(PHYSICS_STEP_SECONDS, tSec);
         collectLocalPickups();
+        collectLocalChests();
       }
 
       if (next.health < wasHealth) {
@@ -10963,6 +11454,7 @@ pixi.ticker.add((ticker) => {
   drawActors();
   const entityUpdateMs = performance.now() - entityUpdateStart + networkEntityApplyMs;
   const uiUpdateStart = performance.now();
+  skillCardModal.setCoins(localPlayer?.coins ?? 0);
   skillCardModal.update(performance.now());
   updateHud(tSec);
   updateInspectionOverlay();

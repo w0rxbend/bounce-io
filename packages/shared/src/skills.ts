@@ -24,7 +24,18 @@ export interface SkillCard {
   icon: string;
   maxStacks: number;
   currentStacks: number;
+  // 0 for common cards (always free, picked with XP-driven level-ups as
+  // before); rare/epic cards cost coins on top of being offered, so
+  // stronger cards are gated behind exploration/combat coin income, not
+  // just XP.
+  coinCost: number;
 }
+
+export const SKILL_RARITY_COIN_COST: Record<SkillRarity, number> = {
+  common: 0,
+  rare: 40,
+  epic: 90,
+};
 
 export interface SkillCardOffer {
   offerId: string;
@@ -192,6 +203,9 @@ export function applySkillToPlayer(player: PlayerState, skillId: string): boolea
   ensurePlayerSkillState(player);
   const current = skillStacks(player, skillId);
   if (current >= definition.maxStacks) return false;
+  const coinCost = SKILL_RARITY_COIN_COST[definition.rarity];
+  if (coinCost > 0 && player.coins < coinCost) return false;
+  if (coinCost > 0) player.coins -= coinCost;
   player.selectedSkills[skillId] = current + 1;
   if (skillId === "vital_growth") {
     player.maxHealth += 15;
@@ -216,6 +230,7 @@ function toCard(player: PlayerState, definition: SkillCardDefinition): SkillCard
     icon: definition.icon,
     maxStacks: definition.maxStacks,
     currentStacks: skillStacks(player, definition.id),
+    coinCost: SKILL_RARITY_COIN_COST[definition.rarity],
   };
 }
 

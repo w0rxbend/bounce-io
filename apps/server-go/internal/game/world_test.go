@@ -362,7 +362,7 @@ func TestRelicCollectionUpdatesAuthoritativeState(t *testing.T) {
 
 	state := &roomState{
 		room:            &Room{seed: seed},
-		collectedRelics: map[string]struct{}{},
+		collectedRelics: map[string]uint64{},
 		pendingEvents:   []MatchEvent{},
 	}
 	sess := &session{

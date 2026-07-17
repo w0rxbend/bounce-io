@@ -1,4 +1,5 @@
 import {
+  CHEST_SPAWN_CHANCE_PER_CHUNK,
   CHUNK_HEIGHT_TILES,
   CHUNK_WIDTH_TILES,
   GRAVITY,
@@ -11,6 +12,7 @@ import {
 } from "./constants.js";
 import type {
   BiomeMetadata,
+  ChestSpawn,
   EnemyKind,
   EnemySpawn,
   DifficultyMetrics,
@@ -683,6 +685,31 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     }
   }
 
+  // Treasure chest: rare, hidden under foliage, placed on a relic/risk
+  // platform not already used by the entry/exit. Revealed by a nearby kick,
+  // opened by walking up to it afterward (see collectLocalPickups in the
+  // client and checkChestInteraction on the Go server).
+  const chests: ChestSpawn[] = [];
+  if (!isCheckpoint && options.chunkY > 0) {
+    const chestRoll = hashSeed(options.seed, options.chunkY * 733 + 17) % 100;
+    if (chestRoll < Math.round(CHEST_SPAWN_CHANCE_PER_CHUNK * 100)) {
+      // width >= 4 (not just the >= 3 relic/risk minimum) so the offset
+      // below never lands on the same tile as that platform's relic coin
+      // (placed at the center, platform.x + floor(width/2)).
+      const candidates = plannedPlatforms.filter((platform) =>
+        platform.span !== entry && platform.span !== exit && platform.span.width >= 4 &&
+        (platform.route === "relic" || platform.route === "risk"));
+      if (candidates.length > 0) {
+        const pick = candidates[hashSeed(options.seed, options.chunkY * 991 + 3) % candidates.length]!;
+        const chestX = pick.span.x + 1;
+        const chestY = pick.span.y - 1;
+        if (chestY >= 0 && chestY < height && tiles[tileIndex(width, chestX, chestY)] === "empty") {
+          chests.push({ id: `chest:${options.chunkY}:0`, x: chestX, y: chestY });
+        }
+      }
+    }
+  }
+
   if (options.chunkY > 0) {
     if (biome.maxWindZones > 0) {
       const windCandidates = allPlatforms
@@ -830,6 +857,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
     routes,
     hazards,
     relics,
+    chests,
     enemies,
     jumpPads,
     windZones

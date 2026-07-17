@@ -6,12 +6,12 @@ const (
 	GameVersion     = "0.1.0"
 	ProtocolVersion = 2
 
-	TileSize                       = 16
-	ChunkWidthTiles                = 36
-	ChunkHeightTiles               = 18
-	CheckpointPortalWidthTiles     = 4
-	PlayerWidth                    = 14
-	PlayerHeight                   = 22
+	TileSize                   = 16
+	ChunkWidthTiles            = 36
+	ChunkHeightTiles           = 18
+	CheckpointPortalWidthTiles = 4
+	PlayerWidth                = 14
+	PlayerHeight               = 22
 	// PlayerCollisionCornerRadius mirrors PLAYER_COLLISION_CORNER_RADIUS in
 	// packages/shared/src/constants.ts: capsule-style rounded corners for
 	// ground/ceiling checks so the outer edge doesn't trigger a landing on
@@ -72,6 +72,12 @@ const (
 	PickupRadius               = 24.0
 	XPPerLevelBase             = 100.0
 	XPPerLevelGrowth           = 1.25
+
+	ChestSpawnChancePerChunk = 0.10
+	ChestRevealRangePX       = 28.0
+	ChestCoinMin             = 5
+	ChestCoinMax             = 10
+	ChestXPValue             = 40
 )
 
 type MessageEnvelope struct {
@@ -166,6 +172,11 @@ var EmoteIDs = map[string]struct{}{
 	"gg":    {},
 	"angry": {},
 	"heart": {},
+}
+
+type ClientChat struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
 }
 
 type InputState struct {
@@ -348,6 +359,7 @@ type SkillCard struct {
 	Icon          string `json:"icon"`
 	MaxStacks     int    `json:"maxStacks"`
 	CurrentStacks int    `json:"currentStacks"`
+	CoinCost      int    `json:"coinCost"`
 }
 
 type SkillCardOffer struct {
@@ -401,6 +413,8 @@ type SnapshotMessage struct {
 	Enemies          []EnemyState        `json:"enemies"`
 	Collectibles     []CollectibleState  `json:"collectibles,omitempty"`
 	CollectedRelics  []string            `json:"collectedRelics"`
+	RevealedChests   []string            `json:"revealedChests"`
+	OpenedChests     []string            `json:"openedChests"`
 	Events           []MatchEvent        `json:"events"`
 	LastProcessedSeq map[string]int64    `json:"lastProcessedSeq"`
 }
@@ -417,6 +431,8 @@ type RelicStateMessage struct {
 	Type            string   `json:"type"`
 	ServerTime      int64    `json:"serverTime"`
 	CollectedRelics []string `json:"collectedRelics"`
+	RevealedChests  []string `json:"revealedChests"`
+	OpenedChests    []string `json:"openedChests"`
 }
 
 type ErrorMessage struct {
@@ -474,6 +490,7 @@ type GeneratedChunk struct {
 	Routes            []RouteBranch      `json:"routes"`
 	Hazards           []HazardSpawn      `json:"hazards,omitempty"`
 	Relics            []RelicSpawn       `json:"relics"`
+	Chests            []ChestSpawn       `json:"chests"`
 	Enemies           []EnemySpawn       `json:"enemies"`
 	JumpPads          []JumpPadSpawn     `json:"jumpPads"`
 	WindZones         []WindZoneSpawn    `json:"windZones"`
@@ -488,6 +505,12 @@ type PlatformSpan struct {
 }
 
 type RelicSpawn struct {
+	ID string `json:"id"`
+	X  int    `json:"x"`
+	Y  int    `json:"y"`
+}
+
+type ChestSpawn struct {
 	ID string `json:"id"`
 	X  int    `json:"x"`
 	Y  int    `json:"y"`

@@ -100,7 +100,7 @@ func TestContestedRelicRequiresServerSideHold(t *testing.T) {
 	}
 	state := &roomState{
 		room:            &Room{seed: seed, cfg: RoomConfig{TickRate: DefaultTickRate}},
-		collectedRelics: map[string]struct{}{},
+		collectedRelics: map[string]uint64{},
 		pendingEvents:   []MatchEvent{},
 		sessions:        map[string]*session{"owner": owner, "challenger": challenger},
 	}

@@ -347,6 +347,8 @@ func (s *Server) readLoop(ctx context.Context, client *Client, conn *websocket.C
 			s.handleSelectSkillCard(client, data)
 		case "emote":
 			s.handleEmote(client, data)
+		case "chat":
+			s.handleChat(client, data)
 		case "ping":
 			var ping ClientPing
 			if json.Unmarshal(data, &ping) == nil {
@@ -489,6 +491,20 @@ func (s *Server) handleEmote(client *Client, data []byte) {
 		return
 	}
 	room.Emote(playerID, msg.EmoteID)
+}
+
+func (s *Server) handleChat(client *Client, data []byte) {
+	room, playerID, _ := client.Session()
+	if room == nil || playerID == "" {
+		_ = client.EnqueueJSON(ErrorMessage{Type: "error", Code: "NOT_JOINED", Message: "send join first"})
+		return
+	}
+	var msg ClientChat
+	if err := json.Unmarshal(data, &msg); err != nil || msg.Text == "" {
+		s.logParseError(client, nil, "PARSE_ERROR", err)
+		return
+	}
+	room.Chat(playerID, msg.Text)
 }
 
 func (s *Server) defaultJoinRoomID() string {

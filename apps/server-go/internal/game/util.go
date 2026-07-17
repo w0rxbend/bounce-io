@@ -61,3 +61,26 @@ func sanitizeSkinID(value string) string {
 	}
 	return value
 }
+
+// sanitizeChatText allows general printable text (letters, punctuation,
+// emoji, spaces) unlike sanitizeName/sanitizeSkinID's restrictive charsets,
+// but strips control characters and caps length so a malicious client can't
+// broadcast an oversized or terminal-control-laden payload to the room.
+func sanitizeChatText(value string) string {
+	value = strings.TrimSpace(value)
+	out := make([]rune, 0, len(value))
+	for _, r := range value {
+		if len(out) >= 240 {
+			break
+		}
+		if r == '\n' || r == '\t' {
+			out = append(out, ' ')
+			continue
+		}
+		if unicode.IsControl(r) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return strings.TrimSpace(string(out))
+}

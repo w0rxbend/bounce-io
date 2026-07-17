@@ -73,12 +73,15 @@ type roomState struct {
 	countdownEndsAt   time.Time
 	sessions          map[string]*session
 	tokenToPlayer     map[string]string
-	collectedRelics   map[string]struct{}
+	collectedRelics   map[string]uint64 // relic ID -> tick it was collected at (respawns after relicRespawnSeconds)
+	chestRevealed     map[string]struct{}
+	openedChests      map[string]uint64 // chest ID -> tick it was opened at (respawns hidden after chestRespawnSeconds)
 	defeatedEnemies   map[string]struct{}
 	enemies           map[string]EnemyState
 	collectibles      map[string]CollectibleState
 	jumpPadCooldowns  map[string]uint64
 	emoteCooldowns    map[string]uint64
+	chatCooldowns     map[string]uint64
 	pvpHitCooldowns   map[string]uint64
 	pvpCombat         map[string]*pvpCombatState
 	relicClaims       map[string]relicClaimState
@@ -213,7 +216,7 @@ func (cmd joinCommand) apply(s *roomState) {
 					}
 					s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_RECONNECTED", "playerId": existing.playerID})
 				}
-				_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
+				_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList(), RevealedChests: s.revealedChestList(), OpenedChests: s.openedChestList()})
 				cmd.reply <- joinReply{playerID: existing.playerID, token: existing.token}
 				return
 			}
@@ -275,7 +278,7 @@ func (cmd joinCommand) apply(s *roomState) {
 		Spectator:    cmd.spectator,
 	})
 	_ = cmd.client.EnqueueJSON(ChunkMessage{Type: "chunk", Chunk: GenerateChunk(s.room.seed, 0)})
-	_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList()})
+	_ = cmd.client.EnqueueJSON(RelicStateMessage{Type: "relicState", ServerTime: unixMillis(now), CollectedRelics: s.collectedRelicList(), RevealedChests: s.revealedChestList(), OpenedChests: s.openedChestList()})
 	for _, existing := range s.sessions {
 		if existing.playerID == playerID || !existing.connected {
 			continue
@@ -385,6 +388,11 @@ type emoteCommand struct {
 	emoteID  string
 }
 
+type chatCommand struct {
+	playerID string
+	text     string
+}
+
 func (cmd pickupCollectibleCommand) apply(s *roomState) {
 	sess := s.sessions[cmd.playerID]
 	if sess == nil || !sess.connected || sess.spectator {
@@ -406,6 +414,22 @@ func (cmd emoteCommand) apply(s *roomState) {
 	}
 	s.markEmoted(cmd.playerID)
 	s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_EMOTE", "playerId": cmd.playerID, "emoteId": cmd.emoteID})
+}
+
+func (cmd chatCommand) apply(s *roomState) {
+	sess := s.sessions[cmd.playerID]
+	if sess == nil || !sess.connected || sess.spectator {
+		return
+	}
+	text := sanitizeChatText(cmd.text)
+	if text == "" {
+		return
+	}
+	if !s.canChat(cmd.playerID) {
+		return
+	}
+	s.markChatted(cmd.playerID)
+	s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "CHAT_MESSAGE", "playerId": cmd.playerID, "text": text})
 }
 
 func (cmd selectSkillCardCommand) apply(s *roomState) {
@@ -604,6 +628,13 @@ func (r *Room) Emote(playerID, emoteID string) {
 	}
 }
 
+func (r *Room) Chat(playerID, text string) {
+	select {
+	case r.commands <- chatCommand{playerID: playerID, text: text}:
+	default:
+	}
+}
+
 func (r *Room) SelectSkillCard(playerID, offerID, cardID string) {
 	select {
 	case r.commands <- selectSkillCardCommand{playerID: playerID, offerID: offerID, cardID: cardID}:
@@ -643,12 +674,15 @@ func (r *Room) loop() {
 		phase:             "waiting",
 		sessions:          map[string]*session{},
 		tokenToPlayer:     map[string]string{},
-		collectedRelics:   map[string]struct{}{},
+		collectedRelics:   map[string]uint64{},
+		chestRevealed:     map[string]struct{}{},
+		openedChests:      map[string]uint64{},
 		defeatedEnemies:   map[string]struct{}{},
 		enemies:           map[string]EnemyState{},
 		collectibles:      map[string]CollectibleState{},
 		jumpPadCooldowns:  map[string]uint64{},
 		emoteCooldowns:    map[string]uint64{},
+		chatCooldowns:     map[string]uint64{},
 		pvpHitCooldowns:   map[string]uint64{},
 		pvpCombat:         map[string]*pvpCombatState{},
 		relicClaims:       map[string]relicClaimState{},
@@ -739,6 +773,24 @@ func (s *roomState) markEmoted(playerID string) {
 		cooldownTicks = 1
 	}
 	s.emoteCooldowns[playerID] = s.tick + cooldownTicks
+}
+
+func (s *roomState) canChat(playerID string) bool {
+	if s.chatCooldowns == nil {
+		s.chatCooldowns = map[string]uint64{}
+	}
+	return s.chatCooldowns[playerID] <= s.tick
+}
+
+func (s *roomState) markChatted(playerID string) {
+	if s.chatCooldowns == nil {
+		s.chatCooldowns = map[string]uint64{}
+	}
+	cooldownTicks := uint64(math.Ceil(0.6 * float64(s.room.cfg.TickRate)))
+	if cooldownTicks < 1 {
+		cooldownTicks = 1
+	}
+	s.chatCooldowns[playerID] = s.tick + cooldownTicks
 }
 
 func (s *roomState) effectiveTickRate() int {
@@ -847,6 +899,7 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 				})
 			}
 			s.checkRelicCollection(sess)
+			s.checkChestInteraction(sess)
 			s.checkDynamicCollectibleCollection(sess)
 			chunkY := ChunkYForWorldY(sess.player.Position.Y)
 			if chunkY > sess.player.CheckpointChunkY && IsCheckpointChunk(chunkY) {
@@ -923,6 +976,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 		lastProcessed[sess.playerID] = sess.lastProcessedSeq
 	}
 	collectedRelics := s.collectedRelicList()
+	revealedChests := s.revealedChestList()
+	openedChests := s.openedChestList()
 	s.spatialIndex = buildDynamicSpatialIndex(s, playerEntities)
 
 	events := s.enrichEvents(s.pendingEvents, s.tick, s.snapshotSeq)
@@ -967,6 +1022,8 @@ func (s *roomState) broadcastSnapshot(now time.Time) {
 				Enemies:          scopedEnemies,
 				Collectibles:     scopedCollectibles,
 				CollectedRelics:  collectedRelics,
+				RevealedChests:   revealedChests,
+				OpenedChests:     openedChests,
 				Events:           []MatchEvent{},
 				LastProcessedSeq: lastProcessed,
 			}
@@ -1278,6 +1335,17 @@ func quantize2(value float64) float64 {
 	return math.Round(value*100) / 100
 }
 
+// relicRespawnSeconds is how long a collected world relic stays gone before
+// it becomes collectible again — long enough that it's not farmable in a
+// loop, short enough that players who join partway through a long-running
+// room still find things to collect instead of a picked-clean world.
+const relicRespawnSeconds = 300.0
+
+// chestRespawnSeconds is how long an opened treasure chest stays gone
+// (and re-hidden under foliage) before it can be revealed and opened again.
+// Rarer than relics, so the window is longer.
+const chestRespawnSeconds = 600.0
+
 func (s *roomState) checkRelicCollection(sess *session) {
 	player := &sess.player
 	px := player.Position.X + float64(PlayerWidth)/2
@@ -1287,11 +1355,23 @@ func (s *roomState) checkRelicCollection(sess *session) {
 	for chunkY := max(0, centerChunkY-1); chunkY <= centerChunkY+1; chunkY++ {
 		chunk := GenerateChunk(s.room.seed, chunkY)
 		for _, relic := range chunk.Relics {
-			if _, ok := s.collectedRelics[relic.ID]; ok {
-				continue
-			}
 			worldX := float64(relic.X*TileSize) + float64(TileSize)/2
 			worldY := float64((chunk.WorldTileY+relic.Y)*TileSize) + float64(TileSize)/2
+			if collectedTick, ok := s.collectedRelics[relic.ID]; ok {
+				if s.tick < collectedTick+s.secondsToTicks(relicRespawnSeconds) {
+					continue
+				}
+				delete(s.collectedRelics, relic.ID)
+				if s.relicClaims != nil {
+					delete(s.relicClaims, relic.ID)
+				}
+				s.pendingEvents = append(s.pendingEvents, MatchEvent{
+					"type":          "COLLECTIBLE_RESPAWNED",
+					"collectibleId": relic.ID,
+					"x":             worldX,
+					"y":             worldY,
+				})
+			}
 			if math.Hypot(px-worldX, py-worldY) > math.Max(PickupRadius, player.PickupRadius) {
 				continue
 			}
@@ -1299,7 +1379,7 @@ func (s *roomState) checkRelicCollection(sess *session) {
 			if !ok {
 				continue
 			}
-			s.collectedRelics[relic.ID] = struct{}{}
+			s.collectedRelics[relic.ID] = s.tick
 			if s.relicClaims != nil {
 				delete(s.relicClaims, relic.ID)
 			}
@@ -1323,6 +1403,81 @@ func (s *roomState) checkRelicCollection(sess *session) {
 				"hotspot":    relicHotspotKind(relic.ID),
 				"regionId":   chunk.RegionID,
 				"chunkY":     chunk.ChunkY,
+			})
+		}
+	}
+}
+
+// checkChestInteraction drives a hidden chest through its lifecycle:
+// hidden (under foliage, invisible to the client) -> revealed (a nearby
+// active kick uncovers it) -> opened (player walks up to the revealed
+// chest, collects a one-time coin+XP reward) -> hidden again after
+// chestRespawnSeconds, so late joiners eventually get a shot at it too.
+func (s *roomState) checkChestInteraction(sess *session) {
+	if s.chestRevealed == nil {
+		s.chestRevealed = map[string]struct{}{}
+	}
+	if s.openedChests == nil {
+		s.openedChests = map[string]uint64{}
+	}
+	player := &sess.player
+	px := player.Position.X + float64(PlayerWidth)/2
+	py := player.Position.Y + float64(PlayerHeight)/2
+	centerChunkY := ChunkYForWorldY(player.Position.Y)
+
+	for chunkY := max(0, centerChunkY-1); chunkY <= centerChunkY+1; chunkY++ {
+		chunk := GenerateChunk(s.room.seed, chunkY)
+		for _, chest := range chunk.Chests {
+			worldX := float64(chest.X*TileSize) + float64(TileSize)/2
+			worldY := float64((chunk.WorldTileY+chest.Y)*TileSize) + float64(TileSize)/2
+
+			if openedTick, ok := s.openedChests[chest.ID]; ok {
+				if s.tick < openedTick+s.secondsToTicks(chestRespawnSeconds) {
+					continue
+				}
+				delete(s.openedChests, chest.ID)
+				delete(s.chestRevealed, chest.ID)
+				s.pendingEvents = append(s.pendingEvents, MatchEvent{
+					"type":    "CHEST_RESET",
+					"chestId": chest.ID,
+					"x":       worldX,
+					"y":       worldY,
+				})
+			}
+
+			if _, revealed := s.chestRevealed[chest.ID]; !revealed {
+				if kickHitsPoint(*player, worldX, worldY) {
+					s.chestRevealed[chest.ID] = struct{}{}
+					s.pendingEvents = append(s.pendingEvents, MatchEvent{
+						"type":    "CHEST_REVEALED",
+						"chestId": chest.ID,
+						"x":       worldX,
+						"y":       worldY,
+					})
+				}
+				continue
+			}
+
+			if math.Hypot(px-worldX, py-worldY) > math.Max(PickupRadius, player.PickupRadius) {
+				continue
+			}
+			n := HashString(chest.ID + ":" + itoa(int(s.tick)))
+			coins := ChestCoinMin + int(n%uint32(ChestCoinMax-ChestCoinMin+1))
+			beforeLevel := player.Level
+			xpGranted := addPlayerXP(player, ChestXPValue)
+			s.queueLevelUpChoices(sess, beforeLevel)
+			player.Coins += coins
+			s.openedChests[chest.ID] = s.tick
+			delete(s.chestRevealed, chest.ID)
+			s.emitPlayerStats(sess)
+			s.pendingEvents = append(s.pendingEvents, MatchEvent{
+				"type":      "CHEST_OPENED",
+				"playerId":  sess.playerID,
+				"chestId":   chest.ID,
+				"x":         worldX,
+				"y":         worldY,
+				"coins":     coins,
+				"xpGranted": xpGranted,
 			})
 		}
 	}
@@ -1467,6 +1622,24 @@ func (s *roomState) collectedRelicList() []string {
 	}
 	sort.Strings(relics)
 	return relics
+}
+
+func (s *roomState) revealedChestList() []string {
+	chests := make([]string, 0, len(s.chestRevealed))
+	for id := range s.chestRevealed {
+		chests = append(chests, id)
+	}
+	sort.Strings(chests)
+	return chests
+}
+
+func (s *roomState) openedChestList() []string {
+	chests := make([]string, 0, len(s.openedChests))
+	for id := range s.openedChests {
+		chests = append(chests, id)
+	}
+	sort.Strings(chests)
+	return chests
 }
 
 func (s *roomState) collectibleList() []CollectibleState {

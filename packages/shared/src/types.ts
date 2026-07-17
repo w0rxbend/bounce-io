@@ -35,6 +35,12 @@ export interface RelicSpawn {
   y: number;
 }
 
+export interface ChestSpawn {
+  id: string;
+  x: number;
+  y: number;
+}
+
 export type EnemyKind =
   | "goblin"
   | "goblinScout"
@@ -251,6 +257,7 @@ export interface GeneratedChunk {
   routes?: RouteBranch[];
   hazards?: HazardSpawn[];
   relics: RelicSpawn[];
+  chests: ChestSpawn[];
   enemies: EnemySpawn[];
   jumpPads: JumpPadSpawn[];
   windZones: WindZoneSpawn[];
@@ -384,6 +391,11 @@ export type MatchEventType =
   | "PLAYER_KICK_STARTED"
   | "PLAYER_KICK_HIT"
   | "PLAYER_EMOTE"
+  | "CHAT_MESSAGE"
+  | "COLLECTIBLE_RESPAWNED"
+  | "CHEST_REVEALED"
+  | "CHEST_OPENED"
+  | "CHEST_RESET"
   | "ENEMY_HIT"
   | "ENEMY_KILLED"
   | "JUMP_PAD_TRIGGERED"
@@ -411,6 +423,11 @@ export type MatchEventPayload =
   | { type: "PLAYER_KICK_STARTED";  playerId: PlayerId }
   | { type: "PLAYER_KICK_HIT";      playerId: PlayerId; targetId: PlayerId }
   | { type: "PLAYER_EMOTE";         playerId: PlayerId; emoteId: EmoteId }
+  | { type: "CHAT_MESSAGE";         playerId: PlayerId; text: string }
+  | { type: "COLLECTIBLE_RESPAWNED"; collectibleId: string; x: number; y: number }
+  | { type: "CHEST_REVEALED"; chestId: string; x: number; y: number }
+  | { type: "CHEST_OPENED"; playerId: PlayerId; chestId: string; x: number; y: number; coins: number; xpGranted: number }
+  | { type: "CHEST_RESET"; chestId: string; x: number; y: number }
   | { type: "ENEMY_HIT";            playerId: PlayerId; enemyId: EntityId; x: number; y: number; damage: number }
   | { type: "ENEMY_KILLED";         playerId: PlayerId; enemyId: EntityId; x: number; y: number; drops: CollectibleState[]; xpGranted?: number }
   | { type: "JUMP_PAD_TRIGGERED";   playerId: PlayerId; padId: EntityId; x: number; y: number; multiplier: number }

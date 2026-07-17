@@ -330,3 +330,23 @@ test("client protocol validation accepts known messages and rejects malformed in
     input: { left: false, right: true, sequence: -1 }
   }), false);
 });
+
+test("treasure chests occasionally generate on relic/risk platforms, hidden by default", () => {
+  let found = false;
+  for (const seed of BALANCE_SEEDS) {
+    for (let chunkY = 1; chunkY < 60; chunkY += 1) {
+      const chunk = generateVerticalChunk({ seed, chunkY });
+      assert.ok(Array.isArray(chunk.chests));
+      for (const chest of chunk.chests) {
+        found = true;
+        assert.ok(chest.x >= 0 && chest.x < chunk.width);
+        assert.ok(chest.y >= 0 && chest.y < chunk.height);
+        // A chest sits on a platform surface, not floating in open air —
+        // the tile directly below it must be a platform (oneWay/solid).
+        const below = chunk.tiles[(chest.y + 1) * chunk.width + chest.x];
+        assert.ok(below === "oneWay" || below === "solid", `chest ${chest.id} should sit on a platform`);
+      }
+    }
+  }
+  assert.equal(found, true, "expected at least one chest across the scanned seeds/chunks");
+});

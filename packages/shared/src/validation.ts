@@ -358,6 +358,10 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return isString(value.collectibleId);
     case "select_skill_card":
       return isString(value.offerId) && isString(value.cardId);
+    case "emote":
+      return isString(value.emoteId);
+    case "chat":
+      return isString(value.text);
     default:
       return false;
   }
@@ -397,6 +401,10 @@ export function isServerMessage(value: unknown): value is ServerMessage {
         (value.collectibles === undefined || (Array.isArray(value.collectibles) && (value.collectibles as unknown[]).every(isCollectibleState))) &&
         Array.isArray(value.collectedRelics) &&
         (value.collectedRelics as unknown[]).every(isString) &&
+        Array.isArray(value.revealedChests) &&
+        (value.revealedChests as unknown[]).every(isString) &&
+        Array.isArray(value.openedChests) &&
+        (value.openedChests as unknown[]).every(isString) &&
         Array.isArray(value.events) &&
         (value.events as unknown[]).every(isMatchEvent) &&
         isRecord(value.lastProcessedSeq);
@@ -409,7 +417,11 @@ export function isServerMessage(value: unknown): value is ServerMessage {
     case "relicState":
       return isFiniteNumber(value.serverTime) &&
         Array.isArray(value.collectedRelics) &&
-        (value.collectedRelics as unknown[]).every(isString);
+        (value.collectedRelics as unknown[]).every(isString) &&
+        Array.isArray(value.revealedChests) &&
+        (value.revealedChests as unknown[]).every(isString) &&
+        Array.isArray(value.openedChests) &&
+        (value.openedChests as unknown[]).every(isString);
     case "matchPhase":
       return isString(value.phase);
     case "chunk":

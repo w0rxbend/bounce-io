@@ -3,29 +3,38 @@ package game
 import "math"
 
 const (
-	skillLongReachPerStack              = 0.15
-	skillMaxHitRangeMultiplier          = 1.75
-	skillHeavyHitPerStack               = 0.10
-	skillMaxAtkMultiplier               = 1.75
-	skillQuickStrikePerStack            = 0.08
-	skillMinAttackCooldownMultiplier    = 0.65
+	skillLongReachPerStack               = 0.15
+	skillMaxHitRangeMultiplier           = 1.75
+	skillHeavyHitPerStack                = 0.10
+	skillMaxAtkMultiplier                = 1.75
+	skillQuickStrikePerStack             = 0.08
+	skillMinAttackCooldownMultiplier     = 0.65
 	skillProtectiveAuraReductionPerStack = 0.08
-	skillMaxDamageReduction             = 0.50
-	skillShieldBase                     = 25.0
-	skillShieldPerStack                 = 15.0
-	skillShieldRegenPerSecond           = 5.0
-	skillShieldRegenDelayMs             = 3000.0
-	skillSpringLegsPerStack             = 0.10
-	skillMaxJumpMultiplier              = 1.40
-	skillAirControlPerStack             = 0.12
-	skillMaxAirControlMultiplier        = 1.50
-	skillDashBaseCooldownMs             = 1800.0
-	skillDashCooldownReductionPerStack  = 0.12
-	skillPickupRadiusPerStack           = 0.25
-	skillMaxPickupRadiusMultiplier      = 2.5
-	skillXPCollectibleBonusPerStack     = 0.20
-	skillKillXPBonusPerStack            = 0.15
+	skillMaxDamageReduction              = 0.50
+	skillShieldBase                      = 25.0
+	skillShieldPerStack                  = 15.0
+	skillShieldRegenPerSecond            = 5.0
+	skillShieldRegenDelayMs              = 3000.0
+	skillSpringLegsPerStack              = 0.10
+	skillMaxJumpMultiplier               = 1.40
+	skillAirControlPerStack              = 0.12
+	skillMaxAirControlMultiplier         = 1.50
+	skillDashBaseCooldownMs              = 1800.0
+	skillDashCooldownReductionPerStack   = 0.12
+	skillPickupRadiusPerStack            = 0.25
+	skillMaxPickupRadiusMultiplier       = 2.5
+	skillXPCollectibleBonusPerStack      = 0.20
+	skillKillXPBonusPerStack             = 0.15
 )
+
+// skillRarityCoinCost mirrors SKILL_RARITY_COIN_COST in
+// packages/shared/src/skills.ts: common cards stay free (XP-driven
+// level-ups pick them at no cost), rare/epic cards also cost coins.
+var skillRarityCoinCost = map[string]int{
+	"common": 0,
+	"rare":   40,
+	"epic":   90,
+}
 
 type skillDefinition struct {
 	id          string
@@ -169,6 +178,13 @@ func applySkillToPlayer(player *PlayerState, skillID string) bool {
 	if current >= def.maxStacks {
 		return false
 	}
+	coinCost := skillRarityCoinCost[def.rarity]
+	if coinCost > 0 && player.Coins < coinCost {
+		return false
+	}
+	if coinCost > 0 {
+		player.Coins -= coinCost
+	}
 	player.SelectedSkills[skillID] = current + 1
 	if skillID == "vital_growth" {
 		player.MaxHealth += 15
@@ -198,6 +214,7 @@ func skillCardFromDefinition(player PlayerState, def skillDefinition) SkillCard 
 		Icon:          def.icon,
 		MaxStacks:     def.maxStacks,
 		CurrentStacks: skillStacks(player, def.id),
+		CoinCost:      skillRarityCoinCost[def.rarity],
 	}
 }
 
@@ -262,25 +279,25 @@ func generateSkillCardOffer(player PlayerState, offerID string, seed uint32) (Sk
 
 func skillStatsPayload(player PlayerState) map[string]any {
 	return map[string]any{
-		"hp": player.Health,
-		"maxHp": player.MaxHealth,
-		"xp": player.Relics,
-		"level": player.Level,
-		"atk": player.Damage,
-		"damage": player.Damage,
-		"attackSpeed": player.AttackSpeed,
-		"hitRange": player.HitRange,
+		"hp":               player.Health,
+		"maxHp":            player.MaxHealth,
+		"xp":               player.Relics,
+		"level":            player.Level,
+		"atk":              player.Damage,
+		"damage":           player.Damage,
+		"attackSpeed":      player.AttackSpeed,
+		"hitRange":         player.HitRange,
 		"attackCooldownMs": player.AttackCooldownMs,
-		"damageReduction": player.DamageReduction,
-		"shield": player.Shield,
-		"maxShield": player.MaxShield,
-		"jumpPower": player.JumpPower,
-		"airControl": player.AirControl,
-		"extraJumps": player.ExtraJumps,
-		"dashUnlocked": player.DashUnlocked,
-		"pickupRadius": player.PickupRadius,
+		"damageReduction":  player.DamageReduction,
+		"shield":           player.Shield,
+		"maxShield":        player.MaxShield,
+		"jumpPower":        player.JumpPower,
+		"airControl":       player.AirControl,
+		"extraJumps":       player.ExtraJumps,
+		"dashUnlocked":     player.DashUnlocked,
+		"pickupRadius":     player.PickupRadius,
 		"xpGainMultiplier": player.XPGainMultiplier,
 		"killXpMultiplier": player.KillXPMultiplier,
-		"selectedSkills": player.SelectedSkills,
+		"selectedSkills":   player.SelectedSkills,
 	}
 }

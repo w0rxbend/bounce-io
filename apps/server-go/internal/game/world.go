@@ -440,6 +440,7 @@ func cloneGeneratedChunk(chunk GeneratedChunk) GeneratedChunk {
 	}
 	chunk.Hazards = cloneSlice(chunk.Hazards)
 	chunk.Relics = cloneSlice(chunk.Relics)
+	chunk.Chests = cloneSlice(chunk.Chests)
 	chunk.Enemies = cloneSlice(chunk.Enemies)
 	chunk.JumpPads = cloneSlice(chunk.JumpPads)
 	chunk.WindZones = cloneSlice(chunk.WindZones)
@@ -546,6 +547,10 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 			tiles[relic.Y*ChunkWidthTiles+relic.X] = "relic"
 		}
 	}
+	chests := plan.Chests[chunkY]
+	if chests == nil {
+		chests = []ChestSpawn{}
+	}
 	landmarks := plan.Landmarks[chunkY]
 	if landmarks == nil {
 		landmarks = []LandmarkSpawn{}
@@ -589,6 +594,7 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 		Routes:            routes,
 		Hazards:           hazards,
 		Relics:            relics,
+		Chests:            chests,
 		Enemies:           enemies,
 		JumpPads:          jumpPads,
 		WindZones:         windZones,
@@ -673,6 +679,7 @@ type RegionPlan struct {
 	Profile       worldRegionProfile
 	Platforms     map[int][]plannedPlatform
 	Relics        map[int][]RelicSpawn
+	Chests        map[int][]ChestSpawn
 	JumpPads      map[int][]JumpPadSpawn
 	Enemies       map[int][]EnemySpawn
 	Landmarks     map[int][]LandmarkSpawn
@@ -757,6 +764,7 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 		Profile:     profile,
 		Platforms:   map[int][]plannedPlatform{},
 		Relics:      map[int][]RelicSpawn{},
+		Chests:      map[int][]ChestSpawn{},
 		JumpPads:    map[int][]JumpPadSpawn{},
 		Enemies:     map[int][]EnemySpawn{},
 		Landmarks:   map[int][]LandmarkSpawn{},
@@ -815,6 +823,7 @@ func BuildRegionPlan(seed uint32, regionIndex int) RegionPlan {
 	plan.placeLandmarks(seed)
 	plan.placePortals()
 	plan.placeCollectibles()
+	plan.placeChests(seed)
 	plan.placeJumpPads(seed)
 	plan.placeEnemies(seed)
 	return plan
@@ -1292,6 +1301,43 @@ func addRelicOnPlatform(relics *[]RelicSpawn, chunkY int, platform plannedPlatfo
 		prefix = "cache"
 	}
 	*relics = append(*relics, RelicSpawn{ID: prefix + ":" + itoa(chunkY) + ":" + itoa(len(*relics)), X: x, Y: y})
+}
+
+// placeChests scatters rare, foliage-hidden treasure chests on relic/risk
+// platforms — one candidate roll per non-checkpoint chunk, mirroring the TS
+// generator (packages/shared/src/generation.ts) so both modes get chests at
+// a comparable rate. A chest starts hidden; see checkChestInteraction for
+// the kick-to-reveal / walk-up-to-open flow.
+func (p *RegionPlan) placeChests(seed uint32) {
+	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
+		if chunkY == p.StartChunkY || IsCheckpointChunk(chunkY) || chunkY == 0 {
+			continue
+		}
+		roll := HashString("chest:"+itoa(int(seed))+":"+itoa(chunkY)) % 100
+		if roll >= uint32(ChestSpawnChancePerChunk*100) {
+			continue
+		}
+		// Width >= 4 (not just the >= 3 relic/risk minimum) so the offset
+		// below never lands on the same tile as that platform's relic coin
+		// (placed at the center, Span.X + Span.Width/2 — see addRelicOnPlatform).
+		candidates := []plannedPlatform{}
+		for _, platform := range p.Platforms[chunkY] {
+			if platform.Span.Width < 4 || (platform.Kind != "relic" && platform.Kind != "risk") {
+				continue
+			}
+			candidates = append(candidates, platform)
+		}
+		if len(candidates) == 0 {
+			continue
+		}
+		pick := candidates[HashString("chestPick:"+itoa(int(seed))+":"+itoa(chunkY))%uint32(len(candidates))]
+		x := pick.Span.X + 1
+		y := pick.Span.Y - 1
+		if y < 0 || y >= ChunkHeightTiles {
+			continue
+		}
+		p.Chests[chunkY] = append(p.Chests[chunkY], ChestSpawn{ID: "chest:" + itoa(chunkY) + ":0", X: x, Y: y})
+	}
 }
 
 func (p *RegionPlan) placeJumpPads(seed uint32) {
@@ -1944,6 +1990,32 @@ func recalculateAttackProgression(player *PlayerState) {
 	player.Damage = 1 + player.RelicFragments/8
 	player.AttackSpeed = math.Min(3, 1+float64(player.RelicFragments)*0.014)
 	recalculateSkillDerivedStats(player)
+}
+
+// kickHitsPoint reports whether an active kick's hitbox reaches a fixed
+// world point (e.g. a hidden chest) — same rect math as playerKickHitsEnemy,
+// against a small point-sized target instead of an enemy's bounds.
+func kickHitsPoint(player PlayerState, x, y float64) bool {
+	if player.KickPhase != "active" {
+		return false
+	}
+	ensurePlayerSkillState(&player)
+	rangeX := player.Position.X
+	hitRange := math.Max(KickRangePX, player.HitRange)
+	if player.Facing < 0 {
+		rangeX = player.Position.X - hitRange
+	}
+	return rectsOverlap(playerBounds{
+		x:      rangeX,
+		y:      player.Position.Y - 4,
+		width:  float64(PlayerWidth) + hitRange,
+		height: float64(PlayerHeight + 8),
+	}, playerBounds{
+		x:      x - 12,
+		y:      y - 12,
+		width:  24,
+		height: 24,
+	})
 }
 
 func playerKickHitsEnemy(player PlayerState, enemy EnemyState) bool {

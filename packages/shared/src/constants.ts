@@ -69,6 +69,18 @@ export const GAME_REWARD_CONFIG = {
   xpPerLevelGrowth: 1.25,
 } as const;
 
+// Treasure chests — rare, hidden under foliage on relic/risk platforms.
+// A kick within CHEST_REVEAL_RANGE_PX of a hidden chest uncovers it; once
+// revealed, walking up to it opens it for a bigger one-time reward than a
+// relic. Respawns (re-hidden) after CHEST_RESPAWN_SECONDS so late joiners
+// eventually get a chance too, mirroring relic respawn.
+export const CHEST_SPAWN_CHANCE_PER_CHUNK = 0.10;
+export const CHEST_REVEAL_RANGE_PX = 28;
+export const CHEST_COIN_MIN = 5;
+export const CHEST_COIN_MAX = 10;
+export const CHEST_XP_VALUE = 40;
+export const CHEST_RESPAWN_SECONDS = 600;
+
 // Kick system
 export const KICK_WINDUP_SECONDS = 0.10;
 export const KICK_ACTIVE_SECONDS = 0.08;
