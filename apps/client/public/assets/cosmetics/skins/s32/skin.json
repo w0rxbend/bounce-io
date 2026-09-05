@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s32",
+  "displayName": "Relic 33",
+  "tags": [
+    "built-in",
+    "arcane"
+  ],
+  "fallbackColor": "#80c559"
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s24",
+  "displayName": "Relic 25",
+  "tags": [
+    "built-in",
+    "storm"
+  ],
+  "fallbackColor": "#7f9f38"
+}

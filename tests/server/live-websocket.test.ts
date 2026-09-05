@@ -99,14 +99,19 @@ test("live Go websocket server accepts two players in the same room and broadcas
   const port = 19_000 + Math.floor(Math.random() * 10_000);
   const proc = spawn("go", ["run", "./cmd/server"], {
     cwd: "apps/server-go",
+    detached: process.platform !== "win32",
     env: {
       ...process.env,
       PORT: String(port),
     }
   });
 
-  t.after(() => {
-    proc.kill();
+  t.after(async () => {
+    if (proc.exitCode === null) {
+      if (process.platform !== "win32" && proc.pid) process.kill(-proc.pid, "SIGTERM");
+      else proc.kill("SIGTERM");
+      await Promise.race([once(proc, "exit"), wait(2_000)]);
+    }
   });
 
   await waitForServer(port, proc);

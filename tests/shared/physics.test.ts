@@ -1,13 +1,74 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { COYOTE_TIME_SECONDS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PLAYER_COLLISION_CORNER_RADIUS, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
+import { COYOTE_TIME_SECONDS, DASH_ACTIVE_MS, ENEMY_ATTACK_WINDUP_SECONDS, FATAL_FALL_DISTANCE_PX, HIT_STUN_SECONDS, JUMP_BUFFER_SECONDS, JUMP_SPEED, KICK_HIT_INVULNERABLE_SECONDS, MAX_RUN_SPEED, PHYSICS_STEP_SECONDS, PLAYER_COLLISION_CORNER_RADIUS, PLAYER_HEIGHT, PLAYER_MAX_HEALTH, PLAYER_WIDTH, RESPAWN_INVULNERABILITY_SECONDS, TILE_SIZE } from "../../packages/shared/src/constants.js";
 import { generateVerticalChunk } from "../../packages/shared/src/generation.js";
-import { applyCollectible, applyDamage, applyHazardHit, applyJumpPad, applyPlayerInteractions, applyWindZones, createPlayerState, rectsOverlap, respawnPlayerState, stepEnemyBehavior, stepPlayer } from "../../packages/shared/src/physics.js";
+import { applyCollectible, applyDamage, applyHazardHit, applyJumpPad, applyPlayerInteractions, applyWindZones, createPlayerState, rectsOverlap, respawnPlayerState, stepEnemyBehavior, stepPlayer, windGustMultiplier } from "../../packages/shared/src/physics.js";
 import type { EnemyState, GeneratedChunk, JumpPadSpawn, TileMap } from "../../packages/shared/src/types.js";
 
 const floorMap: TileMap = {
   isSolid: (_x, y) => y >= 4
 };
+
+test("dash remains an unsteerable physical impulse for its full active window", () => {
+  let player = createPlayerState("dasher", 32, 4 * TILE_SIZE - PLAYER_HEIGHT);
+  player.grounded = true;
+  player.dashUnlocked = true;
+  const startX = player.position.x;
+  player = stepPlayer(player, {
+    left: false, right: true, jumpPressed: false, jumpHeld: false,
+    drop: false, kick: false, dash: true, sequence: 1,
+  }, floorMap, PHYSICS_STEP_SECONDS).player;
+  assert.equal(player.velocity.x, 270);
+  assert.ok(player.dashTimerMs > 0 && player.dashTimerMs < DASH_ACTIVE_MS);
+  assert.ok(Math.abs(player.position.x - startX - 4.5) < 1e-9);
+
+  const activeStartX = player.position.x;
+  let activeMs = PHYSICS_STEP_SECONDS * 1000;
+  while (player.dashTimerMs > 0) {
+    player = stepPlayer(player, {
+      left: true, right: false, jumpPressed: false, jumpHeld: false,
+      drop: false, kick: false, dash: false, sequence: 2,
+    }, floorMap, PHYSICS_STEP_SECONDS).player;
+    activeMs += PHYSICS_STEP_SECONDS * 1000;
+    if (player.dashTimerMs > 0) assert.equal(player.velocity.x, 270, "opposite input must not steer an active dash");
+  }
+  assert.ok(activeMs >= DASH_ACTIVE_MS && activeMs < DASH_ACTIVE_MS + PHYSICS_STEP_SECONDS * 1000);
+  assert.ok(player.position.x > activeStartX);
+  player = stepPlayer(player, {
+    left: true, right: false, jumpPressed: false, jumpHeld: false,
+    drop: false, kick: false, dash: false, sequence: 3,
+  }, floorMap, PHYSICS_STEP_SECONDS).player;
+  assert.ok(player.velocity.x < 270, "normal control resumes after dash expiry");
+});
+
+test("horizontal collision terminates dash immediately", () => {
+  const wallMap: TileMap = { isSolid: (x, y) => x >= 5 || y >= 4 };
+  let player = createPlayerState("dash-wall", 5 * TILE_SIZE - PLAYER_WIDTH - 2, 4 * TILE_SIZE - PLAYER_HEIGHT);
+  player.grounded = true;
+  player.dashUnlocked = true;
+  player = stepPlayer(player, {
+    left: false, right: true, jumpPressed: false, jumpHeld: false,
+    drop: false, kick: false, dash: true, sequence: 1,
+  }, wallMap, PHYSICS_STEP_SECONDS).player;
+  assert.equal(player.velocity.x, 0);
+  assert.equal(player.dashTimerMs, 0);
+});
+
+test("wind turbulence matches the shared cross-language golden fixture", () => {
+  const cases = JSON.parse(readFileSync(new URL("../fixtures/wind-gust-parity.json", import.meta.url), "utf8")) as Array<{
+    seed: number; time: number; centerX: number; centerY: number; expected: number;
+  }>;
+  for (const fixture of cases) {
+    const actual = windGustMultiplier(fixture.seed, fixture.time, {
+      x: fixture.centerX - PLAYER_WIDTH / 2,
+      y: fixture.centerY - PLAYER_HEIGHT / 2,
+      width: PLAYER_WIDTH,
+      height: PLAYER_HEIGHT,
+    });
+    assert.ok(Math.abs(actual - fixture.expected) < 1e-12, `${actual} != ${fixture.expected}`);
+  }
+});
 
 function testEnemy(overrides: Partial<EnemyState> = {}): EnemyState {
   return {

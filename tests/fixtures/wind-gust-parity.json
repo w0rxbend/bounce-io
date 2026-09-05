@@ -1,0 +1,6 @@
+[
+  { "seed": 0, "time": 0, "centerX": 7, "centerY": 11, "expected": 1.3276960299088911 },
+  { "seed": 4294967295, "time": 3.25, "centerX": 136, "centerY": 151, "expected": 1.374359186922129 },
+  { "seed": 123456789, "time": 1700000000.5, "centerX": -44, "centerY": 208, "expected": 1.555693886896739 },
+  { "seed": 987654321, "time": 42.75, "centerX": 512, "centerY": -320, "expected": 0.8614198099756681 }
+]

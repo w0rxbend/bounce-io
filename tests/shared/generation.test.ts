@@ -259,6 +259,9 @@ test("new biome progression follows the post-existing region sequence", () => {
     assert.equal(chunk.portal?.checkpoint, true);
     assert.equal(chunk.biome?.startChunkY, expectedBiome.chunkY);
     assert.ok(chunk.routes?.some((route) => route.kind === "recovery" && route.checkpointSafe));
+    assert.equal(chunk.hazards?.length ?? 0, 0, "checkpoint should be a hazard-free recovery beat");
+    assert.equal(chunk.enemies.length, 0, "checkpoint should be a combat-free recovery beat");
+    assert.equal(chunk.windZones.length, 0, "checkpoint should be a calm recovery beat");
   }
 });
 

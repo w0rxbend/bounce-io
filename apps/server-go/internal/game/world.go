@@ -69,6 +69,8 @@ func CreatePlayerState(id string, x, y float64) PlayerState {
 		PickupRadius:            PickupRadius,
 		XPGainMultiplier:        1,
 		KillXPMultiplier:        1,
+		WindResistance:          0,
+		BonusCollectibleChance:  0,
 		SelectedSkills:          map[string]int{},
 		ShockwaveCounter:        0,
 	}
@@ -98,6 +100,13 @@ func NormalizeInput(msg ClientInput) PlayerInput {
 }
 
 func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) PlayerState {
+	return StepPlayerAtTime(seed, player, input, dt, 0)
+}
+
+// StepPlayerAtTime is the authoritative movement step with an explicit world
+// clock. Keeping time as input (rather than reading it here) makes turbulent
+// wind deterministic in tests, replay, and fixed-tick simulation.
+func StepPlayerAtTime(seed uint32, player PlayerState, input PlayerInput, dt, worldTimeSeconds float64) PlayerState {
 	if dt <= 0 {
 		return player
 	}
@@ -118,7 +127,6 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	player.KickInvulnerable = math.Max(0, player.KickInvulnerable-dt)
 	player.ShieldRegenCooldown = math.Max(0, player.ShieldRegenCooldown-dt*1000)
 	player.DashCooldownRemainingMs = math.Max(0, player.DashCooldownRemainingMs-dt*1000)
-	player.DashTimerMs = math.Max(0, player.DashTimerMs-dt*1000)
 	if player.MaxShield > 0 && player.ShieldRegenCooldown <= 0 && player.Shield < player.MaxShield {
 		player.Shield = math.Min(player.MaxShield, player.Shield+player.ShieldRegenPerSec*dt)
 	}
@@ -128,12 +136,19 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 	}
 	previousY := player.Position.Y
 
-	accel := AirAcceleration * player.AirControl
+	movementScale := math.Max(0.5, math.Min(2, player.MovementSpeed))
+	airControlScale := math.Max(0.5, math.Min(2, player.AirControl))
+	jumpScale := math.Max(0.5, math.Min(1.8, player.JumpPower))
+	accel := AirAcceleration * airControlScale
 	if player.Grounded {
-		accel = MoveAcceleration
+		accel = MoveAcceleration * movementScale
 	}
 	targetDir := 0.0
 	locked := player.KickPhase != "idle" || player.StunTimer > 0 || player.Health <= 0
+	dashActive := player.DashTimerMs > 0 && !locked
+	if locked {
+		player.DashTimerMs = 0
+	}
 	if !locked {
 		if input.Left && !input.Right {
 			targetDir = -1
@@ -144,8 +159,8 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 		}
 	}
 
-	maxSpeed := MaxRunSpeed * player.MovementSpeed
-	if targetDir != 0 {
+	maxSpeed := MaxRunSpeed * movementScale
+	if !dashActive && targetDir != 0 {
 		player.Velocity.X += targetDir * accel * dt
 		if player.Velocity.X > maxSpeed {
 			player.Velocity.X = maxSpeed
@@ -153,7 +168,7 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 		if player.Velocity.X < -maxSpeed {
 			player.Velocity.X = -maxSpeed
 		}
-	} else if player.Grounded {
+	} else if !dashActive && player.Grounded {
 		friction := GroundFriction * dt
 		if math.Abs(player.Velocity.X) <= friction {
 			player.Velocity.X = 0
@@ -163,32 +178,31 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 			player.Velocity.X += friction
 		}
 	}
-	applyWorldWindZones(seed, &player, dt)
-
-	if !locked && input.Dash && player.DashUnlocked && player.DashCooldownRemainingMs <= 0 {
+	if !dashActive && !locked && input.Dash && player.DashUnlocked && player.DashCooldownRemainingMs <= 0 {
 		dashDir := targetDir
 		if dashDir == 0 {
 			dashDir = float64(player.Facing)
 		}
 		player.Velocity.X = dashDir * math.Max(maxSpeed*1.8, 260)
 		player.DashCooldownRemainingMs = player.DashCooldownMs
-		player.DashTimerMs = 120
+		player.DashTimerMs = DashActiveMs
+		dashActive = true
 	}
 
 	if player.JumpBufferTimer > 0 && (player.Grounded || player.CoyoteTimer > 0) {
-		player.Velocity.Y = -JumpSpeed * player.JumpPower
+		player.Velocity.Y = -JumpSpeed * jumpScale
 		player.Grounded = false
 		player.CoyoteTimer = 0
 		player.JumpBufferTimer = 0
 		player.ExtraJumpsUsed = 0
 	} else if player.JumpBufferTimer > 0 && !player.Grounded && player.ExtraJumpsUsed < player.ExtraJumps {
 		bonus := 1 + float64(max(0, skillStacks(player, "double_jump")-1))*0.08
-		player.Velocity.Y = -JumpSpeed * player.JumpPower * bonus
+		player.Velocity.Y = -JumpSpeed * jumpScale * bonus
 		player.ExtraJumpsUsed++
 		player.JumpBufferTimer = 0
 	}
-	if !input.JumpHeld && player.Velocity.Y < 0 {
-		player.Velocity.Y += Gravity * ShortHopCutoff * dt
+	if !input.JumpHeld && player.Velocity.Y < -JumpSpeed*jumpScale*ShortHopCutoff {
+		player.Velocity.Y = -JumpSpeed * jumpScale * ShortHopCutoff
 	}
 
 	player.Velocity.Y += Gravity * dt
@@ -196,42 +210,101 @@ func StepPlayer(seed uint32, player PlayerState, input PlayerInput, dt float64) 
 		player.Velocity.Y = MaxFallSpeed
 	}
 
-	previousBottom := player.Position.Y + PlayerHeight
-	player.Position.X += player.Velocity.X * dt
-	player.Position.Y += player.Velocity.Y * dt
-
-	minX := 0.0
-	maxX := float64(ChunkWidthTiles*TileSize - PlayerWidth)
-	if player.Position.X < minX {
-		player.Position.X = minX
-		player.Velocity.X = 0
+	resolveWorldHorizontal(seed, &player, player.Velocity.X*dt)
+	if dashActive {
+		if player.Velocity.X == 0 {
+			player.DashTimerMs = 0
+		} else {
+			player.DashTimerMs = math.Max(0, player.DashTimerMs-dt*1000)
+		}
 	}
-	if player.Position.X > maxX {
-		player.Position.X = maxX
-		player.Velocity.X = 0
-	}
-
-	if groundY, ok := landingSurfaceY(seed, player, input.Drop, previousBottom); ok {
-		player.Position.Y = groundY - PlayerHeight
-		player.Velocity.Y = 0
-		player.Grounded = true
-		player.CoyoteTimer = CoyoteTimeSeconds
-		player.JumpBufferTimer = 0
-	} else {
-		player.Grounded = false
-	}
+	resolveWorldVertical(seed, &player, player.Velocity.Y*dt, input.Drop)
 
 	updateFatalFall(&player, previousY)
 	applyWorldHazards(seed, &player)
+	// Client prediction applies environmental wind after its core movement
+	// step. Matching that order means a gust changes next tick's displacement
+	// on both simulations instead of producing a one-frame correction.
+	applyWorldWindZones(seed, &player, dt, worldTimeSeconds)
 	return player
 }
 
-func applyWorldWindZones(seed uint32, player *PlayerState, dt float64) {
+func worldTileRange(minValue, maxValue float64) (int, int) {
+	return int(math.Floor(minValue / TileSize)), int(math.Floor((maxValue - 0.001) / TileSize))
+}
+
+func resolveWorldHorizontal(seed uint32, player *PlayerState, dx float64) {
+	player.Position.X += dx
+	top, bottom := worldTileRange(player.Position.Y, player.Position.Y+PlayerHeight)
+	if dx > 0 {
+		right := int(math.Floor((player.Position.X + PlayerWidth - 0.001) / TileSize))
+		for y := top; y <= bottom; y++ {
+			if worldTileKind(seed, right, y) == "solid" {
+				player.Position.X = float64(right*TileSize - PlayerWidth)
+				player.Velocity.X = 0
+				return
+			}
+		}
+	} else if dx < 0 {
+		left := int(math.Floor(player.Position.X / TileSize))
+		for y := top; y <= bottom; y++ {
+			if worldTileKind(seed, left, y) == "solid" {
+				player.Position.X = float64((left + 1) * TileSize)
+				player.Velocity.X = 0
+				return
+			}
+		}
+	}
+}
+
+func resolveWorldVertical(seed uint32, player *PlayerState, dy float64, drop bool) {
+	previousBottom := player.Position.Y + PlayerHeight
+	player.Position.Y += dy
+	player.Grounded = false
+	left, right := worldTileRange(
+		player.Position.X+PlayerCollisionCornerRadius,
+		player.Position.X+PlayerWidth-PlayerCollisionCornerRadius,
+	)
+	if dy > 0 {
+		bottom := int(math.Floor((player.Position.Y + PlayerHeight - 0.001) / TileSize))
+		for x := left; x <= right; x++ {
+			kind := worldTileKind(seed, x, bottom)
+			if kind == "solid" {
+				player.Position.Y = float64(bottom*TileSize - PlayerHeight)
+				player.Velocity.Y = 0
+				player.Grounded = true
+				player.CoyoteTimer = CoyoteTimeSeconds
+				return
+			}
+			platformTop := float64(bottom * TileSize)
+			if !drop && player.Velocity.Y > 0 && previousBottom <= platformTop && kind == "oneWay" {
+				player.Position.Y = platformTop - PlayerHeight
+				player.Velocity.Y = 0
+				player.Grounded = true
+				player.CoyoteTimer = CoyoteTimeSeconds
+				player.JumpBufferTimer = 0
+				return
+			}
+		}
+	} else if dy < 0 {
+		top := int(math.Floor(player.Position.Y / TileSize))
+		for x := left; x <= right; x++ {
+			if worldTileKind(seed, x, top) == "solid" {
+				player.Position.Y = float64((top + 1) * TileSize)
+				player.Velocity.Y = 0
+				return
+			}
+		}
+	}
+}
+
+func applyWorldWindZones(seed uint32, player *PlayerState, dt, worldTimeSeconds float64) {
 	if player.Health <= 0 {
 		return
 	}
 	centerChunkY := ChunkYForWorldY(player.Position.Y)
 	bounds := playerRect(*player)
+	windFactor := 1 - math.Max(0, math.Min(skillMaxWindResistance, player.WindResistance))
 	for chunkY := max(0, centerChunkY-1); chunkY <= centerChunkY+1; chunkY++ {
 		chunk := GenerateChunk(seed, chunkY)
 		for _, zone := range chunk.WindZones {
@@ -244,21 +317,37 @@ func applyWorldWindZones(seed uint32, player *PlayerState, dt float64) {
 			if !rectsOverlap(bounds, zoneRect) {
 				continue
 			}
+			zoneSeed := chunk.Seed ^ (uint32(chunk.ChunkY) * 73_856_093) ^ (uint32(zone.X) * 19_349_663) ^ (uint32(zone.Y) * 83_492_791)
+			centerX := bounds.x + bounds.width/2
+			centerY := bounds.y + bounds.height/2
+			gust := windGustMultiplier(zoneSeed, worldTimeSeconds, centerX, centerY)
 			if zone.Axis == "vertical" {
 				maxVertical := MaxFallSpeed * 0.72
-				target := float64(zone.Direction) * math.Min(maxVertical, zone.Strength*0.48)
-				player.Velocity.Y = moveTowardFloat(player.Velocity.Y, target, zone.Strength*2.6*dt)
+				target := float64(zone.Direction) * math.Min(maxVertical, zone.Strength*0.48*gust*windFactor)
+				player.Velocity.Y = moveTowardFloat(player.Velocity.Y, target, zone.Strength*(1.7+gust*2.2)*windFactor*dt)
 				player.Velocity.Y = math.Max(-maxVertical, math.Min(maxVertical, player.Velocity.Y))
 				if zone.Direction < 0 {
 					player.FallStartY = nil
 				}
 			} else {
-				target := float64(zone.Direction) * math.Min(MaxRunSpeed*1.55, zone.Strength*0.55)
-				player.Velocity.X = moveTowardFloat(player.Velocity.X, target, zone.Strength*3.4*dt)
-				player.Velocity.X = math.Max(-MaxRunSpeed*1.55, math.Min(MaxRunSpeed*1.55, player.Velocity.X))
+				target := float64(zone.Direction) * math.Min(MaxRunSpeed*1.45, zone.Strength*0.55*gust*windFactor)
+				player.Velocity.X = moveTowardFloat(player.Velocity.X, target, zone.Strength*(2.2+gust*3.0)*windFactor*dt)
+				player.Velocity.X = math.Max(-MaxRunSpeed*1.45, math.Min(MaxRunSpeed*1.45, player.Velocity.X))
 			}
 		}
 	}
+}
+
+func windGustMultiplier(seed uint32, worldTimeSeconds, centerX, centerY float64) float64 {
+	primary := math.Sin(worldTimeSeconds*2.15+float64(seed)*0.000_31)*0.5 + 0.5
+	choppy := math.Sin(worldTimeSeconds*5.4+centerY*0.08+float64(seed)*0.000_17)*0.5 + 0.5
+	lane := math.Sin(centerY*0.16+centerX*0.035+float64(seed)*0.000_09)*0.5 + 0.5
+	lull := math.Sin(worldTimeSeconds*1.3+centerY*0.11+float64(seed)*0.000_23) < -0.38
+	base, gustMax := 0.42, 1.65
+	if lull {
+		base, gustMax = 0.16, 0.55
+	}
+	return math.Max(0.12, math.Min(gustMax, base+primary*0.9+choppy*0.28+lane*0.22))
 }
 
 func moveTowardFloat(value, target, maxDelta float64) float64 {
@@ -570,6 +659,7 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 	windZones := windZonesForChunk(seed, chunkY, platformRecords)
 	portal := plan.PortalForChunk(chunkY)
 	biome := biomeMetadataForChunk(chunkY, regionIndex, plan.Profile)
+	hazards, enemies, windZones = applyChallengePressureBudget(chunkY, biome.Difficulty, hazards, enemies, windZones)
 	archetype := archetypeForChunk(seed, plan.Profile, regionIndex, chunkY, IsCheckpointChunk(chunkY))
 	metrics := difficultyMetricsForChunk(platforms, routes, hazards, enemies, windZones, archetype, clampFloat(biome.Difficulty+0.08, 0.05, 1))
 
@@ -599,6 +689,56 @@ func generateChunkUncached(seed uint32, chunkY int) GeneratedChunk {
 		JumpPads:          jumpPads,
 		WindZones:         windZones,
 	}
+}
+
+func applyChallengePressureBudget(chunkY int, difficulty float64, hazards []HazardSpawn, enemies []EnemySpawn, windZones []WindZoneSpawn) ([]HazardSpawn, []EnemySpawn, []WindZoneSpawn) {
+	if IsCheckpointChunk(chunkY) {
+		return hazards[:0], enemies[:0], windZones[:0]
+	}
+	hazardCap := 0
+	if chunkY > 1 {
+		hazardCap = min(4, int(math.Floor(difficulty*3.2))+1)
+	}
+	if len(hazards) > hazardCap {
+		hazards = hazards[:hazardCap]
+	}
+
+	filteredWind := make([]WindZoneSpawn, 0, len(windZones))
+	for _, zone := range windZones {
+		stacked := false
+		for _, hazard := range hazards {
+			if hazard.X >= zone.X && hazard.X < zone.X+zone.Width && hazard.Y >= zone.Y && hazard.Y < zone.Y+zone.Height {
+				stacked = true
+				break
+			}
+		}
+		if !stacked {
+			filteredWind = append(filteredWind, zone)
+		}
+	}
+
+	filteredEnemies := make([]EnemySpawn, 0, len(enemies))
+	for _, enemy := range enemies {
+		stacked := false
+		for _, hazard := range hazards {
+			if enemy.X == hazard.X && enemy.Y == hazard.Y {
+				stacked = true
+				break
+			}
+		}
+		if !stacked {
+			for _, zone := range filteredWind {
+				if enemy.X >= zone.X && enemy.X < zone.X+zone.Width && enemy.Y >= zone.Y && enemy.Y < zone.Y+zone.Height {
+					stacked = true
+					break
+				}
+			}
+		}
+		if !stacked {
+			filteredEnemies = append(filteredEnemies, enemy)
+		}
+	}
+	return hazards, filteredEnemies, filteredWind
 }
 
 func hasSafePlatformAt(platforms []plannedPlatform, x, y int) bool {
@@ -1376,7 +1516,7 @@ func (p *RegionPlan) placeJumpPads(seed uint32) {
 
 func (p *RegionPlan) placeEnemies(seed uint32) {
 	for chunkY := p.StartChunkY; chunkY <= p.EndChunkY; chunkY++ {
-		if chunkY == 0 {
+		if chunkY == 0 || IsCheckpointChunk(chunkY) {
 			continue
 		}
 		enemies := []EnemySpawn{}
@@ -1961,7 +2101,12 @@ func xpRequiredForLevel(level int) int {
 	if level < 1 {
 		level = 1
 	}
-	return max(1, int(math.Round(XPPerLevelBase*math.Pow(XPPerLevelGrowth, float64(level-1)))))
+	tier := level - 1
+	return max(1, int(math.Round(XPPerLevelBase+float64(tier*28+tier*tier*3))))
+}
+
+func enemyKillXPForChunk(chunkY int) int {
+	return EnemyKillXP + min(60, max(0, chunkY)*2)
 }
 
 func addPlayerXP(player *PlayerState, amount int) int {

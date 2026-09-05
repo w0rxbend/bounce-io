@@ -260,6 +260,27 @@ export function biomeRegionIndexForChunkY(chunkY: number): number {
   return biomeForChunkY(chunkY).index;
 }
 
+export interface AltitudeChallengeBudget {
+  difficulty: number;
+  maxHazards: number;
+  maxEnemies: number;
+  maxWindZones: number;
+  safeRouteWindAllowed: boolean;
+}
+
+/** A readable pressure budget: altitude increases the number and variety of
+ * challenges, while individual platforms remain single-pressure encounters. */
+export function altitudeChallengeBudget(chunkY: number): AltitudeChallengeBudget {
+  const { profile, metadata } = biomePlanForChunkY(chunkY);
+  return {
+    difficulty: metadata.difficulty,
+    maxHazards: chunkY <= 1 ? 0 : Math.min(4, Math.floor(metadata.difficulty * 3.2) + 1),
+    maxEnemies: Math.min(6, profile.maxEnemies + Math.floor(metadata.cycle / 2)),
+    maxWindZones: Math.min(3, profile.maxWindZones),
+    safeRouteWindAllowed: metadata.difficulty >= 0.72,
+  };
+}
+
 function emptyTiles(width: number, height: number): TileKind[] {
   return new Array<TileKind>(width * height).fill("empty");
 }
@@ -519,6 +540,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   const { profile: biome, metadata: biomeMetadata } = biomePlanForChunkY(options.chunkY);
   const regionIndex = biomeMetadata.index;
   const difficulty = biomeMetadata.difficulty;
+  const challengeBudget = altitudeChallengeBudget(options.chunkY);
   const isCheckpoint = options.chunkY === biomeMetadata.startChunkY;
   const archetypePlan = chooseArchetype(options.chunkY, biomeMetadata, rng, isCheckpoint);
 
@@ -616,11 +638,13 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
   }
 
   const hazards: HazardSpawn[] = [];
+  const pressuredPlatforms = new Set<string>();
   const hazardKind = hazardKindForBiome(biome);
 
   // Hazard on sparse risk/relic platforms only, so the main route remains readable.
   for (const platform of plannedPlatforms) {
     if (isCheckpoint) continue;
+    if (hazards.length >= challengeBudget.maxHazards) break;
     const archetypeHazardBonus = archetypePlan.archetype === "precisionChallenge" ? 0.12 : archetypePlan.archetype === "combatPlatform" ? 0.08 : 0;
     if ((platform.route !== "risk" && platform.route !== "relic") || platform.span.y > 10 || rng.nextFloat() >= biome.hazardChance + difficulty * 0.12 + archetypeHazardBonus) continue;
     const hazardX = platform.span.width <= 3
@@ -641,6 +665,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
         danger: clamp(difficulty * (platform.route === "risk" ? 0.9 : 0.65), 0.1, 1),
         telegraph: hazardTelegraph(hazardKind)
       });
+      pressuredPlatforms.add(`${platform.span.x}:${platform.span.y}`);
     }
   }
 
@@ -712,11 +737,15 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
 
   if (options.chunkY > 0) {
     if (biome.maxWindZones > 0) {
-      const windCandidates = allPlatforms
+      const windCandidates = plannedPlatforms
         .slice(1, -1)
-        .filter((platform) => platform.width >= 3 && platform.y >= 5 && (!isCheckpoint || platform.route === "recovery"))
+        .filter((planned) => planned.span.width >= 3 && planned.span.y >= 5 &&
+          !pressuredPlatforms.has(`${planned.span.x}:${planned.span.y}`) &&
+          (challengeBudget.safeRouteWindAllowed || planned.route !== "safe") &&
+          (!isCheckpoint || planned.route === "recovery"))
+        .map((planned) => planned.span)
         .sort((a, b) => a.y - b.y);
-      const maxWindZones = biome.maxWindZones;
+      const maxWindZones = isCheckpoint ? 0 : challengeBudget.maxWindZones;
       let windIndex = 0;
       for (let i = 0; i < windCandidates.length && windIndex < maxWindZones; i++) {
         const platform = windCandidates[(i + options.chunkY) % windCandidates.length];
@@ -741,17 +770,19 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
           strength: 420 + Math.round(biomeMetadata.difficulty * 360),
           placement: placement(biomeMetadata, platform.route ?? "safe", "pressure", biomeMetadata.difficulty * 0.55)
         });
+        pressuredPlatforms.add(`${platform.x}:${platform.y}`);
         windIndex++;
       }
     }
 
     const kindPool = biome.enemyKinds;
-    const maxEnemies = isCheckpoint ? 0 : Math.min(6, biome.maxEnemies + Math.floor(biomeMetadata.cycle / 2) + (archetypePlan.archetype === "combatPlatform" ? 2 : 0));
+    const maxEnemies = isCheckpoint ? 0 : Math.min(6, challengeBudget.maxEnemies + (archetypePlan.archetype === "combatPlatform" ? 2 : 0));
     let enemyIndex = 0;
 
     for (let i = 1; i < allPlatforms.length - 1 && enemyIndex < maxEnemies; i++) {
       const platform = allPlatforms[i];
       if (!platform || platform.width < 3) continue;
+      if (pressuredPlatforms.has(`${platform.x}:${platform.y}`)) continue;
       const center = platform.x + platform.width / 2;
       const isMainOrRiskLane = center > width * 0.32;
       const spawnRoll = rng.nextFloat();
@@ -769,6 +800,7 @@ export function generateVerticalChunk(options: GenerateChunkOptions): GeneratedC
         y: tileY,
         placement: placement(biomeMetadata, plannedRoute ?? "safe", "pressure", spawnChance)
       });
+      pressuredPlatforms.add(`${platform.x}:${platform.y}`);
       enemyIndex++;
     }
   }

@@ -4,6 +4,7 @@ import "testing"
 
 func TestApplySkillToPlayerFreeCommonCardNeedsNoCoins(t *testing.T) {
 	player := CreatePlayerState("p1", 0, 0)
+	player.Level = 2
 	player.Coins = 0
 
 	if !applySkillToPlayer(&player, "long_reach") {
@@ -19,6 +20,8 @@ func TestApplySkillToPlayerFreeCommonCardNeedsNoCoins(t *testing.T) {
 
 func TestApplySkillToPlayerRareCardRequiresCoins(t *testing.T) {
 	player := CreatePlayerState("p1", 0, 0)
+	player.Level = 5
+	player.SelectedSkills["stamina"] = 2
 	player.Coins = 10 // less than quick_strike's rare cost
 
 	if applySkillToPlayer(&player, "quick_strike") {
@@ -34,6 +37,9 @@ func TestApplySkillToPlayerRareCardRequiresCoins(t *testing.T) {
 
 func TestApplySkillToPlayerDeductsCoinsForRareAndEpicCards(t *testing.T) {
 	player := CreatePlayerState("p1", 0, 0)
+	player.Level = 9
+	player.SelectedSkills["stamina"] = 2
+	player.SelectedSkills["high_jump"] = 3
 	player.Coins = 200
 
 	if !applySkillToPlayer(&player, "quick_strike") { // rare, costs 40

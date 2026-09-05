@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "crimson",
+  "displayName": "Crimson",
+  "tags": [
+    "built-in",
+    "frost"
+  ],
+  "fallbackColor": "#b83020"
+}

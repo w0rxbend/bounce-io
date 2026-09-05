@@ -3,6 +3,12 @@ import type { PlayerId, PlayerState } from "./types.js";
 
 export type SkillCategory = "attack" | "defense" | "mobility" | "utility";
 export type SkillRarity = "common" | "rare" | "epic";
+export type SkillBranch = "stamina" | "wind" | "jump" | "shield" | "fortune";
+
+export interface SkillPrerequisite {
+  skillId: string;
+  stacks: number;
+}
 
 export interface SkillCardDefinition {
   id: string;
@@ -13,6 +19,10 @@ export interface SkillCardDefinition {
   icon: string;
   maxStacks: number;
   weight: number;
+  branch: SkillBranch;
+  tier: 1 | 2 | 3;
+  unlockLevel: number;
+  requires?: readonly SkillPrerequisite[];
 }
 
 export interface SkillCard {
@@ -29,6 +39,10 @@ export interface SkillCard {
   // stronger cards are gated behind exploration/combat coin income, not
   // just XP.
   coinCost: number;
+  branch?: SkillBranch;
+  tier?: 1 | 2 | 3;
+  unlockLevel?: number;
+  requires?: readonly SkillPrerequisite[];
 }
 
 export const SKILL_RARITY_COIN_COST: Record<SkillRarity, number> = {
@@ -66,24 +80,43 @@ export const SKILL_BALANCE = {
   maxPickupRadiusMultiplier: 2.5,
   xpCollectibleBonusPerStack: 0.20,
   killXpBonusPerStack: 0.15,
+  staminaCooldownPerStack: 0.06,
+  maxStaminaCooldownReduction: 0.30,
+  windResistancePerStack: 0.10,
+  maxWindResistance: 0.50,
+  highJumpPerStack: 0.07,
+  shieldCoreBase: 12,
+  shieldCorePerStack: 10,
+  shieldCoreRegenPerStack: 0.8,
+  goldKeeperChancePerStack: 0.10,
+  maxGoldKeeperChance: 0.45,
 } as const;
 
 export const SKILL_REGISTRY: readonly SkillCardDefinition[] = [
-  { id: "long_reach", name: "Long Reach", category: "attack", rarity: "common", description: "Hit range +15%.", icon: "ARC", maxStacks: 5, weight: 16 },
-  { id: "heavy_hit", name: "Heavy Hit", category: "attack", rarity: "common", description: "ATK damage +10%.", icon: "FIST", maxStacks: 5, weight: 16 },
-  { id: "quick_strike", name: "Quick Strike", category: "attack", rarity: "rare", description: "Attack cooldown -8%.", icon: "SPD", maxStacks: 4, weight: 11 },
-  { id: "shockwave_hit", name: "Shockwave Hit", category: "attack", rarity: "epic", description: "Every few hits emits a pixel shockwave.", icon: "WAVE", maxStacks: 4, weight: 6 },
-  { id: "protective_aura", name: "Protective Aura", category: "defense", rarity: "common", description: "Incoming damage -8%.", icon: "AURA", maxStacks: 4, weight: 14 },
-  { id: "energy_shield", name: "Energy Shield", category: "defense", rarity: "rare", description: "Adds a regenerating shield before HP.", icon: "SHLD", maxStacks: 5, weight: 11 },
-  { id: "last_stand", name: "Last Stand", category: "defense", rarity: "rare", description: "Low HP grants extra damage reduction.", icon: "LAST", maxStacks: 4, weight: 9 },
-  { id: "spring_legs", name: "Spring Legs", category: "mobility", rarity: "common", description: "Jump power +10%.", icon: "JUMP", maxStacks: 4, weight: 14 },
-  { id: "air_control", name: "Air Control", category: "mobility", rarity: "common", description: "Air steering +12%.", icon: "WIND", maxStacks: 4, weight: 13 },
-  { id: "double_jump", name: "Double Jump", category: "mobility", rarity: "epic", description: "Unlocks an extra air jump.", icon: "DBL", maxStacks: 3, weight: 6 },
-  { id: "dash", name: "Dash", category: "mobility", rarity: "epic", description: "Unlocks a short horizontal dash.", icon: "DASH", maxStacks: 4, weight: 6 },
-  { id: "xp_magnet", name: "XP Magnet", category: "utility", rarity: "common", description: "Pickup radius +25%.", icon: "MAG", maxStacks: 4, weight: 14 },
-  { id: "dark_harvest", name: "Dark Harvest", category: "utility", rarity: "rare", description: "XP collectibles give +20% XP.", icon: "XP+", maxStacks: 4, weight: 10 },
-  { id: "vital_growth", name: "Vital Growth", category: "utility", rarity: "common", description: "Max HP +15.", icon: "HP+", maxStacks: 6, weight: 12 },
-  { id: "battle_learning", name: "Battle Learning", category: "utility", rarity: "rare", description: "Enemy kill XP +15%.", icon: "BOOK", maxStacks: 4, weight: 10 },
+  { id: "stamina", name: "Stamina", category: "attack", rarity: "common", description: "Fight recovery and punch cooldown -6%.", icon: "STM", maxStacks: 5, weight: 22, branch: "stamina", tier: 1, unlockLevel: 2 },
+  { id: "long_reach", name: "Long Reach", category: "attack", rarity: "common", description: "Hit range +15%.", icon: "ARC", maxStacks: 5, weight: 14, branch: "stamina", tier: 1, unlockLevel: 2 },
+  { id: "heavy_hit", name: "Heavy Hit", category: "attack", rarity: "common", description: "ATK damage +10%.", icon: "FIST", maxStacks: 5, weight: 13, branch: "stamina", tier: 1, unlockLevel: 3 },
+  { id: "quick_strike", name: "Quick Strike", category: "attack", rarity: "rare", description: "Attack cooldown -8% beyond Stamina.", icon: "SPD", maxStacks: 4, weight: 10, branch: "stamina", tier: 2, unlockLevel: 5, requires: [{ skillId: "stamina", stacks: 2 }] },
+  { id: "shockwave_hit", name: "Shockwave Hit", category: "attack", rarity: "epic", description: "Every few hits emits a pixel shockwave.", icon: "WAVE", maxStacks: 4, weight: 5, branch: "stamina", tier: 3, unlockLevel: 9, requires: [{ skillId: "heavy_hit", stacks: 2 }] },
+
+  { id: "wind_resistance", name: "Wind Resistance", category: "mobility", rarity: "common", description: "Wind force -10% and steadier aerial movement.", icon: "GUST", maxStacks: 5, weight: 22, branch: "wind", tier: 1, unlockLevel: 2 },
+  { id: "air_control", name: "Air Control", category: "mobility", rarity: "rare", description: "Air steering +12%.", icon: "WIND", maxStacks: 4, weight: 11, branch: "wind", tier: 2, unlockLevel: 5, requires: [{ skillId: "wind_resistance", stacks: 2 }] },
+
+  { id: "high_jump", name: "High Jump", category: "mobility", rarity: "common", description: "Jump power +7%.", icon: "UP", maxStacks: 5, weight: 22, branch: "jump", tier: 1, unlockLevel: 2 },
+  { id: "spring_legs", name: "Spring Legs", category: "mobility", rarity: "rare", description: "Jump power +10% beyond High Jump.", icon: "JUMP", maxStacks: 4, weight: 10, branch: "jump", tier: 2, unlockLevel: 5, requires: [{ skillId: "high_jump", stacks: 2 }] },
+  { id: "double_jump", name: "Double Jump", category: "mobility", rarity: "epic", description: "Unlocks an extra air jump.", icon: "DBL", maxStacks: 1, weight: 6, branch: "jump", tier: 3, unlockLevel: 8, requires: [{ skillId: "high_jump", stacks: 3 }] },
+  { id: "dash", name: "Dash", category: "mobility", rarity: "epic", description: "Unlocks a short horizontal dash; stacks reduce its cooldown.", icon: "DASH", maxStacks: 4, weight: 6, branch: "jump", tier: 3, unlockLevel: 9, requires: [{ skillId: "spring_legs", stacks: 2 }] },
+
+  { id: "shield", name: "Shield", category: "defense", rarity: "common", description: "Adds a small regenerating shield.", icon: "SHD", maxStacks: 5, weight: 22, branch: "shield", tier: 1, unlockLevel: 2 },
+  { id: "protective_aura", name: "Protective Aura", category: "defense", rarity: "common", description: "Incoming damage -8%.", icon: "AURA", maxStacks: 4, weight: 12, branch: "shield", tier: 1, unlockLevel: 3 },
+  { id: "energy_shield", name: "Energy Shield", category: "defense", rarity: "rare", description: "Greatly improves shield capacity and regeneration.", icon: "SHLD", maxStacks: 5, weight: 10, branch: "shield", tier: 2, unlockLevel: 5, requires: [{ skillId: "shield", stacks: 2 }] },
+  { id: "last_stand", name: "Last Stand", category: "defense", rarity: "epic", description: "Low HP grants extra damage reduction.", icon: "LAST", maxStacks: 4, weight: 6, branch: "shield", tier: 3, unlockLevel: 8, requires: [{ skillId: "protective_aura", stacks: 2 }] },
+
+  { id: "gold_keeper", name: "Gold Keeper", category: "utility", rarity: "common", description: "Chance for bonus coins and an extra enemy drop +10%.", icon: "GOLD", maxStacks: 5, weight: 22, branch: "fortune", tier: 1, unlockLevel: 2 },
+  { id: "xp_magnet", name: "XP Magnet", category: "utility", rarity: "common", description: "Pickup radius +25%.", icon: "MAG", maxStacks: 4, weight: 12, branch: "fortune", tier: 1, unlockLevel: 3 },
+  { id: "vital_growth", name: "Vital Growth", category: "utility", rarity: "common", description: "Max HP +15.", icon: "HP+", maxStacks: 6, weight: 10, branch: "fortune", tier: 1, unlockLevel: 4 },
+  { id: "dark_harvest", name: "Dark Harvest", category: "utility", rarity: "rare", description: "XP collectibles give +20% XP.", icon: "XP+", maxStacks: 4, weight: 9, branch: "fortune", tier: 2, unlockLevel: 5, requires: [{ skillId: "gold_keeper", stacks: 2 }] },
+  { id: "battle_learning", name: "Battle Learning", category: "utility", rarity: "rare", description: "Enemy kill XP +15%.", icon: "BOOK", maxStacks: 4, weight: 9, branch: "fortune", tier: 2, unlockLevel: 6, requires: [{ skillId: "xp_magnet", stacks: 2 }] },
 ] as const;
 
 export const SKILL_BY_ID = new Map(SKILL_REGISTRY.map((skill) => [skill.id, skill]));
@@ -105,6 +138,14 @@ function hashString(value: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+/** Stable reward roll shared by local play; the Go server mirrors the same
+ * threshold with its authoritative hash so Gold Keeper never depends on FPS. */
+export function goldKeeperBonus(player: PlayerState, rewardKey: string): number {
+  ensurePlayerSkillState(player);
+  if (player.bonusCollectibleChance <= 0) return 0;
+  return hashString(`gold:${player.id}:${rewardKey}`) % 10_000 < Math.round(player.bonusCollectibleChance * 10_000) ? 1 : 0;
 }
 
 function nextSeed(seed: number): number {
@@ -137,6 +178,8 @@ export function ensurePlayerSkillState(player: PlayerState): void {
   player.pickupRadius = Number.isFinite(player.pickupRadius) ? player.pickupRadius : 24;
   player.xpGainMultiplier = Number.isFinite(player.xpGainMultiplier) ? player.xpGainMultiplier : 1;
   player.killXpMultiplier = Number.isFinite(player.killXpMultiplier) ? player.killXpMultiplier : 1;
+  player.windResistance = Number.isFinite(player.windResistance) ? player.windResistance : 0;
+  player.bonusCollectibleChance = Number.isFinite(player.bonusCollectibleChance) ? player.bonusCollectibleChance : 0;
   player.selectedSkills = player.selectedSkills && typeof player.selectedSkills === "object" ? player.selectedSkills : {};
   player.shockwaveCounter = Number.isFinite(player.shockwaveCounter) ? player.shockwaveCounter : 0;
 }
@@ -151,8 +194,12 @@ export function recalculateSkillDerivedStats(player: PlayerState): void {
   const longReach = skillStacks(player, "long_reach");
   const heavyHit = skillStacks(player, "heavy_hit");
   const quickStrike = skillStacks(player, "quick_strike");
+  const stamina = skillStacks(player, "stamina");
   const protectiveAura = skillStacks(player, "protective_aura");
   const energyShield = skillStacks(player, "energy_shield");
+  const shieldCore = skillStacks(player, "shield");
+  const windResistance = skillStacks(player, "wind_resistance");
+  const highJump = skillStacks(player, "high_jump");
   const springLegs = skillStacks(player, "spring_legs");
   const airControl = skillStacks(player, "air_control");
   const doubleJump = skillStacks(player, "double_jump");
@@ -160,6 +207,7 @@ export function recalculateSkillDerivedStats(player: PlayerState): void {
   const xpMagnet = skillStacks(player, "xp_magnet");
   const darkHarvest = skillStacks(player, "dark_harvest");
   const battleLearning = skillStacks(player, "battle_learning");
+  const goldKeeper = skillStacks(player, "gold_keeper");
 
   const baseDamage = Math.min(1.45, PLAYER_BASE_DAMAGE + diminishingBonus(player.relicFragments, 0.035, 0.32));
   const baseAttackSpeed = Math.min(1.28, PLAYER_BASE_ATTACK_SPEED + diminishingBonus(player.relicFragments, 0.014, 0.36));
@@ -169,23 +217,25 @@ export function recalculateSkillDerivedStats(player: PlayerState): void {
   player.hitRange = Math.round(KICK_RANGE_PX * Math.min(SKILL_BALANCE.maxHitRangeMultiplier, 1 + longReach * SKILL_BALANCE.longReachPerStack));
   const atkMultiplier = Math.min(SKILL_BALANCE.maxAtkMultiplier, 1 + heavyHit * SKILL_BALANCE.heavyHitPerStack);
   player.damage = baseDamage * atkMultiplier;
-  const cooldownMultiplier = Math.max(SKILL_BALANCE.minAttackCooldownMultiplier, 1 - quickStrike * SKILL_BALANCE.quickStrikePerStack);
+  const staminaReduction = Math.min(SKILL_BALANCE.maxStaminaCooldownReduction, stamina * SKILL_BALANCE.staminaCooldownPerStack);
+  const cooldownMultiplier = Math.max(SKILL_BALANCE.minAttackCooldownMultiplier, 1 - staminaReduction - quickStrike * SKILL_BALANCE.quickStrikePerStack);
   player.attackCooldownMs = MELEE_ATTACK_COOLDOWN_SECONDS * 1000 * cooldownMultiplier;
   player.attackSpeed = Math.max(baseAttackSpeed, baseAttackSpeed / cooldownMultiplier);
   player.damageReduction = Math.min(SKILL_BALANCE.maxDamageReduction, protectiveAura * SKILL_BALANCE.protectiveAuraReductionPerStack);
-  if (energyShield > 0) {
-    const maxShield = SKILL_BALANCE.shieldBase + Math.max(0, energyShield - 1) * SKILL_BALANCE.shieldPerStack;
+  if (shieldCore > 0 || energyShield > 0) {
+    const coreShield = shieldCore > 0 ? SKILL_BALANCE.shieldCoreBase + Math.max(0, shieldCore - 1) * SKILL_BALANCE.shieldCorePerStack : 0;
+    const maxShield = coreShield + energyShield * SKILL_BALANCE.shieldPerStack;
     player.maxShield = maxShield;
     player.shield = clamp(player.shield, 0, maxShield);
     if (player.shield <= 0 && player.lastDamageAt === 0) player.shield = maxShield;
-    player.shieldRegenPerSecond = SKILL_BALANCE.shieldRegenPerSecond;
+    player.shieldRegenPerSecond = shieldCore * SKILL_BALANCE.shieldCoreRegenPerStack + energyShield * SKILL_BALANCE.shieldRegenPerSecond;
     player.shieldRegenDelayMs = SKILL_BALANCE.shieldRegenDelayMs;
   } else {
     player.maxShield = 0;
     player.shield = 0;
     player.shieldRegenPerSecond = 0;
   }
-  player.jumpPowerMultiplier = Math.min(SKILL_BALANCE.maxJumpMultiplier, 1 + springLegs * SKILL_BALANCE.springLegsPerStack);
+  player.jumpPowerMultiplier = Math.min(SKILL_BALANCE.maxJumpMultiplier, 1 + highJump * SKILL_BALANCE.highJumpPerStack + springLegs * SKILL_BALANCE.springLegsPerStack);
   player.airControlMultiplier = Math.min(SKILL_BALANCE.maxAirControlMultiplier, 1 + airControl * SKILL_BALANCE.airControlPerStack);
   player.jumpPower = baseJumpPower * player.jumpPowerMultiplier;
   player.airControl = baseAirControl * player.airControlMultiplier;
@@ -195,6 +245,8 @@ export function recalculateSkillDerivedStats(player: PlayerState): void {
   player.pickupRadius = 24 * Math.min(SKILL_BALANCE.maxPickupRadiusMultiplier, 1 + xpMagnet * SKILL_BALANCE.pickupRadiusPerStack);
   player.xpGainMultiplier = 1 + darkHarvest * SKILL_BALANCE.xpCollectibleBonusPerStack;
   player.killXpMultiplier = 1 + battleLearning * SKILL_BALANCE.killXpBonusPerStack;
+  player.windResistance = Math.min(SKILL_BALANCE.maxWindResistance, windResistance * SKILL_BALANCE.windResistancePerStack);
+  player.bonusCollectibleChance = Math.min(SKILL_BALANCE.maxGoldKeeperChance, goldKeeper * SKILL_BALANCE.goldKeeperChancePerStack);
 }
 
 export function applySkillToPlayer(player: PlayerState, skillId: string): boolean {
@@ -202,7 +254,8 @@ export function applySkillToPlayer(player: PlayerState, skillId: string): boolea
   if (!definition) return false;
   ensurePlayerSkillState(player);
   const current = skillStacks(player, skillId);
-  if (current >= definition.maxStacks) return false;
+  if (current >= definition.maxStacks || player.level < definition.unlockLevel ||
+      !(definition.requires ?? []).every((requirement) => skillStacks(player, requirement.skillId) >= requirement.stacks)) return false;
   const coinCost = SKILL_RARITY_COIN_COST[definition.rarity];
   if (coinCost > 0 && player.coins < coinCost) return false;
   if (coinCost > 0) player.coins -= coinCost;
@@ -217,7 +270,10 @@ export function applySkillToPlayer(player: PlayerState, skillId: string): boolea
 
 function availableSkills(player: PlayerState): SkillCardDefinition[] {
   ensurePlayerSkillState(player);
-  return SKILL_REGISTRY.filter((skill) => skillStacks(player, skill.id) < skill.maxStacks);
+  return SKILL_REGISTRY.filter((skill) =>
+    player.level >= skill.unlockLevel &&
+    skillStacks(player, skill.id) < skill.maxStacks &&
+    (skill.requires ?? []).every((requirement) => skillStacks(player, requirement.skillId) >= requirement.stacks));
 }
 
 function toCard(player: PlayerState, definition: SkillCardDefinition): SkillCard {
@@ -231,6 +287,10 @@ function toCard(player: PlayerState, definition: SkillCardDefinition): SkillCard
     maxStacks: definition.maxStacks,
     currentStacks: skillStacks(player, definition.id),
     coinCost: SKILL_RARITY_COIN_COST[definition.rarity],
+    branch: definition.branch,
+    tier: definition.tier,
+    unlockLevel: definition.unlockLevel,
+    ...(definition.requires ? { requires: definition.requires } : {}),
   };
 }
 
@@ -244,8 +304,11 @@ export function generateSkillCardOffer(player: PlayerState, offerId: string, see
 
   while (chosen.length < Math.min(3, pool.length)) {
     const remaining = pool.filter((skill) => !chosen.some((card) => card.id === skill.id));
-    const varied = remaining.filter((skill) => !categories.has(skill.category));
-    const source = varied.length > 0 ? varied : remaining;
+    const affordableRemaining = remaining.filter((skill) => SKILL_RARITY_COIN_COST[skill.rarity] <= player.coins);
+    const mustChooseAffordable = chosen.length === 0 && affordableRemaining.length > 0;
+    const candidatePool = mustChooseAffordable ? affordableRemaining : remaining;
+    const varied = candidatePool.filter((skill) => !categories.has(skill.category));
+    const source = varied.length > 0 ? varied : candidatePool;
     const totalWeight = source.reduce((sum, skill) => sum + skill.weight, 0);
     let pick = random01(seedRef) * totalWeight;
     let selected = source[source.length - 1]!;

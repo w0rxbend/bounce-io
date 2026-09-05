@@ -2,6 +2,7 @@ import {
   AIR_ACCELERATION,
   AIR_PUSH_FACTOR,
   COYOTE_TIME_SECONDS,
+  DASH_ACTIVE_MS,
   ENEMY_ATTACK_ACTIVE_SECONDS,
   ENEMY_ATTACK_COOLDOWN_SECONDS,
   ENEMY_ATTACK_RANGE_PX,
@@ -112,6 +113,8 @@ export function createPlayerState(id: string, x: number, y: number): PlayerState
     pickupRadius: GAME_REWARD_CONFIG.pickupRadius,
     xpGainMultiplier: 1,
     killXpMultiplier: 1,
+    windResistance: 0,
+    bonusCollectibleChance: 0,
     selectedSkills: {},
     shockwaveCounter: 0,
     fallStartY: null
@@ -195,7 +198,14 @@ function recalculateAttackProgression(player: PlayerState): void {
 
 export function xpRequiredForLevel(level: number): number {
   const safeLevel = Math.max(1, Math.floor(level));
-  return Math.max(1, Math.round(GAME_REWARD_CONFIG.xpPerLevelBase * Math.pow(GAME_REWARD_CONFIG.xpPerLevelGrowth, safeLevel - 1)));
+  const tier = safeLevel - 1;
+  return Math.max(1, Math.round(GAME_REWARD_CONFIG.xpPerLevelBase + tier * 28 + tier * tier * 3));
+}
+
+/** Tougher altitude bands pay proportionally more XP instead of only making
+ * later levels slower. The cap keeps repeated endgame farming bounded. */
+export function enemyKillXpForChunk(chunkY: number): number {
+  return GAME_REWARD_CONFIG.enemyKillXp + Math.min(60, Math.max(0, Math.floor(chunkY)) * 2);
 }
 
 export function addPlayerXp(player: PlayerState, amount: number): number {
@@ -400,7 +410,7 @@ function windZoneSeed(chunk: GeneratedChunk, zone: GeneratedChunk["windZones"][n
   return (chunk.seed ^ (chunk.chunkY * 73_856_093) ^ (zone.x * 19_349_663) ^ (zone.y * 83_492_791)) >>> 0;
 }
 
-function windGustMultiplier(seed: number, timeSeconds: number, bounds: Rect): number {
+export function windGustMultiplier(seed: number, timeSeconds: number, bounds: Rect): number {
   const centerX = bounds.x + bounds.width / 2;
   const centerY = bounds.y + bounds.height / 2;
   const primary = Math.sin(timeSeconds * 2.15 + seed * 0.000_31) * 0.5 + 0.5;
@@ -413,7 +423,9 @@ function windGustMultiplier(seed: number, timeSeconds: number, bounds: Rect): nu
 
 export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedChunk>, deltaSeconds: number, timeSeconds = 0): boolean {
   if (player.health <= 0) return false;
+  ensurePlayerSkillState(player);
   const dt = Math.min(Math.max(deltaSeconds, 0), MAX_DELTA_SECONDS);
+  const windFactor = 1 - clamp(player.windResistance, 0, SKILL_BALANCE.maxWindResistance);
   const bounds = playerRect(player);
   let pushed = false;
 
@@ -430,13 +442,13 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
       const gust = windGustMultiplier(windZoneSeed(chunk, zone), timeSeconds, bounds);
       if (zone.axis === "vertical") {
         const maxVertical = MAX_FALL_SPEED * 0.72;
-        const targetVelocity = zone.direction * Math.min(maxVertical, zone.strength * 0.48 * gust);
-        player.velocity.y = moveToward(player.velocity.y, targetVelocity, zone.strength * (1.7 + gust * 2.2) * dt);
+        const targetVelocity = zone.direction * Math.min(maxVertical, zone.strength * 0.48 * gust * windFactor);
+        player.velocity.y = moveToward(player.velocity.y, targetVelocity, zone.strength * (1.7 + gust * 2.2) * windFactor * dt);
         player.velocity.y = clamp(player.velocity.y, -maxVertical, maxVertical);
         if (zone.direction < 0) player.fallStartY = null;
       } else {
-        const targetVelocity = zone.direction * Math.min(MAX_RUN_SPEED * 1.45, zone.strength * 0.55 * gust);
-        player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * (2.2 + gust * 3.0) * dt);
+        const targetVelocity = zone.direction * Math.min(MAX_RUN_SPEED * 1.45, zone.strength * 0.55 * gust * windFactor);
+        player.velocity.x = moveToward(player.velocity.x, targetVelocity, zone.strength * (2.2 + gust * 3.0) * windFactor * dt);
         player.velocity.x = clamp(player.velocity.x, -MAX_RUN_SPEED * 1.45, MAX_RUN_SPEED * 1.45);
       }
       pushed = true;
@@ -446,20 +458,21 @@ export function applyWindZones(player: PlayerState, chunks: Iterable<GeneratedCh
   return pushed;
 }
 
-function enemyMovementSpeed(kind: EnemyState["kind"], chasing: boolean): number {
+function enemyMovementSpeed(kind: EnemyState["kind"], chasing: boolean, altitudePressure = 0): number {
   const chase = chasing ? ENEMY_CHASE_SPEED : ENEMY_PATROL_SPEED;
+  const altitudeMultiplier = 1 + clamp(altitudePressure, 0, 1) * (chasing ? 0.35 : 0.22);
   switch (kind) {
     case "goblinScout":
     case "iceBat":
     case "windSpirit":
-      return chase * 1.12;
+      return chase * 1.12 * altitudeMultiplier;
     case "goblinChief":
     case "skeletonArmored":
     case "yeti":
     case "iceGolem":
-      return chase * 0.82;
+      return chase * 0.82 * altitudeMultiplier;
     default:
-      return chase;
+      return chase * altitudeMultiplier;
   }
 }
 
@@ -496,6 +509,10 @@ export function stepEnemyBehavior(enemy: EnemyState, player: PlayerState, deltaS
     attackHasHit: enemy.attackHasHit ?? false
   };
   let hitPlayer = false;
+  const altitudePressure = clamp(next.chunkY / 40, 0, 1);
+  const windupSeconds = ENEMY_ATTACK_WINDUP_SECONDS * (1 - altitudePressure * 0.30);
+  const recoverySeconds = ENEMY_ATTACK_RECOVERY_SECONDS * (1 - altitudePressure * 0.24);
+  const cooldownSeconds = ENEMY_ATTACK_COOLDOWN_SECONDS * (1 - altitudePressure * 0.32);
 
   if (next.health <= 0 || player.health <= 0) {
     next.velocity.x = 0;
@@ -515,7 +532,7 @@ export function stepEnemyBehavior(enemy: EnemyState, player: PlayerState, deltaS
     next.velocity.x = 0;
     if (canSeePlayer) next.facing = targetDir;
     next.attackWindup = (next.attackWindup ?? 0) + dt;
-    if (next.attackWindup >= ENEMY_ATTACK_WINDUP_SECONDS) {
+    if (next.attackWindup >= windupSeconds) {
       next.behavior = "attack";
       next.attackWindup = 0;
       next.attackActive = 0;
@@ -535,10 +552,10 @@ export function stepEnemyBehavior(enemy: EnemyState, player: PlayerState, deltaS
   } else if (next.behavior === "recover") {
     next.velocity.x = 0;
     next.attackActive = (next.attackActive ?? 0) + dt;
-    if (next.attackActive >= ENEMY_ATTACK_RECOVERY_SECONDS) {
+    if (next.attackActive >= recoverySeconds) {
       next.behavior = "patrol";
       next.attackActive = 0;
-      next.attackCooldown = ENEMY_ATTACK_COOLDOWN_SECONDS;
+      next.attackCooldown = cooldownSeconds;
       next.attackHasHit = false;
       delete next.targetId;
     }
@@ -553,14 +570,14 @@ export function stepEnemyBehavior(enemy: EnemyState, player: PlayerState, deltaS
       next.velocity.x = 0;
     } else {
       next.behavior = "chase";
-      next.velocity.x = targetDir * enemyMovementSpeed(next.kind, true);
+      next.velocity.x = targetDir * enemyMovementSpeed(next.kind, true, altitudePressure);
     }
   } else {
     next.behavior = "patrol";
     delete next.targetId;
     const patrolDir: -1 | 1 = next.velocity.x < 0 || next.facing < 0 ? -1 : 1;
     next.facing = patrolDir;
-    next.velocity.x = patrolDir * enemyMovementSpeed(next.kind, false);
+    next.velocity.x = patrolDir * enemyMovementSpeed(next.kind, false, altitudePressure);
   }
 
   next.position.x += next.velocity.x * dt;
@@ -710,7 +727,6 @@ export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap
   };
   next.shieldRegenCooldownMs = Math.max(0, player.shieldRegenCooldownMs - dt * 1000);
   next.dashCooldownRemainingMs = Math.max(0, player.dashCooldownRemainingMs - dt * 1000);
-  next.dashTimerMs = Math.max(0, player.dashTimerMs - dt * 1000);
   if (next.maxShield > 0 && next.shieldRegenCooldownMs <= 0 && next.shield < next.maxShield) {
     next.shield = Math.min(next.maxShield, next.shield + next.shieldRegenPerSecond * dt);
   }
@@ -723,22 +739,25 @@ export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap
   const direction = locked ? 0 : (input.right ? 1 : 0) - (input.left ? 1 : 0);
   const maxRunSpeed = MAX_RUN_SPEED * clamp(next.movementSpeed, 0.5, 2);
   const jumpSpeed = JUMP_SPEED * clamp(next.jumpPower, 0.5, 1.8);
+  let dashActive = player.dashTimerMs > 0 && !locked;
+  if (locked) next.dashTimerMs = 0;
 
-  if (direction !== 0) {
+  if (!dashActive && direction !== 0) {
     next.facing = direction > 0 ? 1 : -1;
     const acceleration = next.grounded
       ? MOVE_ACCELERATION * clamp(next.movementSpeed, 0.5, 2)
       : AIR_ACCELERATION * clamp(next.airControl, 0.5, 2);
     next.velocity.x = moveToward(next.velocity.x, direction * maxRunSpeed, acceleration * dt);
-  } else if (next.grounded) {
+  } else if (!dashActive && next.grounded) {
     next.velocity.x = moveToward(next.velocity.x, 0, GROUND_FRICTION * dt);
   }
 
-  if (!locked && input.dash && next.dashUnlocked && next.dashCooldownRemainingMs <= 0) {
+  if (!dashActive && !locked && input.dash && next.dashUnlocked && next.dashCooldownRemainingMs <= 0) {
     const dashDir = direction !== 0 ? direction : next.facing;
     next.velocity.x = dashDir * Math.max(maxRunSpeed * 1.8, 260);
     next.dashCooldownRemainingMs = next.dashCooldownMs;
-    next.dashTimerMs = 120;
+    next.dashTimerMs = DASH_ACTIVE_MS;
+    dashActive = true;
   }
 
   // Jump
@@ -764,10 +783,15 @@ export function stepPlayer(player: PlayerState, input: PlayerInput, map: TileMap
   next.velocity.y = Math.min(next.velocity.y + GRAVITY * dt, MAX_FALL_SPEED);
 
   // Clamp horizontal
-  if (next.velocity.x > maxRunSpeed) next.velocity.x = maxRunSpeed;
-  if (next.velocity.x < -maxRunSpeed) next.velocity.x = -maxRunSpeed;
+  if (!dashActive) {
+    if (next.velocity.x > maxRunSpeed) next.velocity.x = maxRunSpeed;
+    if (next.velocity.x < -maxRunSpeed) next.velocity.x = -maxRunSpeed;
+  }
 
   resolveHorizontal(next, map, next.velocity.x * dt, hits);
+  if (dashActive) {
+    next.dashTimerMs = next.velocity.x === 0 ? 0 : Math.max(0, next.dashTimerMs - dt * 1000);
+  }
   resolveVertical(next, map, next.velocity.y * dt, input.drop, hits);
 
   if (overlappedHazard(map, next) && next.invulnerable <= 0) {

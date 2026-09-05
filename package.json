@@ -9,6 +9,7 @@
     "dev:server:go": "cd apps/server-go && go run ./cmd/server",
     "loadtest:go": "cd apps/server-go && go run ./cmd/loadtest",
     "assets:generate": "python3 tools/generate-separated-assets.py",
+    "assets:skins": "python3 tools/generate-body-part-skins.py && python3 tools/build-cosmetics-manifest.py && python3 tools/validate-body-part-skins.py",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "node --import tsx --test tests/**/*.test.ts"

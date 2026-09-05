@@ -235,6 +235,8 @@ export function isPlayerState(value: unknown): value is PlayerState {
     isFiniteNumber(value.pickupRadius) &&
     isFiniteNumber(value.xpGainMultiplier) &&
     isFiniteNumber(value.killXpMultiplier) &&
+    isFiniteNumber(value.windResistance) &&
+    isFiniteNumber(value.bonusCollectibleChance) &&
     isStringNumberRecord(value.selectedSkills) &&
     isInteger(value.shockwaveCounter) &&
     isFiniteNumberOrNull(value.fallStartY) &&
@@ -259,7 +261,9 @@ export function isPlayerState(value: unknown): value is PlayerState {
     (value.extraJumpsUsed as number) >= 0 &&
     (value.pickupRadius as number) > 0 &&
     (value.xpGainMultiplier as number) > 0 &&
-    (value.killXpMultiplier as number) > 0;
+    (value.killXpMultiplier as number) > 0 &&
+    (value.windResistance as number) >= 0 && (value.windResistance as number) <= 1 &&
+    (value.bonusCollectibleChance as number) >= 0 && (value.bonusCollectibleChance as number) <= 1;
 }
 
 function isSkillCard(value: unknown): value is SkillCard {

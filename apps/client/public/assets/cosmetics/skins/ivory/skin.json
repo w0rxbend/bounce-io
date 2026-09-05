@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "ivory",
+  "displayName": "Ivory",
+  "tags": [
+    "built-in",
+    "frost"
+  ],
+  "fallbackColor": "#f4e8c8"
+}

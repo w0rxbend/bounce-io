@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s08",
+  "displayName": "Relic 09",
+  "tags": [
+    "built-in",
+    "ember"
+  ],
+  "fallbackColor": "#c59d59"
+}

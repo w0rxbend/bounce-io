@@ -536,9 +536,10 @@ func (cmd metricsCommand) apply(s *roomState) {
 }
 
 func NewRoom(cfg RoomConfig, stats *ServerMetrics, log *slog.Logger) *Room {
-	if cfg.TickRate <= 0 {
-		cfg.TickRate = DefaultTickRate
-	}
+	// The authoritative simulation and client predictor share a 60 Hz fixed
+	// timestep. A configurable ticker with a fixed 1/60 physics delta would
+	// otherwise speed up or slow down the entire game.
+	cfg.TickRate = DefaultTickRate
 	if cfg.SnapshotRate <= 0 {
 		cfg.SnapshotRate = DefaultSnapshotRate
 	}
@@ -882,7 +883,7 @@ func (s *roomState) tickRoom(now time.Time, interval time.Duration) {
 				input = IdleInput(sess.lastProcessedSeq)
 			}
 			previousKickPhase := sess.player.KickPhase
-			sess.player = StepPlayer(s.room.seed, sess.player, input, PhysicsStepSeconds)
+			sess.player = StepPlayerAtTime(s.room.seed, sess.player, input, PhysicsStepSeconds, float64(now.UnixMilli())/1000)
 			if previousKickPhase == "idle" && sess.player.KickPhase == "windup" {
 				s.pendingEvents = append(s.pendingEvents, MatchEvent{"type": "PLAYER_KICK_STARTED", "playerId": sess.playerID})
 			}
@@ -1387,13 +1388,14 @@ func (s *roomState) checkRelicCollection(sess *session) {
 			beforeLevel := player.Level
 			applyCollectible(player, pickupType)
 			s.queueLevelUpChoices(sess, beforeLevel)
-			player.Coins++
+			coinValue := 1 + goldKeeperBonus(*player, relic.ID)
+			player.Coins += coinValue
 			s.emitPlayerStats(sess)
 			s.pendingEvents = append(s.pendingEvents, MatchEvent{
 				"type":       "COIN_COLLECTED",
 				"playerId":   sess.playerID,
 				"coinId":     relic.ID,
-				"value":      1,
+				"value":      coinValue,
 				"x":          worldX,
 				"y":          worldY,
 				"pickupType": pickupType,
@@ -1463,6 +1465,7 @@ func (s *roomState) checkChestInteraction(sess *session) {
 			}
 			n := HashString(chest.ID + ":" + itoa(int(s.tick)))
 			coins := ChestCoinMin + int(n%uint32(ChestCoinMax-ChestCoinMin+1))
+			coins += goldKeeperBonus(*player, chest.ID)
 			beforeLevel := player.Level
 			xpGranted := addPlayerXP(player, ChestXPValue)
 			s.queueLevelUpChoices(sess, beforeLevel)
@@ -1692,8 +1695,10 @@ func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bo
 	beforeLevel := player.Level
 	xpGranted := addPlayerXP(player, xpValue)
 	s.queueLevelUpChoices(sess, beforeLevel)
+	coinValue := 0
 	if collectible.Type == "coin" {
-		player.Coins++
+		coinValue = 1 + goldKeeperBonus(*player, collectible.ID)
+		player.Coins += coinValue
 	}
 	s.emitPlayerStats(sess)
 	s.pendingEvents = append(s.pendingEvents, MatchEvent{
@@ -1706,7 +1711,7 @@ func (s *roomState) tryPickupCollectible(sess *session, collectibleID string) bo
 		"type":       "COIN_COLLECTED",
 		"playerId":   sess.playerID,
 		"coinId":     collectible.ID,
-		"value":      boolInt(collectible.Type == "coin"),
+		"value":      coinValue,
 		"x":          collectible.X,
 		"y":          collectible.Y,
 		"pickupType": collectible.Type,
@@ -1786,9 +1791,9 @@ func (s *roomState) simulateEnemies(dt float64) {
 				})
 				if enemy.Health <= 0 {
 					s.defeatedEnemies[enemy.ID] = struct{}{}
-					drops := s.makeEnemyDrops(enemy)
+					drops := s.makeEnemyDrops(enemy, sess.player)
 					beforeLevel := sess.player.Level
-					xpGranted := addPlayerXP(&sess.player, int(math.Round(float64(EnemyKillXP)*sess.player.KillXPMultiplier)))
+					xpGranted := addPlayerXP(&sess.player, int(math.Round(float64(enemyKillXPForChunk(enemy.ChunkY))*sess.player.KillXPMultiplier)))
 					s.queueLevelUpChoices(sess, beforeLevel)
 					s.emitPlayerStats(sess)
 					for _, drop := range drops {
@@ -1827,7 +1832,7 @@ func (s *roomState) simulateEnemies(dt float64) {
 			}
 			applyDamage(&enemyHitPlayer.player, enemyDamageForChunk(enemy.ChunkY), dir*125, -70, HitStunSeconds)
 			enemy.AttackHasHit = true
-			enemy.AttackCooldown = enemyAttackCooldownSeconds
+			enemy.AttackCooldown = enemyAttackCooldownForChunk(enemy.ChunkY)
 			s.pendingEvents = append(s.pendingEvents, MatchEvent{
 				"type":     "ENEMY_ATTACK",
 				"playerId": enemyHitPlayer.playerID,
@@ -1871,6 +1876,11 @@ func playerOnEnemyPlatformNetwork(player PlayerState, enemy EnemyState) bool {
 		playerCenterX <= maxX+enemyDetectionRange*0.35
 }
 
+func enemyAttackCooldownForChunk(chunkY int) float64 {
+	pressure := math.Max(0, math.Min(1, float64(chunkY)/40))
+	return enemyAttackCooldownSeconds * (1 - pressure*0.32)
+}
+
 func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) EnemyState {
 	if enemy.Behavior == "" {
 		enemy.Behavior = "patrol"
@@ -1887,6 +1897,10 @@ func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) Enem
 		targetDistanceX = math.Abs(playerCenterX - enemyCenterX)
 	}
 	canReachTarget := target != nil && targetDistanceX <= enemyAttackRange+float64(PlayerWidth+22)/2
+	altitudePressure := math.Max(0, math.Min(1, float64(enemy.ChunkY)/40))
+	windupSeconds := enemyAttackWindupSeconds * (1 - altitudePressure*0.30)
+	recoverySeconds := enemyAttackRecoverySeconds * (1 - altitudePressure*0.24)
+	cooldownSeconds := enemyAttackCooldownForChunk(enemy.ChunkY)
 
 	switch enemy.Behavior {
 	case "windup":
@@ -1895,7 +1909,7 @@ func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) Enem
 			enemy.Facing = targetDir
 		}
 		enemy.AttackWindup += dt
-		if enemy.AttackWindup >= enemyAttackWindupSeconds {
+		if enemy.AttackWindup >= windupSeconds {
 			enemy.Behavior = "attack"
 			enemy.AttackWindup = 0
 			enemy.AttackActive = 0
@@ -1911,10 +1925,10 @@ func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) Enem
 	case "recover":
 		enemy.Velocity.X = 0
 		enemy.AttackActive += dt
-		if enemy.AttackActive >= enemyAttackRecoverySeconds {
+		if enemy.AttackActive >= recoverySeconds {
 			enemy.Behavior = "patrol"
 			enemy.AttackActive = 0
-			enemy.AttackCooldown = enemyAttackCooldownSeconds
+			enemy.AttackCooldown = cooldownSeconds
 			enemy.AttackHasHit = false
 			enemy.TargetID = ""
 		}
@@ -1930,7 +1944,7 @@ func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) Enem
 				enemy.Velocity.X = 0
 			} else {
 				enemy.Behavior = "chase"
-				enemy.Velocity.X = float64(targetDir) * enemySpeed(enemy.Kind, true)
+				enemy.Velocity.X = float64(targetDir) * enemySpeed(enemy.Kind, true) * (1 + altitudePressure*0.35)
 			}
 		} else {
 			enemy.Behavior = "patrol"
@@ -1940,7 +1954,7 @@ func stepServerEnemyBehavior(enemy EnemyState, target *session, dt float64) Enem
 				patrolDir = -1
 			}
 			enemy.Facing = patrolDir
-			enemy.Velocity.X = float64(patrolDir) * enemySpeed(enemy.Kind, false)
+			enemy.Velocity.X = float64(patrolDir) * enemySpeed(enemy.Kind, false) * (1 + altitudePressure*0.22)
 		}
 	}
 
@@ -2100,13 +2114,14 @@ func (s *roomState) awardPvPKillCredit(victim *session) {
 	})
 }
 
-func (s *roomState) makeEnemyDrops(enemy EnemyState) []CollectibleState {
+func (s *roomState) makeEnemyDrops(enemy EnemyState, player PlayerState) []CollectibleState {
 	seed := HashString(enemy.ID + ":" + itoa(int(s.tick)))
 	countRange := max(0, EnemyDropMax-EnemyDropMin)
 	count := EnemyDropMin
 	if countRange > 0 {
 		count += int(seed % uint32(countRange+1))
 	}
+	count += goldKeeperBonus(player, enemy.ID+":drops")
 	drops := make([]CollectibleState, 0, count)
 	for i := 0; i < count; i++ {
 		n := HashString(enemy.ID + ":drop:" + itoa(i) + ":" + itoa(int(s.tick)))

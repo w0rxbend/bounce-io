@@ -58,9 +58,11 @@ type ClientSnapshot struct {
 }
 
 func NewServer(cfg ServerConfig, log *slog.Logger) *Server {
-	if cfg.TickRate <= 0 {
-		cfg.TickRate = DefaultTickRate
-	}
+	// Client prediction and the shared movement constants intentionally use a
+	// deterministic 60 Hz fixed step. Accepting another wall-clock tick rate
+	// while still advancing PhysicsStepSeconds changes game-time speed and
+	// makes reconciliation diverge, so keep the authoritative clock fixed.
+	cfg.TickRate = DefaultTickRate
 	if cfg.SnapshotRate <= 0 {
 		cfg.SnapshotRate = DefaultSnapshotRate
 	}

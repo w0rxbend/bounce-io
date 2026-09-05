@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "forest",
+  "displayName": "Forest",
+  "tags": [
+    "built-in",
+    "storm"
+  ],
+  "fallbackColor": "#4f6f3f"
+}

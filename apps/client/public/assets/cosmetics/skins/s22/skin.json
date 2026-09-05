@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s22",
+  "displayName": "Relic 23",
+  "tags": [
+    "built-in",
+    "arcane"
+  ],
+  "fallbackColor": "#2dcda0"
+}

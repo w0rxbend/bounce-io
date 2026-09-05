@@ -291,6 +291,8 @@ test("snapshot message validates correctly including coins in player state", () 
       grounded: playerState.grounded,
     }],
     collectedRelics: ["relic:0:0", "relic:1:2"],
+    revealedChests: [],
+    openedChests: [],
     events: [],
     lastProcessedSeq: { p1: 42 }
   }), true);
@@ -310,7 +312,9 @@ test("relic state message validates collected relic sync", () => {
   assert.equal(isServerMessage({
     type: "relicState",
     serverTime: Date.now(),
-    collectedRelics: ["relic:0:0", "relic:1:2"]
+    collectedRelics: ["relic:0:0", "relic:1:2"],
+    revealedChests: [],
+    openedChests: [],
   }), true);
 });
 

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "coal",
+  "displayName": "Coal",
+  "tags": [
+    "built-in",
+    "arcane"
+  ],
+  "fallbackColor": "#1c1f2a"
+}

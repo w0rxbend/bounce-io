@@ -47,6 +47,7 @@ const (
 	CoyoteTimeSeconds  = 0.09
 	JumpBufferSeconds  = 0.10
 	ShortHopCutoff     = 0.45
+	DashActiveMs       = 120.0
 	BaseMaxHealth      = 5
 	ReconcileTolerance = 6.0
 
@@ -262,6 +263,8 @@ type PlayerState struct {
 	PickupRadius            float64        `json:"pickupRadius"`
 	XPGainMultiplier        float64        `json:"xpGainMultiplier"`
 	KillXPMultiplier        float64        `json:"killXpMultiplier"`
+	WindResistance          float64        `json:"windResistance"`
+	BonusCollectibleChance  float64        `json:"bonusCollectibleChance"`
 	SelectedSkills          map[string]int `json:"selectedSkills"`
 	ShockwaveCounter        int            `json:"shockwaveCounter"`
 	FallStartY              *float64       `json:"fallStartY"`
@@ -351,15 +354,24 @@ type CollectibleState struct {
 type MatchEvent map[string]any
 
 type SkillCard struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Category      string `json:"category"`
-	Rarity        string `json:"rarity"`
-	Description   string `json:"description"`
-	Icon          string `json:"icon"`
-	MaxStacks     int    `json:"maxStacks"`
-	CurrentStacks int    `json:"currentStacks"`
-	CoinCost      int    `json:"coinCost"`
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Category      string              `json:"category"`
+	Rarity        string              `json:"rarity"`
+	Description   string              `json:"description"`
+	Icon          string              `json:"icon"`
+	MaxStacks     int                 `json:"maxStacks"`
+	CurrentStacks int                 `json:"currentStacks"`
+	CoinCost      int                 `json:"coinCost"`
+	Branch        string              `json:"branch,omitempty"`
+	Tier          int                 `json:"tier,omitempty"`
+	UnlockLevel   int                 `json:"unlockLevel,omitempty"`
+	Requires      []SkillPrerequisite `json:"requires,omitempty"`
+}
+
+type SkillPrerequisite struct {
+	SkillID string `json:"skillId"`
+	Stacks  int    `json:"stacks"`
 }
 
 type SkillCardOffer struct {

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s20",
+  "displayName": "Relic 21",
+  "tags": [
+    "built-in",
+    "earth"
+  ],
+  "fallbackColor": "#6859c5"
+}

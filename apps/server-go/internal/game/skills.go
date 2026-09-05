@@ -25,6 +25,16 @@ const (
 	skillMaxPickupRadiusMultiplier       = 2.5
 	skillXPCollectibleBonusPerStack      = 0.20
 	skillKillXPBonusPerStack             = 0.15
+	skillStaminaCooldownPerStack         = 0.06
+	skillMaxStaminaCooldownReduction     = 0.30
+	skillWindResistancePerStack          = 0.10
+	skillMaxWindResistance               = 0.50
+	skillHighJumpPerStack                = 0.07
+	skillShieldCoreBase                  = 12.0
+	skillShieldCorePerStack              = 10.0
+	skillShieldCoreRegenPerStack         = 0.8
+	skillGoldKeeperChancePerStack        = 0.10
+	skillMaxGoldKeeperChance             = 0.45
 )
 
 // skillRarityCoinCost mirrors SKILL_RARITY_COIN_COST in
@@ -45,24 +55,37 @@ type skillDefinition struct {
 	icon        string
 	maxStacks   int
 	weight      int
+	branch      string
+	tier        int
+	unlockLevel int
+	requires    []SkillPrerequisite
+}
+
+func skill(id, name, category, rarity, description, icon string, maxStacks, weight int, branch string, tier, unlockLevel int, requires ...SkillPrerequisite) skillDefinition {
+	return skillDefinition{id: id, name: name, category: category, rarity: rarity, description: description, icon: icon, maxStacks: maxStacks, weight: weight, branch: branch, tier: tier, unlockLevel: unlockLevel, requires: requires}
 }
 
 var skillRegistry = []skillDefinition{
-	{"long_reach", "Long Reach", "attack", "common", "Hit range +15%.", "ARC", 5, 16},
-	{"heavy_hit", "Heavy Hit", "attack", "common", "ATK damage +10%.", "FIST", 5, 16},
-	{"quick_strike", "Quick Strike", "attack", "rare", "Attack cooldown -8%.", "SPD", 4, 11},
-	{"shockwave_hit", "Shockwave Hit", "attack", "epic", "Every few hits emits a pixel shockwave.", "WAVE", 4, 6},
-	{"protective_aura", "Protective Aura", "defense", "common", "Incoming damage -8%.", "AURA", 4, 14},
-	{"energy_shield", "Energy Shield", "defense", "rare", "Adds a regenerating shield before HP.", "SHLD", 5, 11},
-	{"last_stand", "Last Stand", "defense", "rare", "Low HP grants extra damage reduction.", "LAST", 4, 9},
-	{"spring_legs", "Spring Legs", "mobility", "common", "Jump power +10%.", "JUMP", 4, 14},
-	{"air_control", "Air Control", "mobility", "common", "Air steering +12%.", "WIND", 4, 13},
-	{"double_jump", "Double Jump", "mobility", "epic", "Unlocks an extra air jump.", "DBL", 3, 6},
-	{"dash", "Dash", "mobility", "epic", "Unlocks a short horizontal dash.", "DASH", 4, 6},
-	{"xp_magnet", "XP Magnet", "utility", "common", "Pickup radius +25%.", "MAG", 4, 14},
-	{"dark_harvest", "Dark Harvest", "utility", "rare", "XP collectibles give +20% XP.", "XP+", 4, 10},
-	{"vital_growth", "Vital Growth", "utility", "common", "Max HP +15.", "HP+", 6, 12},
-	{"battle_learning", "Battle Learning", "utility", "rare", "Enemy kill XP +15%.", "BOOK", 4, 10},
+	skill("stamina", "Stamina", "attack", "common", "Fight recovery and punch cooldown -6%.", "STM", 5, 22, "stamina", 1, 2),
+	skill("long_reach", "Long Reach", "attack", "common", "Hit range +15%.", "ARC", 5, 14, "stamina", 1, 2),
+	skill("heavy_hit", "Heavy Hit", "attack", "common", "ATK damage +10%.", "FIST", 5, 13, "stamina", 1, 3),
+	skill("quick_strike", "Quick Strike", "attack", "rare", "Attack cooldown -8% beyond Stamina.", "SPD", 4, 10, "stamina", 2, 5, SkillPrerequisite{SkillID: "stamina", Stacks: 2}),
+	skill("shockwave_hit", "Shockwave Hit", "attack", "epic", "Every few hits emits a pixel shockwave.", "WAVE", 4, 5, "stamina", 3, 9, SkillPrerequisite{SkillID: "heavy_hit", Stacks: 2}),
+	skill("wind_resistance", "Wind Resistance", "mobility", "common", "Wind force -10% and steadier aerial movement.", "GUST", 5, 22, "wind", 1, 2),
+	skill("air_control", "Air Control", "mobility", "rare", "Air steering +12%.", "WIND", 4, 11, "wind", 2, 5, SkillPrerequisite{SkillID: "wind_resistance", Stacks: 2}),
+	skill("high_jump", "High Jump", "mobility", "common", "Jump power +7%.", "UP", 5, 22, "jump", 1, 2),
+	skill("spring_legs", "Spring Legs", "mobility", "rare", "Jump power +10% beyond High Jump.", "JUMP", 4, 10, "jump", 2, 5, SkillPrerequisite{SkillID: "high_jump", Stacks: 2}),
+	skill("double_jump", "Double Jump", "mobility", "epic", "Unlocks an extra air jump.", "DBL", 1, 6, "jump", 3, 8, SkillPrerequisite{SkillID: "high_jump", Stacks: 3}),
+	skill("dash", "Dash", "mobility", "epic", "Unlocks a short horizontal dash; stacks reduce its cooldown.", "DASH", 4, 6, "jump", 3, 9, SkillPrerequisite{SkillID: "spring_legs", Stacks: 2}),
+	skill("shield", "Shield", "defense", "common", "Adds a small regenerating shield.", "SHD", 5, 22, "shield", 1, 2),
+	skill("protective_aura", "Protective Aura", "defense", "common", "Incoming damage -8%.", "AURA", 4, 12, "shield", 1, 3),
+	skill("energy_shield", "Energy Shield", "defense", "rare", "Greatly improves shield capacity and regeneration.", "SHLD", 5, 10, "shield", 2, 5, SkillPrerequisite{SkillID: "shield", Stacks: 2}),
+	skill("last_stand", "Last Stand", "defense", "epic", "Low HP grants extra damage reduction.", "LAST", 4, 6, "shield", 3, 8, SkillPrerequisite{SkillID: "protective_aura", Stacks: 2}),
+	skill("gold_keeper", "Gold Keeper", "utility", "common", "Chance for bonus coins and an extra enemy drop +10%.", "GOLD", 5, 22, "fortune", 1, 2),
+	skill("xp_magnet", "XP Magnet", "utility", "common", "Pickup radius +25%.", "MAG", 4, 12, "fortune", 1, 3),
+	skill("vital_growth", "Vital Growth", "utility", "common", "Max HP +15.", "HP+", 6, 10, "fortune", 1, 4),
+	skill("dark_harvest", "Dark Harvest", "utility", "rare", "XP collectibles give +20% XP.", "XP+", 4, 9, "fortune", 2, 5, SkillPrerequisite{SkillID: "gold_keeper", Stacks: 2}),
+	skill("battle_learning", "Battle Learning", "utility", "rare", "Enemy kill XP +15%.", "BOOK", 4, 9, "fortune", 2, 6, SkillPrerequisite{SkillID: "xp_magnet", Stacks: 2}),
 }
 
 func skillByID(id string) (skillDefinition, bool) {
@@ -102,6 +125,8 @@ func ensurePlayerSkillState(player *PlayerState) {
 	if player.KillXPMultiplier <= 0 {
 		player.KillXPMultiplier = 1
 	}
+	player.WindResistance = math.Max(0, player.WindResistance)
+	player.BonusCollectibleChance = math.Max(0, player.BonusCollectibleChance)
 	if player.SelectedSkills == nil {
 		player.SelectedSkills = map[string]int{}
 	}
@@ -114,13 +139,28 @@ func skillStacks(player PlayerState, skillID string) int {
 	return max(0, player.SelectedSkills[skillID])
 }
 
+func goldKeeperBonus(player PlayerState, rewardKey string) int {
+	if player.BonusCollectibleChance <= 0 {
+		return 0
+	}
+	threshold := uint32(math.Round(math.Min(1, player.BonusCollectibleChance) * 10000))
+	if HashString("gold:"+player.ID+":"+rewardKey)%10000 < threshold {
+		return 1
+	}
+	return 0
+}
+
 func recalculateSkillDerivedStats(player *PlayerState) {
 	ensurePlayerSkillState(player)
 	longReach := skillStacks(*player, "long_reach")
 	heavyHit := skillStacks(*player, "heavy_hit")
 	quickStrike := skillStacks(*player, "quick_strike")
+	stamina := skillStacks(*player, "stamina")
 	protectiveAura := skillStacks(*player, "protective_aura")
 	energyShield := skillStacks(*player, "energy_shield")
+	shieldCore := skillStacks(*player, "shield")
+	windResistance := skillStacks(*player, "wind_resistance")
+	highJump := skillStacks(*player, "high_jump")
 	springLegs := skillStacks(*player, "spring_legs")
 	airControl := skillStacks(*player, "air_control")
 	doubleJump := skillStacks(*player, "double_jump")
@@ -128,31 +168,37 @@ func recalculateSkillDerivedStats(player *PlayerState) {
 	xpMagnet := skillStacks(*player, "xp_magnet")
 	darkHarvest := skillStacks(*player, "dark_harvest")
 	battleLearning := skillStacks(*player, "battle_learning")
+	goldKeeper := skillStacks(*player, "gold_keeper")
 
 	baseDamage := float64(1 + player.RelicFragments/8)
 	atkMultiplier := math.Min(skillMaxAtkMultiplier, 1+float64(heavyHit)*skillHeavyHitPerStack)
 	player.Damage = max(1, int(math.Round(baseDamage*atkMultiplier)))
 	baseAttackSpeed := math.Min(3, 1+float64(player.RelicFragments)*0.014)
-	cooldownMultiplier := math.Max(skillMinAttackCooldownMultiplier, 1-float64(quickStrike)*skillQuickStrikePerStack)
+	staminaReduction := math.Min(skillMaxStaminaCooldownReduction, float64(stamina)*skillStaminaCooldownPerStack)
+	cooldownMultiplier := math.Max(skillMinAttackCooldownMultiplier, 1-staminaReduction-float64(quickStrike)*skillQuickStrikePerStack)
 	player.AttackCooldownMs = KickCooldownSeconds * 1000 * cooldownMultiplier
 	player.AttackSpeed = math.Max(baseAttackSpeed, baseAttackSpeed/cooldownMultiplier)
 	player.HitRange = KickRangePX * math.Min(skillMaxHitRangeMultiplier, 1+float64(longReach)*skillLongReachPerStack)
 	player.DamageReduction = math.Min(skillMaxDamageReduction, float64(protectiveAura)*skillProtectiveAuraReductionPerStack)
-	if energyShield > 0 {
-		maxShield := skillShieldBase + float64(max(0, energyShield-1))*skillShieldPerStack
+	if shieldCore > 0 || energyShield > 0 {
+		coreShield := 0.0
+		if shieldCore > 0 {
+			coreShield = skillShieldCoreBase + float64(max(0, shieldCore-1))*skillShieldCorePerStack
+		}
+		maxShield := coreShield + float64(energyShield)*skillShieldPerStack
 		player.MaxShield = maxShield
 		if player.Shield <= 0 && player.LastDamageAt == 0 {
 			player.Shield = maxShield
 		}
 		player.Shield = math.Max(0, math.Min(player.Shield, maxShield))
-		player.ShieldRegenPerSec = skillShieldRegenPerSecond
+		player.ShieldRegenPerSec = float64(shieldCore)*skillShieldCoreRegenPerStack + float64(energyShield)*skillShieldRegenPerSecond
 		player.ShieldRegenDelayMs = skillShieldRegenDelayMs
 	} else {
 		player.Shield = 0
 		player.MaxShield = 0
 		player.ShieldRegenPerSec = 0
 	}
-	player.JumpPowerMultiplier = math.Min(skillMaxJumpMultiplier, 1+float64(springLegs)*skillSpringLegsPerStack)
+	player.JumpPowerMultiplier = math.Min(skillMaxJumpMultiplier, 1+float64(highJump)*skillHighJumpPerStack+float64(springLegs)*skillSpringLegsPerStack)
 	player.AirControlMultiplier = math.Min(skillMaxAirControlMultiplier, 1+float64(airControl)*skillAirControlPerStack)
 	player.JumpPower = math.Min(1.8, 1+float64(player.Crystals/3)*0.06) * player.JumpPowerMultiplier
 	player.AirControl = math.Min(2, 1+float64(player.Crystals/3)*0.05) * player.AirControlMultiplier
@@ -166,6 +212,8 @@ func recalculateSkillDerivedStats(player *PlayerState) {
 	player.PickupRadius = PickupRadius * math.Min(skillMaxPickupRadiusMultiplier, 1+float64(xpMagnet)*skillPickupRadiusPerStack)
 	player.XPGainMultiplier = 1 + float64(darkHarvest)*skillXPCollectibleBonusPerStack
 	player.KillXPMultiplier = 1 + float64(battleLearning)*skillKillXPBonusPerStack
+	player.WindResistance = math.Min(skillMaxWindResistance, float64(windResistance)*skillWindResistancePerStack)
+	player.BonusCollectibleChance = math.Min(skillMaxGoldKeeperChance, float64(goldKeeper)*skillGoldKeeperChancePerStack)
 }
 
 func applySkillToPlayer(player *PlayerState, skillID string) bool {
@@ -175,7 +223,7 @@ func applySkillToPlayer(player *PlayerState, skillID string) bool {
 	}
 	ensurePlayerSkillState(player)
 	current := skillStacks(*player, skillID)
-	if current >= def.maxStacks {
+	if current >= def.maxStacks || player.Level < def.unlockLevel || !skillPrerequisitesMet(*player, def) {
 		return false
 	}
 	coinCost := skillRarityCoinCost[def.rarity]
@@ -194,10 +242,19 @@ func applySkillToPlayer(player *PlayerState, skillID string) bool {
 	return true
 }
 
+func skillPrerequisitesMet(player PlayerState, def skillDefinition) bool {
+	for _, requirement := range def.requires {
+		if skillStacks(player, requirement.SkillID) < requirement.Stacks {
+			return false
+		}
+	}
+	return true
+}
+
 func availableSkillDefinitions(player PlayerState) []skillDefinition {
 	out := []skillDefinition{}
 	for _, skill := range skillRegistry {
-		if skillStacks(player, skill.id) < skill.maxStacks {
+		if player.Level >= skill.unlockLevel && skillStacks(player, skill.id) < skill.maxStacks && skillPrerequisitesMet(player, skill) {
 			out = append(out, skill)
 		}
 	}
@@ -215,6 +272,10 @@ func skillCardFromDefinition(player PlayerState, def skillDefinition) SkillCard 
 		MaxStacks:     def.maxStacks,
 		CurrentStacks: skillStacks(player, def.id),
 		CoinCost:      skillRarityCoinCost[def.rarity],
+		Branch:        def.branch,
+		Tier:          def.tier,
+		UnlockLevel:   def.unlockLevel,
+		Requires:      def.requires,
 	}
 }
 
@@ -242,6 +303,17 @@ func generateSkillCardOffer(player PlayerState, offerID string, seed uint32) (Sk
 			}
 			if !duplicate {
 				remaining = append(remaining, skill)
+			}
+		}
+		if len(chosen) == 0 {
+			affordable := []skillDefinition{}
+			for _, candidate := range remaining {
+				if skillRarityCoinCost[candidate.rarity] <= player.Coins {
+					affordable = append(affordable, candidate)
+				}
+			}
+			if len(affordable) > 0 {
+				remaining = affordable
 			}
 		}
 		source := []skillDefinition{}
@@ -279,25 +351,27 @@ func generateSkillCardOffer(player PlayerState, offerID string, seed uint32) (Sk
 
 func skillStatsPayload(player PlayerState) map[string]any {
 	return map[string]any{
-		"hp":               player.Health,
-		"maxHp":            player.MaxHealth,
-		"xp":               player.Relics,
-		"level":            player.Level,
-		"atk":              player.Damage,
-		"damage":           player.Damage,
-		"attackSpeed":      player.AttackSpeed,
-		"hitRange":         player.HitRange,
-		"attackCooldownMs": player.AttackCooldownMs,
-		"damageReduction":  player.DamageReduction,
-		"shield":           player.Shield,
-		"maxShield":        player.MaxShield,
-		"jumpPower":        player.JumpPower,
-		"airControl":       player.AirControl,
-		"extraJumps":       player.ExtraJumps,
-		"dashUnlocked":     player.DashUnlocked,
-		"pickupRadius":     player.PickupRadius,
-		"xpGainMultiplier": player.XPGainMultiplier,
-		"killXpMultiplier": player.KillXPMultiplier,
-		"selectedSkills":   player.SelectedSkills,
+		"hp":                     player.Health,
+		"maxHp":                  player.MaxHealth,
+		"xp":                     player.Relics,
+		"level":                  player.Level,
+		"atk":                    player.Damage,
+		"damage":                 player.Damage,
+		"attackSpeed":            player.AttackSpeed,
+		"hitRange":               player.HitRange,
+		"attackCooldownMs":       player.AttackCooldownMs,
+		"damageReduction":        player.DamageReduction,
+		"shield":                 player.Shield,
+		"maxShield":              player.MaxShield,
+		"jumpPower":              player.JumpPower,
+		"airControl":             player.AirControl,
+		"extraJumps":             player.ExtraJumps,
+		"dashUnlocked":           player.DashUnlocked,
+		"pickupRadius":           player.PickupRadius,
+		"xpGainMultiplier":       player.XPGainMultiplier,
+		"killXpMultiplier":       player.KillXPMultiplier,
+		"windResistance":         player.WindResistance,
+		"bonusCollectibleChance": player.BonusCollectibleChance,
+		"selectedSkills":         player.SelectedSkills,
 	}
 }

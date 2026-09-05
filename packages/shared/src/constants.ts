@@ -30,6 +30,7 @@ export const MAX_FALL_SPEED = 420;
 export const COYOTE_TIME_SECONDS = 0.09;
 export const JUMP_BUFFER_SECONDS = 0.10;
 export const SHORT_HOP_CUTOFF = 0.45;
+export const DASH_ACTIVE_MS = 120;
 
 // Derived: max jump height = JUMP_SPEED² / (2 × GRAVITY) ≈ 60.5 px ≈ 3.78 tiles
 // MAX_REACHABLE_VERTICAL_GAP_TILES = 3 gives 12+ px of margin over the 48 px gap

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "slate",
+  "displayName": "Slate",
+  "tags": [
+    "built-in",
+    "earth"
+  ],
+  "fallbackColor": "#36475f"
+}

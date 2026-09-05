@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "violet",
+  "displayName": "Violet",
+  "tags": [
+    "built-in",
+    "ember"
+  ],
+  "fallbackColor": "#9b6dff"
+}

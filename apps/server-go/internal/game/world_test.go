@@ -1,10 +1,87 @@
 package game
 
 import (
+	"encoding/json"
 	"math"
+	"os"
 	"reflect"
 	"testing"
 )
+
+func TestWindTurbulenceMatchesCrossLanguageGoldenFixture(t *testing.T) {
+	type windFixture struct {
+		Seed                             uint32 `json:"seed"`
+		Time, CenterX, CenterY, Expected float64
+	}
+	raw, err := os.ReadFile("../../../../tests/fixtures/wind-gust-parity.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures []windFixture
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range fixtures {
+		actual := windGustMultiplier(fixture.Seed, fixture.Time, fixture.CenterX, fixture.CenterY)
+		if math.Abs(actual-fixture.Expected) > 1e-12 {
+			t.Fatalf("seed %d: %.15f != %.15f", fixture.Seed, actual, fixture.Expected)
+		}
+	}
+}
+
+func TestAuthoritativeTileSolverStopsAtWorldWall(t *testing.T) {
+	player := CreatePlayerState("wall", 1, 8)
+	player.Velocity.X = -180
+	resolveWorldHorizontal(HashString("wall-test"), &player, -4)
+	if player.Position.X != 0 || player.Velocity.X != 0 {
+		t.Fatalf("expected wall stop at x=0, got x=%.3f vx=%.3f", player.Position.X, player.Velocity.X)
+	}
+}
+
+func TestDashRemainsPhysicalAndUnsteerableForActiveWindow(t *testing.T) {
+	const dt = 1.0 / 60.0
+	seed := HashString("dash-physics")
+	player := CreatePlayerState("dasher", 8*TileSize, TileSize)
+	player.DashUnlocked = true
+	startX := player.Position.X
+	player = StepPlayerAtTime(seed, player, PlayerInput{Right: true, Dash: true}, dt, 0)
+	if math.Abs(player.Velocity.X-270) > 1e-9 {
+		t.Fatalf("dash activation velocity = %.6f, want 270", player.Velocity.X)
+	}
+	if math.Abs(player.Position.X-startX-4.5) > 1e-9 {
+		t.Fatalf("dash activation displacement = %.6f, want 4.5", player.Position.X-startX)
+	}
+	if player.DashTimerMs <= 0 || player.DashTimerMs >= DashActiveMs {
+		t.Fatalf("dash timer after activation = %.3f", player.DashTimerMs)
+	}
+	activeMs := dt * 1000
+	for player.DashTimerMs > 0 {
+		player = StepPlayerAtTime(seed, player, PlayerInput{Left: true}, dt, 0)
+		activeMs += dt * 1000
+		if player.DashTimerMs > 0 && math.Abs(player.Velocity.X-270) > 1e-9 {
+			t.Fatalf("opposite input steered active dash to %.6f", player.Velocity.X)
+		}
+	}
+	if activeMs < DashActiveMs || activeMs >= DashActiveMs+dt*1000 {
+		t.Fatalf("dash active for %.3fms", activeMs)
+	}
+	player = StepPlayerAtTime(seed, player, PlayerInput{Left: true}, dt, 0)
+	if player.Velocity.X >= 270 {
+		t.Fatalf("normal control did not resume after dash: %.6f", player.Velocity.X)
+	}
+}
+
+func TestAuthoritativeTileSolverLandsOnSolidFloor(t *testing.T) {
+	seed := HashString("floor-test")
+	floorY := ChunkHeightTiles * TileSize
+	player := CreatePlayerState("floor", float64(4*TileSize), float64(floorY-PlayerHeight-1))
+	player.Velocity.Y = 180
+	resolveWorldVertical(seed, &player, 4, false)
+	expectedY := float64(floorY - PlayerHeight)
+	if player.Position.Y != expectedY || player.Velocity.Y != 0 || !player.Grounded {
+		t.Fatalf("expected grounded floor stop y=%.3f, got y=%.3f vy=%.3f grounded=%v", expectedY, player.Position.Y, player.Velocity.Y, player.Grounded)
+	}
+}
 
 func TestGeneratedChunksKeepPlatformsReachable(t *testing.T) {
 	for chunkY := 0; chunkY < 25; chunkY++ {
@@ -197,6 +274,9 @@ func TestRegionRoutesProvideSafeRiskRelicAndRecoveryOpportunities(t *testing.T) 
 
 		for chunkY := plan.StartChunkY; chunkY <= plan.EndChunkY; chunkY++ {
 			chunk := GenerateChunk(seed, chunkY)
+			if chunkY == plan.StartChunkY && (len(chunk.Hazards) != 0 || len(chunk.Enemies) != 0 || len(chunk.WindZones) != 0) {
+				t.Fatalf("region %d checkpoint should be a calm recovery beat: hazards=%d enemies=%d wind=%d", regionIndex, len(chunk.Hazards), len(chunk.Enemies), len(chunk.WindZones))
+			}
 			if len(chunk.Routes) < 2 {
 				t.Fatalf("region %d chunk %d should expose multiple route choices, got %#v", regionIndex, chunkY, chunk.Routes)
 			}

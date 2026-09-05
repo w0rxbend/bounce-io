@@ -354,6 +354,8 @@ export interface PlayerState {
   pickupRadius: number;
   xpGainMultiplier: number;
   killXpMultiplier: number;
+  windResistance: number;
+  bonusCollectibleChance: number;
   selectedSkills: Record<string, number>;
   shockwaveCounter: number;
   fallStartY: number | null;

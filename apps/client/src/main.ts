@@ -42,27 +42,40 @@ import {
   xpRequiredForLevel,
   applySkillToPlayer,
   generateSkillCardOffer,
+  goldKeeperBonus,
+  enemyKillXpForChunk,
   ensurePlayerSkillState,
   skillStacks,
+  SKILL_BY_ID,
 } from "@skybound/shared";
 import { isServerMessage } from "@skybound/shared";
 import type { CollectibleKind, CollectibleState, EmoteId, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
-import { createBodyRig, poseBodyRig, type BodyRig, type PoseParams } from "./bodyRig";
+import { createBodyRig, poseBodyRig, stableAnimationSeed, updateBodyRigAppearance, type BodyPoseState, type BodyRig, type BodyRigTextures, type PoseParams } from "./bodyRig";
 import {
   BODY_PART_SLOTS,
   cosmeticsForColorIndex,
   cosmeticsToPalette,
+  configureSkinCatalog,
+  parseCosmeticManifest,
   decodeCosmetics,
   DEFAULT_COSMETICS,
   encodeCosmetics,
   PART_SWATCHES,
+  SKIN_DISPLAY_NAMES,
   SWATCH_IDS,
   type BodyPartSlot,
   type PartSwatchId,
   type PlayerCosmetics,
 } from "./cosmetics";
 import { MenuSplashBackground } from "./MenuSplashBackground";
+import { CosmeticAssetRegistry } from "./cosmeticAssetRegistry";
+import { MAX_AUTOMATIC_RECONNECT_ATTEMPTS, nextReconnect, type ConnectionStatus } from "./connectionLifecycle";
+import { layoutHud, type HudDensity, type HudRect } from "./hudLayout";
+import { nextSkillChoiceIndex, skillChoiceDenial, skillChoiceLabel } from "./skillChoiceSemantics";
+import { CombatSemanticTracker, combatSemanticSummary, type CombatSemanticState } from "./hudSemantics";
+import { SkillOfferQueue } from "./skillOfferQueue";
+import { movementInputPolicy } from "./inputPolicy";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -487,8 +500,10 @@ interface PixelAssetManifest {
 }
 
 const ASSET_MANIFEST_URL = "/assets/manifest.json";
+const COSMETIC_MANIFEST_URL = "/assets/cosmetics/manifest.json";
 const manifestAssetFolders = new Map<string, AssetKey[]>();
 const manifestAssetSizes = new Map<AssetKey, { width: number; height: number }>();
+const cosmeticRegistry = new CosmeticAssetRegistry();
 const PROCEDURAL_MOUNTAIN_FOLDERS = new Set(["environment/midMountains"]);
 const PROCEDURAL_PLATFORM_FOLDERS = new Set(["environment/platforms", "environment/platformVariants"]);
 const PROCEDURAL_GAMEPLAY_PROP_FOLDERS = new Set(["environment/relicShrines"]);
@@ -859,7 +874,24 @@ if (!appRoot) throw new Error("Missing #app root");
 
 appRoot.innerHTML = `
   <main class="shell">
-    <section class="game-wrap"></section>
+    <section class="game-wrap" tabindex="-1"></section>
+    <nav id="menu-accessibility" class="visually-hidden" aria-label="Game menu"></nav>
+    <section id="hud-accessibility" class="visually-hidden" aria-label="Game status">
+      <p id="hud-summary"></p>
+      <output id="hud-announcements" role="status" aria-live="polite" aria-atomic="true"></output>
+      <output id="hud-alerts" role="alert" aria-live="assertive" aria-atomic="true"></output>
+    </section>
+    <aside id="connection-recovery" class="connection-recovery" role="dialog" aria-modal="true" aria-labelledby="connection-recovery-title" aria-describedby="connection-recovery-status" hidden>
+      <h2 id="connection-recovery-title">Connection recovery</h2>
+      <p id="connection-recovery-status">Connection lost.</p>
+      <div><button id="connection-retry" type="button">RETRY NOW</button><button id="connection-leave" type="button">LEAVE MATCH</button></div>
+    </aside>
+    <section id="skill-card-dialog" class="skill-card-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-card-title" aria-describedby="skill-card-balance" hidden>
+      <h2 id="skill-card-title">Choose an upgrade</h2>
+      <p id="skill-card-balance"></p>
+      <div id="skill-card-options" class="skill-card-options"></div>
+      <output id="skill-card-status" role="status" aria-live="polite" aria-atomic="true"></output>
+    </section>
     <input id="nickname-input" class="nickname-input" value="" maxlength="16" aria-label="Player nickname" autocomplete="off" spellcheck="false"/>
     <input id="chat-input" class="chat-input" value="" maxlength="240" aria-label="Chat message" autocomplete="off" spellcheck="false" placeholder="Press Enter to chat, Esc to cancel"/>
     </main>`;
@@ -867,6 +899,20 @@ appRoot.innerHTML = `
 const gameWrap  = appRoot.querySelector<HTMLElement>(".game-wrap")!;
 const nicknameInput = appRoot.querySelector<HTMLInputElement>("#nickname-input")!;
 const chatInput = appRoot.querySelector<HTMLInputElement>("#chat-input")!;
+const semanticMenu = appRoot.querySelector<HTMLElement>("#menu-accessibility")!;
+const semanticHud = appRoot.querySelector<HTMLElement>("#hud-accessibility")!;
+const semanticHudSummary = appRoot.querySelector<HTMLElement>("#hud-summary")!;
+const semanticHudAnnouncements = appRoot.querySelector<HTMLOutputElement>("#hud-announcements")!;
+const semanticHudAlerts = appRoot.querySelector<HTMLOutputElement>("#hud-alerts")!;
+const connectionRecovery = appRoot.querySelector<HTMLElement>("#connection-recovery")!;
+const connectionRecoveryStatus = appRoot.querySelector<HTMLElement>("#connection-recovery-status")!;
+const connectionRetryButton = appRoot.querySelector<HTMLButtonElement>("#connection-retry")!;
+const connectionLeaveButton = appRoot.querySelector<HTMLButtonElement>("#connection-leave")!;
+const semanticSkillDialog = appRoot.querySelector<HTMLElement>("#skill-card-dialog")!;
+const semanticSkillBalance = appRoot.querySelector<HTMLElement>("#skill-card-balance")!;
+const semanticSkillOptions = appRoot.querySelector<HTMLElement>("#skill-card-options")!;
+const semanticSkillStatus = appRoot.querySelector<HTMLOutputElement>("#skill-card-status")!;
+const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function setSpectatorDocumentMode(enabled: boolean): void {
   document.documentElement.classList.toggle("spectator-mode", enabled);
@@ -878,7 +924,11 @@ function setSpectatorDocumentMode(enabled: boolean): void {
 function showSpectatorError(message: string): void {
   setSpectatorDocumentMode(true);
   gameWrap.classList.add("spectator-error-mode");
-  appRoot!.insertAdjacentHTML("beforeend", `<div class="spectator-error" role="alert">${message}</div>`);
+  const error = document.createElement("div");
+  error.className = "spectator-error";
+  error.setAttribute("role", "alert");
+  error.textContent = message;
+  appRoot!.appendChild(error);
 }
 
 // ── PixiJS init ───────────────────────────────────────────────────────────────
@@ -913,6 +963,7 @@ await pixi.init({
   roundPixels: true,
 });
 pixi.canvas.style.imageRendering = "pixelated";
+pixi.canvas.setAttribute("aria-hidden", "true");
 pixi.stage.eventMode = "passive";
 gameWrap.prepend(pixi.canvas);
 
@@ -973,6 +1024,20 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
     }));
   }
 
+  // Cosmetics use their own aggregate index so adding a skin is a directory
+  // operation, and so the large world manifest remains independent. Missing
+  // or malformed custom entries degrade to the rig's Graphics fallback.
+  try {
+    const response = await fetch(COSMETIC_MANIFEST_URL);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const cosmetics = parseCosmeticManifest(await response.json());
+    if (!cosmetics) throw new Error("invalid or unsupported cosmetic manifest");
+    if (!configureSkinCatalog(cosmetics.skins)) throw new Error("catalog is missing required defaults or contains no valid skins");
+    cosmeticRegistry.install(cosmetics);
+  } catch (err) {
+    console.warn(`Could not load cosmetic manifest ${COSMETIC_MANIFEST_URL}`, err);
+  }
+
   await Promise.all(Object.entries(ASSET_URLS).map(async ([key, url]) => {
     if (loaded[key] || loadedUrls.has(url)) return;
     try {
@@ -985,6 +1050,10 @@ async function loadPixelAssets(): Promise<Record<AssetKey, Texture>> {
 }
 
 const pixelAssets = await loadPixelAssets();
+
+function cosmeticPartTextures(cosmetics: PlayerCosmetics): BodyRigTextures {
+  return cosmeticRegistry.getLoadout(cosmetics);
+}
 
 function assetTexture(key: AssetKey): Texture {
   return pixelAssets[key] ?? Texture.EMPTY;
@@ -1046,15 +1115,50 @@ function setScaleIfChanged(sprite: Sprite, x: number, y: number): void {
 
 function bodyRigPoseForPlayer(s: PlayerState): Omit<PoseParams, "elapsedMs"> {
   const speedFactor = Math.min(1, Math.abs(s.velocity.x) / 150);
+  const animationSeed = stableAnimationSeed(s.id);
   if (s.kickPhase === "windup" || s.kickPhase === "active" || s.kickPhase === "recovery") {
     const duration = attackPhaseDuration(s.kickPhase);
-    const progress = duration > 0 ? clamp01(1 - s.kickTimer / duration) : 1;
-    return { state: "idle", speedFactor, verticalVelocity: 0, kick: { phase: s.kickPhase, progress } };
+    // Phase timers count upward from zero in both simulations. Keeping visual
+    // progress in the same direction prevents each pose playing backwards
+    // and snapping at windup/active/recovery boundaries.
+    const progress = duration > 0 ? clamp01(s.kickTimer / duration) : 1;
+    // Keep locomotion/airborne state independent from the attack overlay so
+    // aerial strikes still accumulate fall speed and produce a proportional
+    // landing response when the feet touch down.
+    const baseState: BodyPoseState = !s.grounded ? "jump_fall" : Math.abs(s.velocity.x) > 28 ? "run" : "idle";
+    return { state: baseState, speedFactor, horizontalVelocity: s.velocity.x, verticalVelocity: s.velocity.y, facing: s.facing, animationSeed, kick: { phase: s.kickPhase, progress } };
   }
-  if (s.invulnerable > 0) return { state: "hit", speedFactor, verticalVelocity: 0 };
-  if (!s.grounded) return { state: "jump_fall", speedFactor, verticalVelocity: s.velocity.y };
-  if (Math.abs(s.velocity.x) > 28) return { state: "run", speedFactor, verticalVelocity: 0 };
-  return { state: "idle", speedFactor, verticalVelocity: 0 };
+  if (s.stunTimer > 0) return { state: "hit", speedFactor, horizontalVelocity: s.velocity.x, verticalVelocity: 0, facing: s.facing, animationSeed };
+  if (!s.grounded) return { state: "jump_fall", speedFactor, horizontalVelocity: s.velocity.x, verticalVelocity: s.velocity.y, facing: s.facing, animationSeed };
+  if (Math.abs(s.velocity.x) > 28) return { state: "run", speedFactor, horizontalVelocity: s.velocity.x, verticalVelocity: 0, facing: s.facing, animationSeed };
+  return { state: "idle", speedFactor, horizontalVelocity: s.velocity.x, verticalVelocity: 0, facing: s.facing, animationSeed };
+}
+
+function sampleRigGroundY(worldX: number, referenceY: number): number | null {
+  const tileX = Math.floor(worldX / TILE_SIZE);
+  const firstY = Math.floor((referenceY - (TILE_SIZE / 2 + 2)) / TILE_SIZE);
+  const lastY = Math.floor((referenceY + 12) / TILE_SIZE);
+  let best: { y: number; distance: number } | null = null;
+  for (let tileY = firstY; tileY <= lastY; tileY++) {
+    const kind = tileMap.getTile?.(tileX, tileY) ?? (tileMap.isSolid(tileX, tileY) ? "solid" : tileMap.isOneWay?.(tileX, tileY) ? "oneWay" : "empty");
+    if (kind !== "solid" && kind !== "oneWay") continue;
+    const above = tileMap.getTile?.(tileX, tileY - 1) ?? (tileMap.isSolid(tileX, tileY - 1) ? "solid" : tileMap.isOneWay?.(tileX, tileY - 1) ? "oneWay" : "empty");
+    if (above === "solid" || above === "oneWay") continue;
+    const surfaceY = tileY * TILE_SIZE;
+    if (kind === "oneWay" && referenceY > surfaceY + 2) continue;
+    const distance = Math.abs(surfaceY - referenceY);
+    if (!best || distance < best.distance || (distance === best.distance && surfaceY > best.y)) best = { y: surfaceY, distance };
+  }
+  return best?.y ?? null;
+}
+
+function rigGroundContact(drawPosition: { x: number; y: number }, grounded: boolean) {
+  return {
+    rootWorldX: drawPosition.x + PLAYER_WIDTH / 2,
+    rootWorldY: drawPosition.y + PLAYER_HEIGHT,
+    grounded,
+    sampleGroundY: sampleRigGroundY,
+  };
 }
 
 function coinFrameAsset(frame: number): AssetKey {
@@ -2434,6 +2538,7 @@ const worldDebugGfx = new Graphics();
 const inspectionWorldLayer = new Container();
 const inspectionWorldGfx = new Graphics();
 const hudLayer    = new Container({ isRenderGroup: true });
+hudLayer.sortableChildren = true;
 const menuSplashLayer = new Container({ isRenderGroup: true });
 const menuLayer   = new Container({ isRenderGroup: true });
 menuSplashLayer.eventMode = "none";
@@ -2694,8 +2799,13 @@ let   pingJitterMs = 0;
 let serverTick    = 0;
 let lastSnapshotSeq = -1;
 let matchPhase: SnapshotServerMessage["matchPhase"] = "waiting";
-let reconnDelay   = 1000;
 let reconnTimeout: ReturnType<typeof setTimeout> | null = null;
+let connectionStatus: ConnectionStatus = "local";
+let reconnectAttempt = 0;
+let reconnectAtMs: number | null = null;
+let connectionMessage = "Local game";
+let lastPoliteAnnouncement = "";
+let lastAssertiveAnnouncement = "";
 let lastViewportInterestSentMs = -Infinity;
 let lastViewportInterestKey = "";
 
@@ -2707,6 +2817,8 @@ let appState: AppState = "mainMenu";
 let selectedMode: GameMode | null = null;
 let clientMode: ClientMode = "local";
 let selectedCosmetics: PlayerCosmetics = decodeCosmetics(localStorage.getItem("bounceCosmetics"));
+let selectedCosmeticSlot: BodyPartSlot = "torso";
+let cosmeticPage = 0;
 let nickname = localStorage.getItem("bounceNickname") ?? "";
 let currentRoomId = "demo";
 let spectatorSessionId: string | null = null;
@@ -2716,8 +2828,10 @@ let menuErrorText = "";
 let nicknameInputFrame: { x: number; y: number; width: number; height: number } | null = null;
 let connectResolve: (() => void) | null = null;
 let connectReject: ((error: Error) => void) | null = null;
+let connectTimeout: ReturnType<typeof setTimeout> | null = null;
 let reconnectEnabled = false;
 let gameStartInFlight = false;
+let recoveryRestoreFocus: HTMLElement | null = null;
 interface MenuButtonHitRegion {
   button: Container;
   width: number;
@@ -2726,6 +2840,39 @@ interface MenuButtonHitRegion {
 }
 const menuButtonHitRegions: MenuButtonHitRegion[] = [];
 
+function announceHud(message: string, assertive = false): void {
+  if (!message) return;
+  if (assertive ? message === lastAssertiveAnnouncement : message === lastPoliteAnnouncement) return;
+  if (assertive) lastAssertiveAnnouncement = message;
+  else lastPoliteAnnouncement = message;
+  const target = assertive ? semanticHudAlerts : semanticHudAnnouncements;
+  target.textContent = "";
+  queueMicrotask(() => { target.textContent = message; });
+}
+
+function setConnectionStatus(status: ConnectionStatus, message: string, announce = true): void {
+  const changed = status !== connectionStatus || message !== connectionMessage;
+  const wasVisible = !connectionRecovery.hidden;
+  connectionStatus = status;
+  connectionMessage = message;
+  connectionRecoveryStatus.textContent = message;
+  const visible = status === "offline" && appState === "game";
+  connectionRecovery.hidden = !visible;
+  if (visible && !wasVisible) {
+    recoveryRestoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (chatOpen) closeChat();
+    skillCardModal.setRecoverySuspended(true);
+    queueMicrotask(() => connectionRetryButton.focus({ preventScroll: true }));
+  } else if (!visible && wasVisible) {
+    skillCardModal.setRecoverySuspended(false);
+    const target = skillCardModal.active ? skillCardModal.focusSemantic() : false;
+    const prior = recoveryRestoreFocus;
+    if (!target) queueMicrotask(() => (prior?.isConnected && prior !== chatInput ? prior : gameWrap).focus({ preventScroll: true }));
+    recoveryRestoreFocus = null;
+  }
+  if (changed && announce) announceHud(message, status === "offline");
+}
+
 type MenuDirection = "up" | "down" | "left" | "right";
 
 interface MenuInteractiveOptions {
@@ -2733,6 +2880,8 @@ interface MenuInteractiveOptions {
   selected?: boolean;
   disabled?: boolean;
   bob?: boolean;
+  accessibleLabel?: string;
+  allowWhenBusy?: boolean;
 }
 
 interface MenuInteractive {
@@ -2754,6 +2903,8 @@ interface MenuInteractive {
   baseY: number | null;
   clickPulseUntil: number;
   visualKey: string;
+  accessibleLabel: string;
+  allowWhenBusy: boolean;
 }
 
 const menuInteractives: MenuInteractive[] = [];
@@ -2814,6 +2965,18 @@ function setAppState(next: AppState): void {
   skyLayer.visible = next === "game" && !isSpectatorMode();
   worldLayer.visible = next === "game";
   hudLayer.visible = next === "game";
+  semanticMenu.hidden = next === "game" || isSpectatorMode();
+  semanticHud.hidden = next !== "game" || isSpectatorMode();
+  connectionRecovery.hidden = next !== "game" || connectionStatus !== "offline";
+  skillCardModal.setRecoverySuspended(!connectionRecovery.hidden);
+  if (next !== "game" || isSpectatorMode()) {
+    semanticHudSummary.textContent = "";
+    semanticHudAnnouncements.textContent = "";
+    semanticHudAlerts.textContent = "";
+    lastSemanticHudUpdateMs = -Infinity;
+    lastPoliteAnnouncement = "";
+    lastAssertiveAnnouncement = "";
+  }
   backDecorationLayer.visible = !isSpectatorMode();
   midMountainCrumbleParticleLayer.visible = !isSpectatorMode();
   if (next !== "game") {
@@ -2827,9 +2990,48 @@ function setAppState(next: AppState): void {
   }
 }
 
+function syncSemanticMenu(): void {
+  const labels: Record<Exclude<AppState, "game">, string> = {
+    mainMenu: "Skybound Relics",
+    modeSelect: "Choose game mode",
+    skinSelect: `Customize ${BODY_PART_SLOT_LABELS[selectedCosmeticSlot].toLowerCase()}`,
+    onlineNickname: "Online player setup",
+    connecting: connectingMessage,
+  };
+  semanticMenu.replaceChildren();
+  nicknameInput.toggleAttribute("aria-invalid", !!menuErrorText);
+  if (menuErrorText) nicknameInput.setAttribute("aria-describedby", "menu-accessibility-error");
+  else nicknameInput.removeAttribute("aria-describedby");
+  if (appState === "game") return;
+  const heading = document.createElement("h1");
+  heading.textContent = labels[appState];
+  semanticMenu.appendChild(heading);
+  for (const item of menuInteractives) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = item.accessibleLabel;
+    button.disabled = item.disabled || (gameStartInFlight && !item.allowWhenBusy);
+    if (item.selected) button.setAttribute("aria-pressed", "true");
+    button.dataset.menuId = item.id;
+    button.addEventListener("focus", () => setMenuInteractiveFocused(item));
+    button.addEventListener("pointerenter", () => setMenuInteractiveFocused(item));
+    button.addEventListener("click", () => activateMenuInteractive(item));
+    semanticMenu.appendChild(button);
+  }
+  if (menuErrorText) {
+    const error = document.createElement("p");
+    error.id = "menu-accessibility-error";
+    error.setAttribute("role", "alert");
+    error.textContent = menuErrorText;
+    semanticMenu.appendChild(error);
+  }
+}
+
 function setSelectedCosmetics(cosmetics: PlayerCosmetics): void {
   selectedCosmetics = cosmetics;
   localStorage.setItem("bounceCosmetics", encodeCosmetics(cosmetics));
+  updateBodyRigAppearance(localBodyRig, cosmeticsToPalette(cosmetics), cosmeticPartTextures(cosmetics));
+  void cosmeticRegistry.ensureLoadout(cosmetics);
   menuSplashBackground?.setSelectedSkinId(cosmetics.torso);
   menuDirty = true;
   console.info("[BounceIO] Cosmetics selected", selectedCosmetics);
@@ -3043,13 +3245,24 @@ const localCrownSprite = makeSprite("crown");
 const localGfx = new Graphics();
 const localAttackBar = new Graphics();
 const localEmoteText = makeEmoteText();
-const localBodyRig: BodyRig = createBodyRig();
+const initialBodyCosmetics = currentCosmetics();
+const localBodyRig: BodyRig = createBodyRig(cosmeticsToPalette(initialBodyCosmetics), cosmeticPartTextures(initialBodyCosmetics));
 disableDisplayEvents(localGfx);
 disableDisplayEvents(localAttackBar);
 localCrownSprite.anchor.set(0.5, 1);
 localCrownSprite.visible = false;
 localGfx.alpha = 1;
 localLayer.addChild(localGfx, localAttackBar, localCrownSprite, localEmoteText, localBodyRig.root);
+cosmeticRegistry.subscribe(() => {
+  menuDirty = true;
+  const localCosmetics = currentCosmetics();
+  updateBodyRigAppearance(localBodyRig, cosmeticsToPalette(localCosmetics), cosmeticPartTextures(localCosmetics));
+  for (const remote of remotePlayers.values()) {
+    const cosmetics = cosmeticsForPlayer(remote.current, cosmeticsForColorIndex(remote.colorIndex));
+    updateBodyRigAppearance(remote.bodyRig, cosmeticsToPalette(cosmetics), cosmeticPartTextures(cosmetics));
+  }
+});
+void cosmeticRegistry.ensureLoadout(initialBodyCosmetics);
 
 interface DisplayTreeStats {
   total: number;
@@ -3178,10 +3391,19 @@ let jumpEdge = false, kickEdge = false;
 
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
+  if (selectedMode === "online" && !connectionRecovery.hidden) {
+    if (e.code === "KeyR") { retryConnectionNow(); e.preventDefault(); return; }
+    if (e.code === "Escape") { leaveDisconnectedGame(); e.preventDefault(); return; }
+  }
   if (!isSpectatorMode() && skillCardModal.handleKeyDown(e)) return;
+  if (skillCardModal.active && e.target instanceof HTMLButtonElement && semanticSkillDialog.contains(e.target)) return;
   if (appState !== "game") {
     handleMenuKeyDown(e);
     return;
+  }
+  if (selectedMode === "online" && (connectionStatus === "offline" || connectionStatus === "reconnecting")) {
+    if (e.code === "KeyR") { retryConnectionNow(); e.preventDefault(); return; }
+    if (e.code === "Escape") { leaveDisconnectedGame(); e.preventDefault(); return; }
   }
   if (isSpectatorMode()) {
     if (e.code === "F1") {
@@ -3299,7 +3521,10 @@ function clearHeldInput(sendIdle = false): void {
 }
 
 window.addEventListener("blur", () => clearHeldInput(true));
-window.addEventListener("pagehide", () => clearHeldInput(true));
+window.addEventListener("pagehide", () => {
+  clearHeldInput(true);
+  if (selectedMode === "online") disconnectNetwork("local");
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") clearHeldInput(true);
 });
@@ -3420,7 +3645,11 @@ function ensureChunkLoaded(cy: number, immediateRender = false): GeneratedChunk 
 }
 
 function shouldApplyClientWindZones(): boolean {
-  return selectedMode !== "online";
+  return loadedChunks.size > 0;
+}
+
+function worldSimulationTimeSeconds(): number {
+  return selectedMode === "online" && hasServerClock ? estimatedServerTime() / 1000 : elapsedMs / 1000;
 }
 
 function chunkYForWorldY(y: number): number {
@@ -3742,6 +3971,7 @@ function clearRemotePlayers(): void {
 }
 
 function resetGameSession(mode: GameMode): void {
+  onlineSkillOffers.clear();
   clearWorldChunks();
   clearRemotePlayers();
   chatLog.length = 0;
@@ -3757,6 +3987,7 @@ function resetGameSession(mode: GameMode): void {
   localEnemyLastHitBy.clear();
   pendingLocalSkillChoices.length = 0;
   skillCardModal.close();
+  combatSemanticTracker.reset();
   localSkillOfferSerial = 0;
   playerNames.clear();
   localPlayer = null;
@@ -6679,7 +6910,8 @@ function makeLabel(name: string): Text {
 function createRemoteEntry(player: PlayerState, name: string, serverTime: number, tick = 0): RemoteEntry {
   const ci = playerColorIdx++ % PLAYER_COLORS.length;
   const cosmetics = cosmeticsForPlayer(player, cosmeticsForColorIndex(ci));
-  const bodyRig = createBodyRig(cosmeticsToPalette(cosmetics));
+  const bodyRig = createBodyRig(cosmeticsToPalette(cosmetics), cosmeticPartTextures(cosmetics));
+  void cosmeticRegistry.ensureLoadout(cosmetics);
   const crownSprite = makeSprite("crown");
   crownSprite.anchor.set(0.5, 1);
   crownSprite.visible = false;
@@ -6871,6 +7103,7 @@ function spawnFloatingText(wx: number, wy: number, msg: string, color: number): 
 }
 
 function triggerScreenFlash(color: number, life = 0.22): void {
+  if (reduceMotionQuery.matches) return;
   screenFlashColor = color;
   screenFlashLife = life;
   screenFlashMax = life;
@@ -7136,14 +7369,14 @@ function updateEnemyEntries(enemies: EnemyState[], tSec: number): void {
       entry.hp.clear();
       continue;
     }
-    const bob = enemy.kind === "iceBat" || enemy.kind === "windSpirit"
+    const bob = !reduceMotionQuery.matches && (enemy.kind === "iceBat" || enemy.kind === "windSpirit")
       ? Math.sin(tSec * 7 + enemy.position.x * 0.03) * 2
       : 0;
     entry.sprite.texture = assetTexture(enemyAssetForKind(enemy.kind));
     entry.sprite.x = Math.round(enemy.position.x + 11);
     entry.sprite.y = Math.round(enemy.position.y + 25 + bob);
     entry.sprite.scale.x = Math.abs(entry.sprite.scale.x) * enemy.facing;
-    entry.sprite.alpha = enemy.hurtCooldown > 0 ? 0.68 + Math.sin(tSec * 42) * 0.24 : 0.96;
+    entry.sprite.alpha = enemy.hurtCooldown > 0 ? reduceMotionQuery.matches ? 0.78 : 0.68 + Math.sin(tSec * 42) * 0.24 : 0.96;
     entry.sprite.tint = enemy.hurtCooldown > 0 ? 0xffc7c7 : enemy.behavior === "windup" ? 0xffdf9a : 0xffffff;
 
     entry.hp.clear();
@@ -7191,7 +7424,7 @@ function enemyStateFromLocalSpawn(chunk: GeneratedChunk, spawn: GeneratedChunk["
   const platformY = (chunk.worldTileY + platform.y) * TILE_SIZE;
   const facing = spawn.x % 2 === 0 ? 1 : -1;
   const level = Math.max(1, localPlayer?.level ?? 1);
-  const maxHealth = localEnemyMaxHealthForLevel(level, spawn.kind);
+  const maxHealth = localEnemyMaxHealth(level, chunk.chunkY, spawn.kind);
   return {
     id: spawn.id,
     kind: spawn.kind,
@@ -7213,7 +7446,7 @@ function enemyStateFromLocalSpawn(chunk: GeneratedChunk, spawn: GeneratedChunk["
   };
 }
 
-function localEnemyMaxHealthForLevel(level: number, kind: EnemyKind): number {
+function localEnemyMaxHealth(level: number, chunkY: number, kind: EnemyKind): number {
   const baseByKind: Record<EnemyKind, number> = {
     goblin: 2,
     goblinScout: 2,
@@ -7227,18 +7460,20 @@ function localEnemyMaxHealthForLevel(level: number, kind: EnemyKind): number {
     windSpirit: 4,
   };
   const base = baseByKind[kind] ?? 2;
-  return Math.max(base, base + Math.floor((Math.max(1, level) - 1) * 0.7));
+  const altitudeBonus = Math.floor(Math.max(0, chunkY) / 3);
+  const adaptiveBonus = Math.floor(Math.max(0, level - 1) * 0.25);
+  return base + altitudeBonus + adaptiveBonus;
 }
 
-function localEnemyDamageForPlayerLevel(level: number): number {
-  return 1 + Math.floor(Math.max(0, level - 1) / 5);
+function localEnemyDamageForChunk(chunkY: number): number {
+  return 1 + Math.min(3, Math.floor(Math.max(0, chunkY) / 10));
 }
 
 function syncLocalEnemyLevels(): void {
   if (!localPlayer || selectedMode !== "local") return;
   const level = Math.max(1, localPlayer.level);
   for (const entry of enemyEntries.values()) {
-    const nextMaxHealth = localEnemyMaxHealthForLevel(level, entry.state.kind);
+    const nextMaxHealth = localEnemyMaxHealth(level, entry.state.chunkY, entry.state.kind);
     if (nextMaxHealth <= entry.state.maxHealth) continue;
     const increase = nextMaxHealth - entry.state.maxHealth;
     entry.state.maxHealth = nextMaxHealth;
@@ -7277,7 +7512,8 @@ function enemyTouchesLocalPlayer(enemy: EnemyState, player: PlayerState): boolea
 function makeLocalEnemyDrops(enemy: EnemyState): CollectibleState[] {
   const seed = rewardHash(`${enemy.id}:${elapsedMs | 0}`);
   const range = Math.max(0, GAME_REWARD_CONFIG.enemyDropMax - GAME_REWARD_CONFIG.enemyDropMin);
-  const count = GAME_REWARD_CONFIG.enemyDropMin + (range > 0 ? seed % (range + 1) : 0);
+  const bonusDrop = localPlayer ? goldKeeperBonus(localPlayer, `${enemy.id}:drops`) : 0;
+  const count = GAME_REWARD_CONFIG.enemyDropMin + (range > 0 ? seed % (range + 1) : 0) + bonusDrop;
   const drops: CollectibleState[] = [];
   for (let i = 0; i < count; i += 1) {
     const n = rewardHash(`${enemy.id}:drop:${i}:${seed}`);
@@ -7349,11 +7585,26 @@ function openNextLocalSkillOffer(): void {
   });
 }
 
+const onlineSkillOffers = new SkillOfferQueue<SkillCardOffer>();
+
+function showOnlineSkillOffer(offer: SkillCardOffer): void {
+  skillCardModal.open(offer, localPlayer?.coins ?? 0, (selectedOffer, card) => {
+    const sent = sendWsMessage({ type: "select_skill_card", offerId: selectedOffer.offerId, cardId: card.id }, "critical");
+    if (sent) onlineSkillOffers.markSubmitted(selectedOffer.offerId);
+    return sent;
+  });
+}
+
+function openNextOnlineSkillOffer(): void {
+  if (selectedMode !== "online" || skillCardModal.active) return;
+  const next = onlineSkillOffers.next();
+  if (next) showOnlineSkillOffer(next);
+}
+
 function openOnlineSkillOffer(offer: SkillCardOffer): void {
   if (offer.playerId !== localPlayerId) return;
-  skillCardModal.open(offer, localPlayer?.coins ?? 0, (selectedOffer, card) => {
-    sendWsMessage({ type: "select_skill_card", offerId: selectedOffer.offerId, cardId: card.id }, "critical");
-  });
+  const arrival = onlineSkillOffers.receive(offer, skillCardModal.currentOfferId);
+  if (arrival.kind === "ready") showOnlineSkillOffer(arrival.offer);
 }
 
 function applyAuthoritativeSkillStats(player: PlayerState, stats: Partial<PlayerState> & { hp?: number; maxHp?: number; atk?: number; xp?: number }): void {
@@ -7390,7 +7641,8 @@ function collectLocalCollectible(id: string, kind: CollectibleKind, x: number, y
       queueLocalLevelChoices(localPlayer, beforeLevel);
     }
   }
-  localPlayer.coins += coinValue;
+  const bonusCoins = coinValue > 0 ? goldKeeperBonus(localPlayer, id) : 0;
+  localPlayer.coins += coinValue + bonusCoins;
   pickupBurst(x, y, kind);
   const visual = collectibleVisual(kind);
   pushNotification(visual.notification, visual.color);
@@ -7467,12 +7719,13 @@ function openLocalChest(chestId: string, worldX: number, worldY: number): void {
     levelUpFeedback(localPlayer);
     queueLocalLevelChoices(localPlayer, beforeLevel);
   }
-  localPlayer.coins += coins;
+  const bonusCoins = goldKeeperBonus(localPlayer, chestId);
+  localPlayer.coins += coins + bonusCoins;
   revealedChests.delete(chestId);
   openedChests.add(chestId);
   chestOpenedAtMs.set(chestId, elapsedMs + CHEST_RESPAWN_MS);
   setChestState(chestId, "opened");
-  pushNotification(`TREASURE! +${coins} coins`, PAL.coinGold);
+  pushNotification(`TREASURE! +${coins + bonusCoins} coins`, PAL.coinGold);
 }
 
 // Mirrors checkChestInteraction in apps/server-go/internal/game/room.go —
@@ -7574,11 +7827,12 @@ function simulateLocalEnemies(dt: number, tSec: number): void {
         enemyEntries.delete(id);
         entry.sprite.destroy();
         entry.hp.destroy();
-        grantLocalXp(localPlayer, Math.round(GAME_REWARD_CONFIG.enemyKillXp * localPlayer.killXpMultiplier));
+        const killXp = enemyKillXpForChunk(enemy.chunkY);
+        grantLocalXp(localPlayer, Math.round(killXp * localPlayer.killXpMultiplier));
         const drops = makeLocalEnemyDrops(enemy);
         spawnDropAnimations(drops);
         burst(enemy.position.x + 11, enemy.position.y + 12, PAL.coinGold);
-        spawnFloatingText(enemy.position.x + 11, enemy.position.y - 2, `+${GAME_REWARD_CONFIG.enemyKillXp} XP`, PAL.coinGold);
+        spawnFloatingText(enemy.position.x + 11, enemy.position.y - 2, `+${killXp} XP`, PAL.coinGold);
         pushNotification("NPC DOWN", PAL.coinGold);
         continue;
       }
@@ -7587,7 +7841,7 @@ function simulateLocalEnemies(dt: number, tSec: number): void {
     if (stepped.hitPlayer) {
       const dir = localPlayer.position.x + PLAYER_WIDTH / 2 < enemy.position.x + 11 ? -1 : 1;
       const beforeHealth = localPlayer.health;
-      applyDamage(localPlayer, localEnemyDamageForPlayerLevel(localPlayer.level), dir * 125, -70, 0.16);
+      applyDamage(localPlayer, localEnemyDamageForChunk(enemy.chunkY), dir * 125, -70, 0.16);
       if (localPlayer.health < beforeHealth) {
         damageFeedback(localPlayer.position.x + PLAYER_WIDTH / 2, localPlayer.position.y + PLAYER_HEIGHT * 0.45, beforeHealth - localPlayer.health);
       }
@@ -7682,6 +7936,11 @@ function updateCamera(dt: number, scale: number): void {
 }
 
 function triggerShake(sx: number, sy: number): void {
+  if (reduceMotionQuery.matches) {
+    shakeX = 0;
+    shakeY = 0;
+    return;
+  }
   shakeX = sx * (Math.random() > 0.5 ? 1 : -1);
   shakeY = sy;
 }
@@ -7717,6 +7976,15 @@ function drawHudPanel(g: Graphics, x: number, y: number, w: number, h: number): 
 
 function hudPx(value: number): number {
   return Math.round(value * HUD_UI_SCALE);
+}
+
+function hudSafeInsets(): { top: number; right: number; bottom: number; left: number } {
+  const style = getComputedStyle(gameWrap);
+  const read = (name: string) => {
+    const value = Number.parseFloat(style.getPropertyValue(name));
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+  return { top: read("--safe-top"), right: read("--safe-right"), bottom: read("--safe-bottom"), left: read("--safe-left") };
 }
 
 // Draw a small pixel-art coin icon at (x, y) - frame 0..3 spin animation
@@ -7793,45 +8061,52 @@ class PlayerStatsHud {
   private cooldownBarX = 0;
   private cooldownBarY = 0;
   private cooldownBarW = 0;
+  private density: HudDensity = "wide";
 
   constructor() {
     this.container.addChild(this.panel, this.bars, this.titleText, this.hpText, this.shieldText, this.xpText, this.levelText, this.atkText, this.coinText, this.cooldownBar);
     disableDisplayEvents(this.container);
   }
 
-  update(player: PlayerState, screenWidth: number): void {
-    const width = hudPx(screenWidth < 520 ? 222 : 286);
+  update(player: PlayerState, layout: HudRect & { density: HudDensity }): void {
+    const width = layout.width;
     const hasShield = hudStatNumber(player.maxShield, 0) > 0;
-    const height = hudPx(hasShield ? 176 : 148);
-    const x = hudPx(10);
-    const y = hudPx(10);
-    const layoutKey = `${width}|${height}|${x}|${y}`;
+    const height = layout.height;
+    const x = layout.x;
+    const y = layout.y;
+    const micro = layout.density === "micro";
+    this.density = layout.density;
+    const layoutKey = `${width}|${height}|${x}|${y}|${layout.density}|${hasShield}`;
     if (layoutKey !== this.layoutKey) {
       this.layoutKey = layoutKey;
       this.container.x = x;
       this.container.y = y;
       this.panel.clear();
       drawHudPanel(this.panel, 0, 0, width, height);
-      const leftX = hudPx(18);
+      const leftX = micro ? hudPx(10) : hudPx(18);
       const rightX = width - hudPx(96);
+      this.titleText.visible = !micro;
       this.titleText.x = leftX;
       this.titleText.y = hudPx(14);
       this.hpText.x = leftX;
-      this.hpText.y = hudPx(39);
+      this.hpText.y = micro ? hudPx(8) : hudPx(39);
       this.shieldText.x = leftX;
-      this.shieldText.y = hudPx(70);
+      this.shieldText.y = micro ? hudPx(31) : hudPx(70);
       this.shieldText.visible = hasShield;
+      this.xpText.visible = !micro;
       this.xpText.x = leftX;
       this.xpText.y = hudPx(hasShield ? 101 : 73);
       this.levelText.x = rightX;
-      this.levelText.y = hudPx(14);
+      this.levelText.y = micro ? hudPx(8) : hudPx(14);
+      this.atkText.visible = !micro;
       this.atkText.x = rightX;
       this.atkText.y = hudPx(hasShield ? 101 : 73);
       this.coinText.x = leftX;
-      this.coinText.y = hudPx(hasShield ? 122 : 94);
-      this.cooldownBarX = hudPx(18);
-      this.cooldownBarY = hudPx(hasShield ? 150 : 122);
-      this.cooldownBarW = width - hudPx(36);
+      this.coinText.x = micro ? rightX : leftX;
+      this.coinText.y = micro ? hudPx(31) : hudPx(hasShield ? 122 : 94);
+      this.cooldownBarX = micro ? hudPx(10) : hudPx(18);
+      this.cooldownBarY = micro ? height - hudPx(10) : hudPx(hasShield ? 150 : 122);
+      this.cooldownBarW = width - (micro ? hudPx(20) : hudPx(36));
       this.statsKey = "";
     }
 
@@ -7859,16 +8134,18 @@ class PlayerStatsHud {
     this.bars.clear();
     // Slim diegetic-style sliver bars (Dishonored-esque) instead of boxy
     // stat bars; HP itself is shown as a heart row below, not a bar.
-    if (shieldMax > 0) {
+    if (!micro && shieldMax > 0) {
       const shieldRatio = Math.max(0, Math.min(1, shield / shieldMax));
       this.bars.rect(barX, hudPx(87), statBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.85 });
       this.bars.rect(barX, hudPx(87), Math.round(statBarW * shieldRatio), hudPx(4)).fill(PAL.portalGlow);
     }
-    const xpBarY = hudPx(hasShield ? 118 : 90);
-    this.bars.rect(barX, xpBarY, statBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.85 });
-    this.bars.rect(barX, xpBarY, Math.round(statBarW * xpRatio), hudPx(4)).fill(PAL.portalBlue);
+    if (!micro) {
+      const xpBarY = hudPx(hasShield ? 118 : 90);
+      this.bars.rect(barX, xpBarY, statBarW, hudPx(4)).fill({ color: PAL.stoneShadow, alpha: 0.85 });
+      this.bars.rect(barX, xpBarY, Math.round(statBarW * xpRatio), hudPx(4)).fill(PAL.portalBlue);
+    }
 
-    this.hpText.text = heartRow(hp, hpMax);
+    this.hpText.text = micro ? `❤️ ${Math.ceil(hp)}/${Math.ceil(hpMax)}` : heartRow(hp, hpMax);
     this.shieldText.visible = shieldMax > 0;
     this.shieldText.text = shieldMax > 0 ? `SH ${Math.ceil(shield)}/${Math.ceil(shieldMax)}` : "";
     this.xpText.text = `XP ${xpProgress}/${xpNeeded}`;
@@ -7918,6 +8195,19 @@ function skillCategoryColor(category: SkillCard["category"]): number {
   return PAL.coinGold;
 }
 
+function skillBranchLabel(card: SkillCard): string {
+  return `${(card.branch ?? card.category).toUpperCase()} · TIER ${card.tier ?? 1}`;
+}
+
+function currentSkillTreeSummary(): string {
+  const totals = { stamina: 0, wind: 0, jump: 0, shield: 0, fortune: 0 };
+  for (const [skillId, stacks] of Object.entries(localPlayer?.selectedSkills ?? {})) {
+    const branch = SKILL_BY_ID.get(skillId)?.branch;
+    if (branch) totals[branch] += Math.max(0, Math.floor(stacks));
+  }
+  return `STM ${totals.stamina} · WIND ${totals.wind} · JUMP ${totals.jump} · SHIELD ${totals.shield} · GOLD ${totals.fortune}`;
+}
+
 function skillCardShortDescription(card: SkillCard): string {
   return card.description.length > 38 ? `${card.description.slice(0, 35)}...` : card.description;
 }
@@ -7925,7 +8215,7 @@ function skillCardShortDescription(card: SkillCard): string {
 function skillCardTooltipText(card: SkillCard): string {
   const nextStack = Math.min(card.maxStacks, card.currentStacks + 1);
   const costPart = card.coinCost > 0 ? ` Costs ${card.coinCost} coins.` : " Free.";
-  return `${card.description} Stack ${card.currentStacks} to ${nextStack}/${card.maxStacks}. ${card.rarity.toUpperCase()} ${card.category.toUpperCase()}.${costPart}`;
+  return `${card.description} Stack ${card.currentStacks} to ${nextStack}/${card.maxStacks}. ${skillBranchLabel(card)} · ${card.rarity.toUpperCase()}.${costPart}`;
 }
 
 interface SkillCardView {
@@ -7954,7 +8244,7 @@ class SkillCardModal {
   private readonly shade = new Graphics();
   private readonly panel = new Graphics();
   private readonly title = new Text({
-    text: "LEVEL UP",
+    text: "LEVEL UP · SKILL TREE",
     style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 22, fontWeight: "900", stroke: { color: PAL.uiInk, width: 3 } },
   });
   private readonly coinSubtitle = new Text({
@@ -7968,13 +8258,15 @@ class SkillCardModal {
   });
   private readonly cards: SkillCardView[] = [];
   private offer: SkillCardOffer | null = null;
-  private onSelect: ((offer: SkillCardOffer, card: SkillCard) => void) | null = null;
+  private onSelect: ((offer: SkillCardOffer, card: SkillCard) => boolean | void) | null = null;
   private focusedIndex = 0;
   private selectedCardId: string | null = null;
   private closeAtMs = 0;
   private screenWidth = 1;
   private screenHeight = 1;
   private coins = 0;
+  private restoreFocus: HTMLElement | null = null;
+  private recoverySuspended = false;
 
   constructor() {
     this.container.visible = false;
@@ -7987,7 +8279,38 @@ class SkillCardModal {
     return !!this.offer;
   }
 
-  open(offer: SkillCardOffer, coins: number, onSelect: (offer: SkillCardOffer, card: SkillCard) => void): void {
+  get currentOfferId(): string | null {
+    return this.offer?.offerId ?? null;
+  }
+
+  focusSemantic(): boolean {
+    if (!this.offer || semanticSkillDialog.hidden || this.recoverySuspended) return false;
+    queueMicrotask(() => this.semanticButton(this.focusedIndex)?.focus({ preventScroll: true }));
+    return true;
+  }
+
+  setRecoverySuspended(suspended: boolean): void {
+    this.recoverySuspended = suspended;
+    if (!this.offer) return;
+    this.container.visible = !suspended;
+    this.container.eventMode = suspended ? "none" : "passive";
+    for (const card of this.cards) card.root.eventMode = suspended ? "none" : "static";
+    semanticSkillDialog.inert = suspended;
+    if (suspended) semanticSkillDialog.setAttribute("aria-hidden", "true");
+    else semanticSkillDialog.removeAttribute("aria-hidden");
+  }
+
+  open(offer: SkillCardOffer, coins: number, onSelect: (offer: SkillCardOffer, card: SkillCard) => boolean | void): void {
+    if (chatOpen) closeChat();
+    this.restoreFocus = document.activeElement instanceof HTMLElement && !semanticSkillDialog.contains(document.activeElement)
+      ? document.activeElement : this.restoreFocus;
+    held["KeyA"] = false;
+    held["KeyD"] = false;
+    held["Space"] = false;
+    jumpEdge = false;
+    kickEdge = false;
+    queuedJumpPressed = false;
+    queuedKickPressed = false;
     this.destroyCards();
     this.offer = offer;
     this.onSelect = onSelect;
@@ -7995,13 +8318,15 @@ class SkillCardModal {
     this.selectedCardId = null;
     this.closeAtMs = 0;
     this.coins = coins;
-    this.coinSubtitle.text = `\u{1FA99} ${coins} — common cards are free, rare/epic cost coins`;
+    this.coinSubtitle.text = `\u{1FA99} ${coins}  ${currentSkillTreeSummary()}`;
     this.container.visible = true;
     offer.cards.forEach((card, index) => this.cards.push(this.createCard(card, index)));
     for (const item of this.cards) this.container.addChild(item.root);
     this.container.addChild(this.tooltipBg, this.tooltipText);
     this.layout(pixi.screen.width, pixi.screen.height);
     this.redrawCards();
+    this.renderSemanticDialog();
+    this.setRecoverySuspended(!connectionRecovery.hidden);
   }
 
   // Called every frame (see the main update loop) so affordability reflects
@@ -8011,30 +8336,62 @@ class SkillCardModal {
     if (coins === this.coins) return;
     this.coins = coins;
     if (!this.offer) return;
-    this.coinSubtitle.text = `\u{1FA99} ${coins} — common cards are free, rare/epic cost coins`;
+    this.coinSubtitle.text = `\u{1FA99} ${coins}  ${currentSkillTreeSummary()}`;
     this.redrawCards();
+    this.updateSemanticDialog();
   }
 
   private canAfford(card: SkillCard): boolean {
     return card.coinCost <= this.coins;
   }
 
-  close(): void {
+  close(restoreFocus = true): void {
     this.offer = null;
     this.onSelect = null;
     this.selectedCardId = null;
     this.closeAtMs = 0;
     this.container.visible = false;
     this.destroyCards();
+    semanticSkillDialog.hidden = true;
+    semanticSkillDialog.inert = false;
+    semanticSkillDialog.removeAttribute("aria-hidden");
+    semanticSkillOptions.replaceChildren();
+    semanticSkillStatus.textContent = "";
+    semanticHud.removeAttribute("aria-hidden");
+    semanticHud.inert = false;
+    if (restoreFocus) {
+      const target = this.restoreFocus?.isConnected ? this.restoreFocus : gameWrap;
+      queueMicrotask(() => target.focus({ preventScroll: true }));
+      this.restoreFocus = null;
+    }
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
-    if (!this.offer || this.selectedCardId) return false;
+    if (!this.offer || this.recoverySuspended) return false;
+    const fromSemanticButton = e.target instanceof HTMLButtonElement && semanticSkillDialog.contains(e.target);
+    if (this.selectedCardId) {
+      e.preventDefault();
+      return true;
+    }
+    if (fromSemanticButton && (e.code === "Enter" || e.code === "Space")) return false;
     if (e.code === "ArrowLeft" || e.code === "KeyA") {
       return this.moveFocus(-1, e);
     }
     if (e.code === "ArrowRight" || e.code === "KeyD") {
       return this.moveFocus(1, e);
+    }
+    if (e.code === "Home") return this.setSemanticFocus(0, e);
+    if (e.code === "End") return this.setSemanticFocus(this.cards.length - 1, e);
+    if (e.code === "Tab" && fromSemanticButton) {
+      const next = e.shiftKey
+        ? nextSkillChoiceIndex(this.focusedIndex, this.cards.length, "previous")
+        : nextSkillChoiceIndex(this.focusedIndex, this.cards.length, "next");
+      return this.setSemanticFocus(next, e);
+    }
+    if (e.code === "Escape") {
+      semanticSkillStatus.textContent = "Choose a skill to continue.";
+      e.preventDefault();
+      return true;
     }
     if (e.code === "Digit1" || e.code === "Numpad1") return this.pickIndex(0, e);
     if (e.code === "Digit2" || e.code === "Numpad2") return this.pickIndex(1, e);
@@ -8046,8 +8403,17 @@ class SkillCardModal {
   update(nowMs: number): void {
     if (!this.offer) return;
     if (this.closeAtMs > 0 && nowMs >= this.closeAtMs) {
-      this.close();
+      const restoreTarget = this.restoreFocus;
+      this.close(false);
       openNextLocalSkillOffer();
+      openNextOnlineSkillOffer();
+      if (!this.active) {
+        if (connectionRecovery.hidden) {
+          const target = restoreTarget?.isConnected ? restoreTarget : gameWrap;
+          queueMicrotask(() => target.focus({ preventScroll: true }));
+        }
+        this.restoreFocus = null;
+      }
       return;
     }
     if (this.cards.some((item) => nowMs - item.deniedAtMs < 420)) this.redrawCards();
@@ -8105,10 +8471,12 @@ class SkillCardModal {
 
   private pickIndex(index: number, e?: KeyboardEvent): boolean {
     const item = this.cards[index];
-    if (!this.offer || !item || this.selectedCardId) return false;
+    if (!this.offer || !item || this.selectedCardId || this.recoverySuspended) return false;
     e?.preventDefault();
     if (!this.canAfford(item.card)) {
       item.deniedAtMs = performance.now();
+      semanticSkillStatus.textContent = skillChoiceDenial(item.card, this.coins);
+      this.semanticButton(index)?.focus({ preventScroll: true });
       this.redrawCards();
       return true;
     }
@@ -8116,8 +8484,18 @@ class SkillCardModal {
     item.pressed = false;
     item.selectedAtMs = performance.now();
     this.selectedCardId = item.card.id;
+    semanticSkillStatus.textContent = `Selected ${item.card.name}.`;
+    this.updateSemanticDialog();
     this.redrawCards();
-    this.onSelect?.(this.offer, item.card);
+    const accepted = this.onSelect?.(this.offer, item.card);
+    if (accepted === false) {
+      item.selected = false;
+      this.selectedCardId = null;
+      semanticSkillStatus.textContent = "Connection required. Your choice is still available.";
+      this.updateSemanticDialog();
+      this.redrawCards();
+      return true;
+    }
     this.closeAtMs = performance.now() + 260;
     return true;
   }
@@ -8126,8 +8504,68 @@ class SkillCardModal {
     if (!this.offer || this.selectedCardId || this.cards.length === 0) return false;
     this.focusedIndex = (this.focusedIndex + this.cards.length + delta) % this.cards.length;
     this.redrawCards();
+    this.semanticButton(this.focusedIndex)?.focus({ preventScroll: true });
     e?.preventDefault();
     return true;
+  }
+
+  private semanticButton(index: number): HTMLButtonElement | undefined {
+    return semanticSkillOptions.querySelectorAll<HTMLButtonElement>("button")[index];
+  }
+
+  private setSemanticFocus(index: number, e?: KeyboardEvent): boolean {
+    if (!this.offer || index < 0 || index >= this.cards.length) return false;
+    this.focusedIndex = index;
+    this.redrawCards();
+    this.semanticButton(index)?.focus({ preventScroll: true });
+    e?.preventDefault();
+    return true;
+  }
+
+  private renderSemanticDialog(): void {
+    semanticSkillOptions.replaceChildren();
+    semanticSkillDialog.hidden = false;
+    semanticHud.setAttribute("aria-hidden", "true");
+    semanticHud.inert = true;
+    semanticSkillStatus.textContent = "";
+    for (let index = 0; index < this.cards.length; index++) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.addEventListener("focus", () => {
+        this.focusedIndex = index;
+        this.redrawCards();
+      });
+      button.addEventListener("pointerenter", () => {
+        this.focusedIndex = index;
+        this.redrawCards();
+      });
+      button.addEventListener("click", () => { this.pickIndex(index); });
+      semanticSkillOptions.appendChild(button);
+    }
+    this.updateSemanticDialog();
+    queueMicrotask(() => this.semanticButton(0)?.focus({ preventScroll: true }));
+  }
+
+  private updateSemanticDialog(): void {
+    if (!this.offer) return;
+    semanticSkillBalance.textContent = `${this.coins} coins. ${currentSkillTreeSummary()}. Common cards are free; rare and epic cards cost coins.`;
+    const buttons = semanticSkillOptions.querySelectorAll<HTMLButtonElement>("button");
+    this.offer.cards.forEach((card, index) => {
+      const button = buttons[index];
+      if (!button) return;
+      const label = skillChoiceLabel(card, this.coins, index);
+      button.setAttribute("aria-label", label);
+      button.setAttribute("aria-disabled", String(!!this.selectedCardId || !this.canAfford(card)));
+      button.toggleAttribute("aria-pressed", this.selectedCardId === card.id);
+      button.replaceChildren();
+      const name = document.createElement("strong");
+      name.textContent = `${index + 1}. ${card.name}`;
+      const description = document.createElement("span");
+      description.textContent = card.description;
+      const meta = document.createElement("span");
+      meta.textContent = `${skillBranchLabel(card)} · ${card.rarity.toUpperCase()} · ${card.coinCost > 0 ? `${card.coinCost} COINS` : "FREE"}`;
+      button.append(name, description, meta);
+    });
   }
 
   private createCard(card: SkillCard, index: number): SkillCardView {
@@ -8139,7 +8577,7 @@ class SkillCardModal {
       new Text({ text: card.icon, style: { fill: 0xffffff, fontFamily: "monospace", fontSize: 10, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
       new Text({ text: card.name, style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 13, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 }, wordWrap: true, wordWrapWidth: 140 } }),
       new Text({ text: skillCardShortDescription(card), style: { fill: 0xd7f0cc, fontFamily: "monospace", fontSize: 9, fontWeight: "700", stroke: { color: PAL.uiInk, width: 2 }, wordWrap: true, wordWrapWidth: 140, lineHeight: 12 } }),
-      new Text({ text: `${card.rarity.toUpperCase()} R${SKILL_RARITY_PIPS[card.rarity]}  ${card.category.toUpperCase()}`, style: { fill: skillCategoryColor(card.category), fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
+      new Text({ text: `${skillBranchLabel(card)}  ${card.rarity.toUpperCase()}`, style: { fill: skillCategoryColor(card.category), fontFamily: "monospace", fontSize: 8, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
       new Text({ text: `STACK ${card.currentStacks} > ${Math.min(card.maxStacks, card.currentStacks + 1)}/${card.maxStacks}`, style: { fill: PAL.coinGold, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
       new Text({ text: `${index + 1}`, style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: 9, fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } } }),
     ];
@@ -8298,6 +8736,8 @@ let hudBuilt   = false;
 let hudLeaderboardGfx: Graphics;
 let hudLegendGfx: Graphics;
 let hudPhaseTxt: Text;
+let hudConnectionGfx: Graphics;
+let hudConnectionTxt: Text;
 let playerStatsHud: PlayerStatsHud | null = null;
 const hudRowTexts: Text[] = [];
 const hudLegendTexts: Text[] = [];
@@ -8311,6 +8751,9 @@ let spectatorOverlayText: Text | null = null;
 let lastHudRegion: number | null = null;
 let lastHudLayoutKey = "";
 let lastHudPhaseKey = "";
+let lastConnectionHudKey = "";
+let lastSemanticHudUpdateMs = -Infinity;
+const combatSemanticTracker = new CombatSemanticTracker();
 const skillCardModal = new SkillCardModal();
 hudLayer.addChild(skillCardModal.container);
 const pendingLocalSkillChoices: number[] = [];
@@ -8325,6 +8768,8 @@ function destroyGameHud(): void {
   hudLeaderboardGfx.destroy();
   hudLegendGfx.destroy();
   hudPhaseTxt.destroy();
+  hudConnectionGfx.destroy();
+  hudConnectionTxt.destroy();
   hudRowTexts.splice(0).forEach((txt) => txt.destroy());
   hudLegendTexts.splice(0).forEach((txt) => txt.destroy());
   hudEmoteBarTexts.splice(0).forEach((txt) => txt.destroy());
@@ -8337,6 +8782,7 @@ function destroyGameHud(): void {
   lastHudLayoutKey = "";
   lastScoreboardKey = "";
   lastHudPhaseKey = "";
+  lastConnectionHudKey = "";
 }
 
 function updateSpectatorOverlay(): void {
@@ -8371,7 +8817,13 @@ function ensureHud(): void {
     text: "",
     style: { fill: PAL.uiHighlight, fontFamily: "monospace", fontSize: hudPx(12), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
   });
-  hudLayer.addChild(playerStatsHud.container, hudLeaderboardGfx, hudLegendGfx, hudPhaseTxt);
+  hudConnectionGfx = new Graphics();
+  hudConnectionTxt = new Text({
+    text: "",
+    style: { fill: PAL.uiParchment, fontFamily: "monospace", fontSize: hudPx(9), fontWeight: "900", stroke: { color: PAL.uiInk, width: 2 } },
+  });
+  hudConnectionTxt.anchor.set(0.5, 0.5);
+  hudLayer.addChild(playerStatsHud.container, hudLeaderboardGfx, hudLegendGfx, hudPhaseTxt, hudConnectionGfx, hudConnectionTxt);
 
   for (let i = 0; i < 6; i++) {
     const txt = new Text({
@@ -8434,7 +8886,17 @@ function updateHud(tSec: number): void {
   spectatorOverlayText = null;
   if (!localPlayer) return;
   ensureHud();
-  playerStatsHud?.update(localPlayer, pixi.screen.width);
+  const responsiveHud = layoutHud({
+    width: pixi.screen.width,
+    height: pixi.screen.height,
+    safeInsets: hudSafeInsets(),
+    hasShield: localPlayer.maxShield > 0,
+    offline: connectionStatus === "offline",
+    chatCount: chatLog.length,
+    emoteCount: hudEmoteBarTexts.length,
+    scale: HUD_UI_SCALE,
+  });
+  playerStatsHud?.update(localPlayer, { ...responsiveHud.stats, density: responsiveHud.density });
 
   const hm    = Math.max(0, Math.round(-localPlayer.position.y / 32));
   const coins = localPlayer.coins;
@@ -8448,25 +8910,71 @@ function updateHud(tSec: number): void {
   const currentChunkY = Math.max(0, -Math.floor(localPlayer.position.y / (CHUNK_HEIGHT_TILES * TILE_SIZE)));
   const currentBiome = biomeForChunkY(currentChunkY);
   const currentRegion = regionIndexForChunkY(currentChunkY);
+  const nowMs = performance.now();
+  const combatSemanticState: CombatSemanticState = {
+    health: localPlayer.health,
+    maxHealth: localPlayer.maxHealth,
+    shield: localPlayer.shield,
+    maxShield: localPlayer.maxShield,
+    stunned: localPlayer.stunTimer > 0,
+    attackReady: localPlayer.kickPhase === "idle" && localPlayer.kickCooldown <= 0,
+    dashUnlocked: localPlayer.dashUnlocked,
+    dashReady: localPlayer.dashUnlocked && localPlayer.dashCooldownRemainingMs <= 0,
+  };
+  for (const event of combatSemanticTracker.update(combatSemanticState, nowMs)) announceHud(event.message, event.assertive);
+  if (nowMs - lastSemanticHudUpdateMs >= 250) {
+    lastSemanticHudUpdateMs = nowMs;
+    const reconnectSummary = connectionStatus === "reconnecting" ? ` Retry in ${Math.max(0, Math.ceil(((reconnectAtMs ?? nowMs) - nowMs) / 1000))} seconds.` : "";
+    const semanticStatus = `${regionDisplayNameForChunkY(currentChunkY)}. Health ${formatHudStat(localPlayer.health)} of ${formatHudStat(localPlayer.maxHealth)}. ${combatSemanticSummary(combatSemanticState)} Level ${localPlayer.level}. Altitude ${hm} meters. ${coins} coins. Connection ${connectionStatus}.${reconnectSummary}`;
+    if (semanticHudSummary.textContent !== semanticStatus) semanticHudSummary.textContent = semanticStatus;
+  }
   if (lastHudRegion !== currentRegion) {
     if (lastHudRegion !== null && matchPhase === "playing") {
       pushNotification(regionDisplayNameForChunkY(currentChunkY), currentBiome === "celestialSummit" ? PAL.coinGold : PAL.portalGlow);
+      announceHud(`Entered ${regionDisplayNameForChunkY(currentChunkY)}.`);
     }
     lastHudRegion = currentRegion;
   }
 
   const phText = matchPhase === "countdown" ? "GET READY!" : matchPhase === "waiting" ? "WAITING..." : regionDisplayNameForChunkY(currentChunkY);
-  const phaseKey = `${phText}|${pixi.screen.width}|${matchPhase}`;
+  const compactHud = responsiveHud.density !== "wide";
+  const microHud = responsiveHud.density === "micro";
+  const retrySeconds = reconnectAtMs === null ? 0 : Math.max(0, Math.ceil((reconnectAtMs - performance.now()) / 1000));
+  const connectionLabel = selectedMode !== "online" ? "LOCAL"
+    : connectionStatus === "online" ? `ONLINE ${Math.round(pingMs)}ms`
+    : connectionStatus === "reconnecting" ? `RETRY ${retrySeconds}s`
+    : connectionStatus === "offline" ? "OFFLINE · R / ESC"
+    : "CONNECTING";
+  const badgeW = responsiveHud.connection.width;
+  const badgeH = responsiveHud.connection.height;
+  const badgeX = responsiveHud.connection.x;
+  const badgeY = responsiveHud.connection.y;
+  const connectionKey = `${connectionLabel}|${badgeX}|${badgeY}|${badgeW}|${connectionStatus}`;
+  if (connectionKey !== lastConnectionHudKey) {
+    lastConnectionHudKey = connectionKey;
+    const color = connectionStatus === "online" ? PAL.mossBright
+      : connectionStatus === "offline" ? PAL.hazardRed
+      : connectionStatus === "reconnecting" || connectionStatus === "connecting" ? PAL.coinGold
+      : PAL.uiGray;
+    hudConnectionGfx.clear();
+    drawHudPanel(hudConnectionGfx, badgeX, badgeY, badgeW, badgeH);
+    hudConnectionGfx.rect(badgeX + hudPx(6), badgeY + hudPx(8), hudPx(10), hudPx(10)).fill(color);
+    hudConnectionTxt.text = connectionLabel;
+    hudConnectionTxt.style.fill = color;
+    hudConnectionTxt.x = badgeX + badgeW / 2 + hudPx(5);
+    hudConnectionTxt.y = badgeY + badgeH / 2;
+  }
+  const phaseKey = `${phText}|${responsiveHud.phase.x}|${responsiveHud.phase.y}|${responsiveHud.phase.width}|${matchPhase}|${responsiveHud.density}`;
   if (phaseKey !== lastHudPhaseKey) {
     lastHudPhaseKey = phaseKey;
     hudPhaseTxt.text = phText;
-    hudPhaseTxt.x = Math.round(pixi.screen.width / 2 - hudPhaseTxt.width / 2);
-    hudPhaseTxt.y = 10;
+    hudPhaseTxt.x = Math.round(responsiveHud.phase.x + responsiveHud.phase.width / 2 - hudPhaseTxt.width / 2);
+    hudPhaseTxt.y = responsiveHud.phase.y + Math.max(0, Math.round((responsiveHud.phase.height - hudPhaseTxt.height) / 2));
     hudPhaseTxt.alpha = matchPhase === "playing" ? 0.76 : 1;
   }
 
   const leaderboardW = hudPx(Math.min(300, Math.max(218, Math.floor(pixi.screen.width * 0.34))));
-  const visibleRows = rows.slice(0, 5);
+  const visibleRows = compactHud ? [] : rows.slice(0, 5);
   const leaderboardRowGap = hudPx(23);
   const leaderboardH = hudPx(42) + visibleRows.length * leaderboardRowGap;
   const leaderboardX = Math.max(hudPx(10), pixi.screen.width - leaderboardW - hudPx(12));
@@ -8475,9 +8983,13 @@ function updateHud(tSec: number): void {
   const legendH = hudPx(140);
   const legendX = Math.max(hudPx(10), pixi.screen.width - legendW - hudPx(12));
   const legendY = Math.max(leaderboardY + leaderboardH + hudPx(14), pixi.screen.height - legendH - hudPx(12));
-  const layoutKey = `${pixi.screen.width}|${pixi.screen.height}|${leaderboardW}|${leaderboardH}|${legendW}`;
+  const emoteRect = responsiveHud.emotes;
+  const layoutKey = `${pixi.screen.width}|${pixi.screen.height}|${leaderboardW}|${leaderboardH}|${legendW}|${responsiveHud.density}|${emoteRect ? `${emoteRect.x},${emoteRect.y},${emoteRect.width}` : "hidden"}`;
   if (layoutKey !== lastHudLayoutKey) {
     lastHudLayoutKey = layoutKey;
+    hudLeaderboardGfx.visible = !compactHud;
+    hudLegendGfx.visible = !compactHud;
+    hudLegendTexts.forEach((txt) => { txt.visible = !compactHud; });
     hudLeaderboardGfx.clear();
     drawHudPanel(hudLeaderboardGfx, leaderboardX, leaderboardY, leaderboardW, leaderboardH);
     hudLegendGfx.clear();
@@ -8495,23 +9007,26 @@ function updateHud(tSec: number): void {
     // triggers it, bottom-center of the screen — a visible menu of what's
     // available rather than a blind keyboard shortcut.
     const slotW = hudPx(34);
-    const barW = slotW * hudEmoteBarTexts.length + hudPx(12);
-    const barH = hudPx(30);
-    const barX = Math.round(pixi.screen.width / 2 - barW / 2);
-    const barY = pixi.screen.height - barH - hudPx(12);
+    const barW = emoteRect?.width ?? 1;
+    const barH = emoteRect?.height ?? 1;
+    const barX = emoteRect?.x ?? 0;
+    const barY = emoteRect?.y ?? 0;
+    hudEmoteBarGfx.visible = !!emoteRect;
+    hudEmoteBarTexts.forEach((txt) => { txt.visible = !!emoteRect; });
     hudEmoteBarGfx.clear();
-    drawHudPanel(hudEmoteBarGfx, barX, barY, barW, barH);
+    if (emoteRect) drawHudPanel(hudEmoteBarGfx, barX, barY, barW, barH);
     hudEmoteBarTexts.forEach((txt, i) => {
       txt.x = barX + hudPx(6) + slotW * i + slotW / 2;
       txt.y = barY + barH / 2;
     });
   }
 
-  const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}|${leaderboardW}`;
+  const scoreKey = visibleRows.map((r) => `${r.name}|${r.h}|${r.coins}|${r.local}`).join(";") + `|${leaderboardX}|${leaderboardY}|${leaderboardW}|${compactHud}`;
   if (scoreKey !== lastScoreboardKey) {
     lastScoreboardKey = scoreKey;
     hudRowTexts.forEach((txt) => { txt.visible = false; });
     const title = hudRowTexts[0]!;
+    if (compactHud) return updateCompactHudChat();
     title.visible = true;
     title.text = "LEADERBOARD";
     title.style.fill = PAL.coinGold;
@@ -8534,33 +9049,40 @@ function updateHud(tSec: number): void {
   // CHAT_LOG_MAX, not a time-based fade) — oldest message on top, like any
   // normal chat window. Only takes up screen space once something's been
   // said, so it doesn't clutter the HUD before anyone's typed anything.
-  const chatW = hudPx(Math.min(320, Math.max(220, Math.floor(pixi.screen.width * 0.3))));
+  updateCompactHudChat();
+
+  function updateCompactHudChat(): void {
+  const chatRect = responsiveHud.chat;
+  const chatW = chatRect?.width ?? 1;
   const chatLineGap = hudPx(14);
-  const chatH = hudPx(30) + CHAT_LOG_MAX * chatLineGap;
-  const chatX = hudPx(10);
-  const chatY = pixi.screen.height - chatH - hudPx(12);
-  const chatLayoutKey = `${chatW}|${chatH}|${chatX}|${chatY}|${chatLog.length > 0}`;
+  const chatH = chatRect?.height ?? 1;
+  const chatX = chatRect?.x ?? 0;
+  const chatY = chatRect?.y ?? 0;
+  const visibleChatEntries = chatLog.slice(-responsiveHud.chatRows);
+  const chatLayoutKey = `${chatW}|${chatH}|${chatX}|${chatY}|${visibleChatEntries.length}|${microHud}`;
   if (chatLayoutKey !== lastChatLayoutKey) {
     lastChatLayoutKey = chatLayoutKey;
     hudChatGfx.clear();
-    if (chatLog.length > 0) drawHudPanel(hudChatGfx, chatX, chatY, chatW, chatH);
+    if (chatRect) drawHudPanel(hudChatGfx, chatX, chatY, chatW, chatH);
     hudChatTitle.x = chatX + hudPx(12);
     hudChatTitle.y = chatY + hudPx(10);
   }
-  hudChatGfx.visible = chatLog.length > 0;
-  hudChatTitle.visible = chatLog.length > 0;
+  hudChatGfx.visible = !!chatRect;
+  hudChatTitle.visible = !!chatRect;
   for (let i = 0; i < hudChatTexts.length; i++) {
     const txt = hudChatTexts[i]!;
-    const entry = chatLog[i];
+    const entry = visibleChatEntries[i];
     if (!entry) {
       txt.visible = false;
       continue;
     }
     txt.visible = true;
-    txt.text = `${entry.name}: ${entry.text}`;
+    const rawLine = `${entry.name}: ${entry.text}`;
+    txt.text = rawLine.length > 52 ? `${rawLine.slice(0, 49)}...` : rawLine;
     txt.style.fill = entry.local ? PAL.coinGold : PAL.uiParchment;
     txt.x = chatX + hudPx(12);
     txt.y = chatY + hudPx(30) + i * chatLineGap;
+  }
   }
 }
 
@@ -9464,7 +9986,7 @@ function captureMenuInteractiveBase(item: MenuInteractive): void {
 }
 
 function activateMenuInteractive(item: MenuInteractive): void {
-  if (item.disabled || gameStartInFlight) return;
+  if (item.disabled || (gameStartInFlight && !item.allowWhenBusy)) return;
   const now = performance.now();
   if (now < menuActivationLockedUntil) return;
   menuActivationLockedUntil = now + 180;
@@ -9551,7 +10073,11 @@ function moveMenuFocus(direction: MenuDirection): void {
 }
 
 function goBackFromMenu(): void {
-  if (gameStartInFlight || appState === "connecting") return;
+  if (appState === "connecting") {
+    cancelPendingConnection();
+    return;
+  }
+  if (gameStartInFlight) return;
   if (appState === "modeSelect") setAppState("mainMenu");
   else if (appState === "skinSelect") setAppState("modeSelect");
   else if (appState === "onlineNickname") setAppState("skinSelect");
@@ -9582,9 +10108,10 @@ function handleMenuKeyDown(e: KeyboardEvent): void {
 }
 
 function updateMenuDecorations(tSec: number): void {
+  const reducedMotion = reduceMotionQuery.matches;
   for (const bobber of menuBobbers) {
     if (bobber.baseY === null) bobber.baseY = bobber.target.y;
-    const step = Math.round(Math.sin(tSec * bobber.speed + bobber.phase) * bobber.amplitude);
+    const step = reducedMotion ? 0 : Math.round(Math.sin(tSec * bobber.speed + bobber.phase) * bobber.amplitude);
     bobber.target.y = bobber.baseY + step;
   }
 
@@ -9601,9 +10128,9 @@ function updateMenuDecorations(tSec: number): void {
           : item.selected
             ? 1.015
             : 1;
-    const pulseScale = pulse > 0 ? Math.sin(pulse * Math.PI) * 0.035 : 0;
+    const pulseScale = !reducedMotion && pulse > 0 ? Math.sin(pulse * Math.PI) * 0.035 : 0;
     const scale = targetScale + pulseScale;
-    const bob = item.bob || item.selected || item.focused
+    const bob = !reducedMotion && (item.bob || item.selected || item.focused)
       ? Math.round(Math.sin(tSec * 5 + menuInteractives.indexOf(item) * 0.7) * 2)
       : 0;
     const baseX = item.baseX ?? item.button.x;
@@ -9614,7 +10141,7 @@ function updateMenuDecorations(tSec: number): void {
     item.button.alpha = item.disabled ? 0.58 : item.hover || item.focused ? 1 : 0.96;
 
     const sparkleOn = (item.selected || item.focused) && !item.disabled;
-    item.sparkleLayer.visible = sparkleOn;
+    item.sparkleLayer.visible = sparkleOn && !reducedMotion;
     if (sparkleOn) {
       for (let i = 0; i < item.sparkles.length; i++) {
         const sp = item.sparkles[i]!;
@@ -9631,7 +10158,7 @@ function updateMenuDecorations(tSec: number): void {
     const typedWidth = Math.min(nicknameInputFrame.width - 10, nicknameInput.value.length * 9);
     nicknameCaretGfx.x = nicknameInputFrame.x + 4 + typedWidth;
     nicknameCaretGfx.y = nicknameInputFrame.y + 4;
-    nicknameCaretGfx.alpha = Math.floor(tSec * 2) % 2 === 0 ? 1 : 0.18;
+    nicknameCaretGfx.alpha = reducedMotion || Math.floor(tSec * 2) % 2 === 0 ? 1 : 0.18;
   }
 }
 
@@ -9687,6 +10214,8 @@ function makePixelButton(
     baseY: null,
     clickPulseUntil: 0,
     visualKey: "",
+    accessibleLabel: (options.accessibleLabel ?? label.trim()) || options.id || "Menu option",
+    allowWhenBusy: !!options.allowWhenBusy,
   };
   btn.on("pointerover", () => {
     if (item.disabled) return;
@@ -9700,7 +10229,7 @@ function makePixelButton(
     drawMenuInteractiveState(item);
   });
   btn.on("pointerdown", () => {
-    if (item.disabled || gameStartInFlight) return;
+    if (item.disabled || (gameStartInFlight && !item.allowWhenBusy)) return;
     item.pressed = true;
     drawMenuInteractiveState(item);
   });
@@ -9759,7 +10288,7 @@ function renderMainMenu(sw: number, sh: number): void {
   title.x = Math.round(sw / 2);
   title.y = Math.round(sh * 0.24);
   menuBobbers.push({ target: title, baseY: null, amplitude: 3, speed: 3, phase: 0 });
-  const subtitle = menuText("Race upward. Collect coins. Kick rivals off ledges.", 13, 0xd7f0cc, "700");
+  const subtitle = menuText(sw < 420 ? "Climb. Collect. Kick." : "Race upward. Collect coins. Kick rivals off ledges.", sw < 420 ? 11 : 13, 0xd7f0cc, "700");
   subtitle.anchor.set(0.5);
   subtitle.x = title.x;
   subtitle.y = title.y + 58;
@@ -9781,23 +10310,28 @@ function renderMainMenu(sw: number, sh: number): void {
 }
 
 function renderModeSelect(sw: number, sh: number): void {
-  const titleSize = Math.max(24, Math.min(34, Math.floor(sw / 18)));
+  const compact = sh < 360;
+  const titleSize = compact ? Math.max(18, Math.min(24, Math.floor(sw / 15))) : Math.max(24, Math.min(34, Math.floor(sw / 18)));
   const title = menuText("Choose Mode", titleSize, MENU_COLORS.gold, "900");
   title.anchor.set(0.5);
-  title.x = Math.round(sw / 2);
-  title.y = Math.max(52, Math.round(sh * 0.16));
-  const stacked = sw < 620;
-  const gap = stacked ? Math.max(12, Math.min(22, Math.floor(sh * 0.026))) : 22;
-  const y = stacked
+  title.x = compact && sw < 420 ? Math.round((126 + sw) / 2) : Math.round(sw / 2);
+  title.y = compact ? 24 : Math.max(52, Math.round(sh * 0.16));
+  const stacked = !compact && sw < 620;
+  const gap = compact ? 8 : stacked ? Math.max(12, Math.min(22, Math.floor(sh * 0.026))) : 22;
+  const y = compact ? 52 : stacked
     ? Math.max(title.y + 46, Math.round(sh * 0.27))
     : Math.max(title.y + 58, Math.round(sh * 0.34));
-  const cardW = stacked
+  const cardW = compact
+    ? Math.floor((sw - 24) / 2)
+    : stacked
     ? Math.min(330, Math.max(218, sw - 48))
     : Math.min(294, Math.max(220, Math.floor((sw - 86) / 2)));
-  const cardH = stacked
+  const cardH = compact
+    ? Math.max(96, sh - y - 8)
+    : stacked
     ? Math.max(116, Math.min(210, Math.floor((sh - y - 26 - gap) / 2)))
     : Math.max(184, Math.min(224, sh - y - 42));
-  const startX = Math.round(sw / 2 - cardW - gap / 2);
+  const startX = compact ? 8 : Math.round(sw / 2 - cardW - gap / 2);
   const local = makeModeCard("Local", "Play offline", cardW, cardH, () => {
     selectedMode = "local";
     console.info("[BounceIO] Mode selected", selectedMode);
@@ -9817,14 +10351,19 @@ function renderModeSelect(sw: number, sh: number): void {
   }
   local.y = y;
   online.y ||= y;
-  const back = makePixelButton("BACK", 112, 40, () => setAppState("mainMenu"), false, { id: "back" });
-  back.x = 18;
-  back.y = 18;
+  const back = makePixelButton("BACK", compact ? 72 : 112, compact ? 32 : 40, () => setAppState("mainMenu"), false, { id: "back" });
+  back.x = compact ? 8 : 18;
+  back.y = compact ? 8 : 18;
   menuLayer.addChild(title, local, online, back);
 }
 
 function makeModeCard(title: string, body: string, w: number, h: number, onClick: () => void, mode: GameMode): Container {
-  const card = makePixelButton("", w, h, onClick, mode === selectedMode, { id: `mode-${mode}`, selected: mode === selectedMode, bob: mode === selectedMode });
+  const card = makePixelButton("", w, h, onClick, mode === selectedMode, {
+    id: `mode-${mode}`,
+    selected: mode === selectedMode,
+    bob: mode === selectedMode,
+    accessibleLabel: `${title}. ${body}`,
+  });
   const titleSize = Math.max(20, Math.min(28, Math.floor(w * 0.1), Math.floor(h * 0.17)));
   const bodySize = Math.max(12, Math.min(15, Math.floor(w * 0.06), Math.floor(h * 0.1)));
   const centerX = Math.round(w / 2);
@@ -9871,69 +10410,115 @@ const BODY_PART_SLOT_LABELS: Record<BodyPartSlot, string> = {
 };
 
 function renderSkinSelect(sw: number, sh: number): void {
-  const title = menuText("Customize Look", 29, MENU_COLORS.gold, "900");
+  const short = sh < 360;
+  const gutter = short ? 8 : 18;
+  const title = menuText("Customize Look", short ? 18 : 29, MENU_COLORS.gold, "900");
   title.anchor.set(0.5);
-  title.x = Math.round(sw / 2);
-  title.y = Math.round(sh * 0.1);
+  title.x = short && sw < 430 ? Math.round((88 + sw) / 2) : Math.round(sw / 2);
+  title.y = short ? gutter + 16 : sw < 520 ? 74 : Math.round(sh * 0.1);
   const cosmetics = currentCosmetics();
+  void cosmeticRegistry.ensureLoadout(cosmetics);
 
   const island = new Graphics();
   const previewCx = Math.round(sw / 2);
   const previewIslandY = Math.round(sh * 0.2);
   drawMenuIsland(island, previewCx - 44, previewIslandY, 88, 30);
-  const previewRig = createBodyRig(cosmeticsToPalette(cosmetics));
+  const previewRig = createBodyRig(cosmeticsToPalette(cosmetics), cosmeticPartTextures(cosmetics));
   previewRig.root.x = previewCx;
   previewRig.root.y = previewIslandY;
   previewRig.root.scale.set(1.9);
+  island.visible = !short;
+  previewRig.root.visible = !short;
   poseBodyRig(previewRig, { state: "idle", elapsedMs, speedFactor: 0, verticalVelocity: 0 });
 
-  const rowW = Math.min(sw - 48, 360);
+  const rowW = Math.min(sw - gutter * 2, 390);
   const startX = Math.round(sw / 2 - rowW / 2);
-  const rowGap = 46;
-  let rowY = Math.round(sh * 0.4);
-  const swatchButtons: Container[] = [];
-  for (const slot of BODY_PART_SLOTS) {
-    const label = menuText(BODY_PART_SLOT_LABELS[slot], 13, MENU_COLORS.parchment, "900");
-    label.anchor.set(0, 0.5);
-    label.x = startX;
-    label.y = rowY;
-    menuLayer.addChild(label);
-    const swatchSize = 26;
-    const swatchGap = 6;
-    const swatchAreaX = startX + 66;
-    const available = rowW - 66;
-    const perRow = Math.max(4, Math.floor((available + swatchGap) / (swatchSize + swatchGap)));
-    SWATCH_IDS.forEach((swatchId, index) => {
-      const selected = cosmetics[slot] === swatchId;
-      const btn = makePixelButton("", swatchSize, swatchSize, () => {
-        setSelectedCosmetics({ ...currentCosmetics(), [slot]: swatchId });
-      }, selected, { id: `swatch-${slot}-${swatchId}`, selected });
-      const swatch = new Graphics().rect(4, 4, swatchSize - 8, swatchSize - 8).fill(PART_SWATCHES[swatchId]);
-      btn.addChild(swatch);
-      btn.x = swatchAreaX + (index % perRow) * (swatchSize + swatchGap);
-      btn.y = rowY - swatchSize / 2 + Math.floor(index / perRow) * (swatchSize + swatchGap);
-      swatchButtons.push(btn);
+  const tabGap = 4;
+  const tabW = Math.floor((rowW - tabGap * 3) / 4);
+  const compactHeight = sh < 480;
+  const tabY = short ? gutter + 36 : compactHeight ? 88 : Math.max(132, Math.round(sh * 0.29));
+  const tabH = short ? 28 : 32;
+  const controls: Container[] = [];
+  BODY_PART_SLOTS.forEach((slot, index) => {
+    const selected = slot === selectedCosmeticSlot;
+    const tab = makePixelButton(BODY_PART_SLOT_LABELS[slot], tabW, tabH, () => {
+      selectedCosmeticSlot = slot;
+      cosmeticPage = Math.floor(SWATCH_IDS.indexOf(currentCosmetics()[slot]) / 10);
+      menuDirty = true;
+    }, selected, { id: `part-${slot}`, selected });
+    tab.x = startX + index * (tabW + tabGap);
+    tab.y = tabY;
+    controls.push(tab);
+  });
+
+  const pageSize = 10;
+  const pageCount = Math.ceil(SWATCH_IDS.length / pageSize);
+  cosmeticPage = Math.max(0, Math.min(pageCount - 1, cosmeticPage));
+  const pageSkins = SWATCH_IDS.slice(cosmeticPage * pageSize, (cosmeticPage + 1) * pageSize);
+  void cosmeticRegistry.ensurePickerParts(selectedCosmeticSlot, pageSkins);
+  const cellGap = short ? 4 : 6;
+  const compactActionY = sh - gutter - 40;
+  const compactNavY = compactActionY - 46;
+  const gridY = tabY + tabH + 4;
+  const availableCellHeight = Math.floor((compactNavY - gridY - cellGap) / 2);
+  const cellSize = Math.max(22, Math.min(short ? 40 : compactHeight ? 36 : 48, Math.floor((rowW - cellGap * 4) / 5), short ? availableCellHeight : 999));
+  const gridW = cellSize * 5 + cellGap * 4;
+  const gridX = Math.round(sw / 2 - gridW / 2);
+  pageSkins.forEach((skinId, index) => {
+    const selected = cosmetics[selectedCosmeticSlot] === skinId;
+    const btn = makePixelButton("", cellSize, cellSize, () => {
+      setSelectedCosmetics({ ...currentCosmetics(), [selectedCosmeticSlot]: skinId });
+    }, selected, {
+      id: `skin-${selectedCosmeticSlot}-${skinId}`,
+      selected,
+      accessibleLabel: `${BODY_PART_SLOT_LABELS[selectedCosmeticSlot]}: ${SKIN_DISPLAY_NAMES[skinId]}`,
     });
-    const rowsUsed = Math.ceil(SWATCH_IDS.length / perRow);
-    rowY += swatchSize + (rowsUsed - 1) * (swatchSize + swatchGap) + rowGap - swatchSize;
-  }
+    const texturePart = selectedCosmeticSlot === "arms" ? "arm" : selectedCosmeticSlot === "legs" ? "leg" : selectedCosmeticSlot;
+    const texture = cosmeticRegistry.getPart(skinId, texturePart)?.texture;
+    if (texture) {
+      const icon = new Sprite(texture);
+      icon.anchor.set(0.5);
+      const scale = Math.min((cellSize - 12) / texture.width, (cellSize - 12) / texture.height);
+      icon.scale.set(scale);
+      icon.x = cellSize / 2;
+      icon.y = cellSize / 2;
+      btn.addChild(icon);
+    } else {
+      btn.addChild(new Graphics().rect(8, 8, cellSize - 16, cellSize - 16).fill(PART_SWATCHES[skinId]));
+    }
+    btn.x = gridX + (index % 5) * (cellSize + cellGap);
+    btn.y = gridY + Math.floor(index / 5) * (cellSize + cellGap);
+    controls.push(btn);
+  });
+
+  const navY = short ? compactNavY : gridY + cellSize * 2 + cellGap + 8;
+  const previous = makePixelButton("<", 44, 32, () => { cosmeticPage = (cosmeticPage + pageCount - 1) % pageCount; menuDirty = true; }, false, { id: "skins-prev", accessibleLabel: "Previous skin page" });
+  previous.x = Math.round(sw / 2 - 92); previous.y = navY;
+  const next = makePixelButton(">", 44, 32, () => { cosmeticPage = (cosmeticPage + 1) % pageCount; menuDirty = true; }, false, { id: "skins-next", accessibleLabel: "Next skin page" });
+  next.x = Math.round(sw / 2 + 48); next.y = navY;
+  const pageLabel = menuText(`${cosmeticPage + 1} / ${pageCount}`, 12, MENU_COLORS.parchment, "900");
+  pageLabel.anchor.set(0.5); pageLabel.x = Math.round(sw / 2); pageLabel.y = navY + 16;
+  const selectedName = menuText(SKIN_DISPLAY_NAMES[cosmetics[selectedCosmeticSlot]], 11, MENU_COLORS.rune, "900");
+  selectedName.anchor.set(0.5); selectedName.x = Math.round(sw / 2); selectedName.y = short ? navY + 38 : navY + 46;
+  controls.push(previous, next);
 
   const continueText = selectedMode === "online" ? "NICKNAME" : "START";
-  const cont = makePixelButton(continueText, 172, 48, () => {
+  const cont = makePixelButton(continueText, short ? 140 : 172, short ? 40 : 48, () => {
     if (selectedMode === "online") setAppState("onlineNickname");
     else void enterGameScene({ mode: "local", skinId: encodeCosmetics(currentCosmetics()) });
   }, false, { id: selectedMode === "online" ? "nickname" : "start", disabled: gameStartInFlight });
-  cont.x = Math.round(sw / 2 - 86);
-  cont.y = Math.min(sh - 70, rowY + 12);
-  const back = makePixelButton("BACK", 112, 40, () => setAppState("modeSelect"), false, { id: "back", disabled: gameStartInFlight });
-  back.x = 18;
-  back.y = 18;
-  menuLayer.addChild(title, island, previewRig.root, ...swatchButtons, cont, back);
+  cont.x = Math.round(sw / 2 - (short ? 70 : 86));
+  cont.y = short ? compactActionY : Math.min(sh - 54, Math.max(navY + 58, sh - 66));
+  const back = makePixelButton("BACK", short ? 72 : 112, short ? 32 : 40, () => setAppState("modeSelect"), false, { id: "back", disabled: gameStartInFlight });
+  back.x = gutter;
+  back.y = gutter;
+  menuLayer.addChild(title, island, previewRig.root, ...controls, pageLabel, selectedName, cont, back);
 }
 
 function renderOnlineNickname(sw: number, sh: number): void {
-  const panelW = Math.min(440, sw - 34);
-  const panelH = 250;
+  const compact = sh < 360;
+  const panelW = Math.min(440, sw - (compact ? 16 : 34));
+  const panelH = compact ? sh - 16 : 250;
   const px = Math.round(sw / 2 - panelW / 2);
   const py = Math.round(sh / 2 - panelH / 2);
   const panel = new Graphics();
@@ -9941,22 +10526,25 @@ function renderOnlineNickname(sw: number, sh: number): void {
   const title = menuText("Online Player", 28, MENU_COLORS.gold, "900");
   title.anchor.set(0.5);
   title.x = Math.round(sw / 2);
-  title.y = py + 42;
+  title.y = py + (compact ? 24 : 42);
   const preview = new Graphics();
   drawMenuIsland(preview, px + panelW - 102, py + 61, 70, 28);
-  const previewRig = createBodyRig(cosmeticsToPalette(currentCosmetics()));
+  const previewCosmetics = currentCosmetics();
+  const previewRig = createBodyRig(cosmeticsToPalette(previewCosmetics), cosmeticPartTextures(previewCosmetics));
   previewRig.root.x = px + panelW - 67;
   previewRig.root.y = py + 80;
   previewRig.root.scale.set(1.6);
+  preview.visible = !compact;
+  previewRig.root.visible = !compact;
   poseBodyRig(previewRig, { state: "idle", elapsedMs, speedFactor: 0, verticalVelocity: 0 });
   const label = menuText("Nickname", 12, 0xd7f0cc, "900");
-  label.x = px + 44;
-  label.y = py + 82;
+  label.x = px + (compact ? 16 : 44);
+  label.y = py + (compact ? 44 : 82);
   const inputFrame = new Graphics();
-  const inputX = px + 42;
-  const inputY = py + 108;
-  const inputW = panelW - 84;
-  const inputH = 42;
+  const inputX = px + (compact ? 16 : 42);
+  const inputY = py + (compact ? 62 : 108);
+  const inputW = panelW - (compact ? 32 : 84);
+  const inputH = compact ? 38 : 42;
   drawPixelPanel(inputFrame, inputX, inputY, inputW, inputH, true);
   setNicknameInputFrame(inputX + 8, inputY + 7, inputW - 16, inputH - 14);
   if (nicknameInput.value !== nickname) nicknameInput.value = nickname;
@@ -9966,9 +10554,10 @@ function renderOnlineNickname(sw: number, sh: number): void {
   if (validation) {
     validation.anchor.set(0.5);
     validation.x = Math.round(sw / 2);
-    validation.y = py + 166;
+    validation.y = py + (compact ? 142 : 166);
   }
-  const join = makePixelButton("JOIN GAME", 172, 44, () => {
+  const joinW = compact ? Math.min(152, panelW - 124) : 172;
+  const join = makePixelButton("JOIN GAME", joinW, compact ? 40 : 44, () => {
     const err = validateNickname(nicknameInput.value);
     if (err) {
       menuErrorText = err;
@@ -9977,15 +10566,15 @@ function renderOnlineNickname(sw: number, sh: number): void {
     }
     void joinOnlineGame(nicknameInput.value.trim());
   }, false, { id: "join-game", disabled: gameStartInFlight });
-  join.x = Math.round(sw / 2 - 86);
-  join.y = py + 186;
-  const back = makePixelButton("BACK", 112, 40, () => setAppState("skinSelect"), false, { id: "back", disabled: gameStartInFlight });
-  back.x = 18;
-  back.y = 18;
+  join.x = compact ? px + panelW - joinW - 12 : Math.round(sw / 2 - 86);
+  join.y = compact ? py + panelH - 48 : py + 186;
+  const back = makePixelButton("BACK", compact ? 88 : 112, 40, () => setAppState("skinSelect"), false, { id: "back", disabled: gameStartInFlight });
+  back.x = compact ? px + 12 : 18;
+  back.y = compact ? py + panelH - 48 : 18;
   const hint = menuText("3 - 16 characters", 10, 0xbfd7d9, "700");
   hint.anchor.set(0.5);
   hint.x = Math.round(sw / 2);
-  hint.y = inputY + inputH + 22;
+  hint.y = inputY + inputH + (compact ? 14 : 22);
   menuLayer.addChild(panel, inputFrame, title, preview, previewRig.root, label, hint, nicknameCaretGfx, join, back);
   if (validation) menuLayer.addChild(validation);
 }
@@ -10002,7 +10591,8 @@ function renderConnecting(sw: number, sh: number): void {
   panel.rect(px + panelW / 2 - 48, py + 64, 22, 28).fill(0x293a47);
   panel.circle(px + panelW / 2 - 37, py + 63, 18).fill(0x432a75);
   panel.circle(px + panelW / 2 - 37, py + 63, 9).fill(MENU_COLORS.rune);
-  const previewRig = createBodyRig(cosmeticsToPalette(currentCosmetics()));
+  const previewCosmetics = currentCosmetics();
+  const previewRig = createBodyRig(cosmeticsToPalette(previewCosmetics), cosmeticPartTextures(previewCosmetics));
   previewRig.root.x = Math.round(px + panelW / 2 - 90);
   previewRig.root.y = py + 132;
   previewRig.root.scale.set(1.8);
@@ -10015,7 +10605,10 @@ function renderConnecting(sw: number, sh: number): void {
   connectingDotsText.anchor.set(0.5);
   connectingDotsText.x = Math.round(sw / 2);
   connectingDotsText.y = py + 176;
-  menuLayer.addChild(panel, previewRig.root, label, connectingDotsText);
+  const cancel = makePixelButton("CANCEL", 112, 36, cancelPendingConnection, false, { id: "cancel-connection", accessibleLabel: "Cancel connection", allowWhenBusy: true });
+  cancel.x = Math.round(sw / 2 - 56);
+  cancel.y = py + 190;
+  menuLayer.addChild(panel, previewRig.root, label, connectingDotsText, cancel);
 }
 
 function renderMenu(): void {
@@ -10039,13 +10632,14 @@ function renderMenu(): void {
   else if (appState === "onlineNickname") renderOnlineNickname(sw, sh);
   else if (appState === "connecting") renderConnecting(sw, sh);
   finalizeMenuFocus();
+  syncSemanticMenu();
   syncNicknameInput();
 }
 
 function updateMenu(tSec: number, dtMs: number): void {
   renderMenu();
-  menuSplashBackground?.update(dtMs, tSec);
-  if (connectingDotsText) connectingDotsText.text = ".".repeat((Math.floor(tSec * 2) % 3) + 1);
+  if (!reduceMotionQuery.matches) menuSplashBackground?.update(dtMs, tSec);
+  if (connectingDotsText) connectingDotsText.text = reduceMotionQuery.matches ? "..." : ".".repeat((Math.floor(tSec * 2) % 3) + 1);
   updateMenuDecorations(tSec);
 }
 
@@ -10179,6 +10773,12 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
     const maxHealth = (flags >> 5) & 0x1f;
     if (entityType === BINARY_ENTITY_PLAYER) {
       const existing = id === localPlayerId ? localPlayer : remotePlayers.get(id)?.current;
+      const kickPhase = (flags & BINARY_FLAG_ACTIVE) !== 0 ? "active" : (flags & BINARY_FLAG_WINDUP) !== 0 ? "windup" : (flags & BINARY_FLAG_RECOVERY) !== 0 ? "recovery" : "idle";
+      const remoteKickTimer = kickPhase === "idle"
+        ? 0
+        : kickPhase === existing?.kickPhase
+          ? Math.min(attackPhaseDuration(kickPhase), existing.kickTimer + SNAPSHOT_INTERVAL_MS / 1000)
+          : 0;
       playerEntities.push({
         id,
         s: existing?.skinId,
@@ -10188,7 +10788,11 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
         vy,
         f: (flags & BINARY_FLAG_FACING) !== 0 ? 1 : -1,
         g: (flags & BINARY_FLAG_GROUNDED) !== 0,
-        k: (flags & BINARY_FLAG_ACTIVE) !== 0 ? "active" : (flags & BINARY_FLAG_WINDUP) !== 0 ? "windup" : (flags & BINARY_FLAG_RECOVERY) !== 0 ? "recovery" : "idle",
+        k: kickPhase,
+        // The compact frame encodes phase flags but not the continuous timer.
+        // Advance remote visual progress once per snapshot; retain the local
+        // predicted timer because reconciliation owns local attack timing.
+        kt: id === localPlayerId ? existing?.kickTimer : remoteKickTimer,
         h: health || existing?.health || PLAYER_MAX_HEALTH,
         c: existing?.coins ?? 0,
         mh: maxHealth || existing?.maxHealth || PLAYER_MAX_HEALTH,
@@ -10582,34 +11186,54 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
   return performance.now() - entityStart;
 }
 
-function disconnectNetwork(): void {
+function disconnectNetwork(nextStatus: ConnectionStatus = "local"): void {
   reconnectEnabled = false;
   if (reconnTimeout) {
     clearTimeout(reconnTimeout);
     reconnTimeout = null;
   }
+  if (connectTimeout) {
+    clearTimeout(connectTimeout);
+    connectTimeout = null;
+  }
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
     ws.close();
   }
   ws = null;
+  reconnectAtMs = null;
+  reconnectAttempt = 0;
+  setConnectionStatus(nextStatus, nextStatus === "local" ? "Local game" : "Disconnected", false);
 }
 
 function resolveConnect(): void {
+  if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
   connectResolve?.();
   connectResolve = null;
   connectReject = null;
 }
 
 function rejectConnect(message: string): void {
+  if (connectTimeout) { clearTimeout(connectTimeout); connectTimeout = null; }
   connectReject?.(new Error(message));
   connectResolve = null;
   connectReject = null;
+}
+
+function cancelPendingConnection(): void {
+  if (appState !== "connecting") return;
+  rejectConnect("Connection cancelled.");
+  disconnectNetwork();
+  gameStartInFlight = false;
+  menuErrorText = "Connection cancelled.";
+  setAppState("onlineNickname");
 }
 
 function connectRoom(name: string, skinId: string, preserveSession = false, roomId = "demo", spectator = false): Promise<void> {
   if (ws && ws.readyState === WebSocket.CONNECTING) return Promise.reject(new Error("Connection already in progress."));
   if (ws && ws.readyState === WebSocket.OPEN) ws.close();
   reconnectEnabled = true;
+  reconnectAtMs = null;
+  setConnectionStatus(preserveSession ? "reconnecting" : "connecting", preserveSession ? `Reconnecting, attempt ${Math.max(1, reconnectAttempt)}.` : "Connecting to multiplayer.");
   if (!preserveSession) {
     resetGameSession("online");
     sessionToken = null;
@@ -10619,15 +11243,22 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
   const wsUrl = new URL(configuredUrl || `${proto}://${location.host}/ws`);
   if (roomId && roomId !== "auto") wsUrl.searchParams.set("room", roomId);
   ws = new WebSocket(wsUrl.toString());
-  ws.binaryType = "arraybuffer";
+  const socket = ws;
+  socket.binaryType = "arraybuffer";
 
   const connectPromise = new Promise<void>((resolve, reject) => {
     connectResolve = resolve;
     connectReject = reject;
   });
+  connectTimeout = setTimeout(() => {
+    if (ws !== socket) return;
+    rejectConnect("Connection timed out. Please try again.");
+    socket.close();
+  }, 10_000);
 
-  ws.addEventListener("open", () => {
-    reconnDelay = 1000;
+  socket.addEventListener("open", () => {
+    if (ws !== socket) return;
+    setConnectionStatus(preserveSession ? "reconnecting" : "connecting", preserveSession ? "Restoring multiplayer session." : "Joining multiplayer session.", false);
     sendWsMessage({
       type: "hello",
       protocol: PROTOCOL_VERSION,
@@ -10642,7 +11273,8 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
     if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
   });
 
-  ws.addEventListener("message", (ev) => {
+  socket.addEventListener("message", (ev) => {
+    if (ws !== socket) return;
     if (ev.data instanceof ArrayBuffer) {
       recordIncomingNetworkBytes(ev.data.byteLength);
       recordSnapshotSize(ev.data.byteLength);
@@ -10696,6 +11328,9 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         resetLocalPrediction(); cameraSnap = true;
         console.info("[BounceIO] Joined online game", { spectator: spectator || parsed.spectator });
         setAppState("game");
+        reconnectAttempt = 0;
+        reconnectAtMs = null;
+        setConnectionStatus("online", "Connected to multiplayer.");
         resolveConnect();
         break;
       case "resumed":
@@ -10707,6 +11342,9 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         if (loadedChunks.size === 0) for (let cy = 0; cy < INITIAL_CHUNKS_TO_LOAD; cy++) loadChunk(cy, cy < 2);
         console.info("[BounceIO] Joined online game");
         setAppState("game");
+        reconnectAttempt = 0;
+        reconnectAtMs = null;
+        setConnectionStatus("online", "Connection restored.");
         resolveConnect();
         break;
       case "snapshot":
@@ -10789,21 +11427,25 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         break;
       case "error":
         rejectConnect(parsed.message || parsed.code || "Server rejected the join.");
+        if (appState === "game") socket.close();
         break;
     }
   });
 
-  ws.addEventListener("close", () => {
+  socket.addEventListener("close", () => {
+    if (ws !== socket) return;
+    ws = null;
     if (appState !== "game") {
       rejectConnect("Could not connect to the multiplayer server.");
       return;
     }
+    rejectConnect("Connection lost.");
     if (reconnectEnabled) {
-      pushNotification(`Disconnected. Retrying in ${reconnDelay / 1000}s`, PAL.uiGray);
       schedReconn(name, skinId, roomId, spectator);
     }
   });
-  ws.addEventListener("error", () => {
+  socket.addEventListener("error", () => {
+    if (ws !== socket) return;
     if (appState !== "game") rejectConnect("Server unavailable. Check that the multiplayer server is running.");
   });
 
@@ -10812,20 +11454,77 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
 
 function schedReconn(name: string, skinId: string, roomId: string, spectator: boolean): void {
   if (reconnTimeout) return;
+  const next = nextReconnect(reconnectAttempt, navigator.onLine);
+  reconnectAttempt = next.attempt;
+  if (next.status === "offline" || next.delayMs === null) {
+    reconnectAtMs = null;
+    const exhausted = reconnectAttempt >= MAX_AUTOMATIC_RECONNECT_ATTEMPTS;
+    setConnectionStatus("offline", exhausted ? "Connection lost. Automatic retries exhausted. Press R to retry or Escape to leave." : "You are offline. Press R to retry or Escape to leave.");
+    return;
+  }
+  reconnectAtMs = performance.now() + next.delayMs;
+  setConnectionStatus("reconnecting", `Connection lost. Retrying in ${Math.ceil(next.delayMs / 1000)} seconds, attempt ${next.attempt} of ${MAX_AUTOMATIC_RECONNECT_ATTEMPTS}.`);
+  pushNotification(`Disconnected. Retrying in ${next.delayMs / 1000}s`, PAL.uiGray);
   reconnTimeout = setTimeout(() => {
     reconnTimeout = null;
-    reconnDelay = Math.min(reconnDelay * 2, 30_000);
-    void connectRoom(name, skinId, true, roomId, spectator);
-  }, reconnDelay);
+    reconnectAtMs = null;
+    void connectRoom(name, skinId, true, roomId, spectator).catch((error: unknown) => {
+      console.warn("[BounceIO] Reconnect attempt failed", error);
+    });
+  }, next.delayMs);
 }
+
+function retryConnectionNow(): void {
+  if (selectedMode !== "online" || connectionStatus === "online" || connectionStatus === "connecting") return;
+  if (reconnTimeout) { clearTimeout(reconnTimeout); reconnTimeout = null; }
+  reconnectAttempt = 0;
+  reconnectAtMs = null;
+  const reconnectName = isSpectatorMode() ? "Spectator" : nickname;
+  try {
+    void connectRoom(reconnectName, encodeCosmetics(currentCosmetics()), true, currentRoomId, isSpectatorMode()).catch((error: unknown) => {
+      console.warn("[BounceIO] Manual reconnect failed", error);
+    });
+  } catch (error) {
+    console.warn("[BounceIO] Could not start manual reconnect", error);
+    schedReconn(reconnectName, encodeCosmetics(currentCosmetics()), currentRoomId, isSpectatorMode());
+  }
+}
+
+function leaveDisconnectedGame(): void {
+  if (connectionStatus !== "offline" && connectionStatus !== "reconnecting") return;
+  disconnectNetwork("local");
+  resetGameSession("local");
+  gameStartInFlight = false;
+  selectedMode = "online";
+  clientMode = "local";
+  setAppState("mainMenu");
+}
+
+window.addEventListener("offline", () => {
+  if (selectedMode === "online" && appState === "game" && connectionStatus !== "online") {
+    if (reconnTimeout) { clearTimeout(reconnTimeout); reconnTimeout = null; }
+    reconnectAtMs = null;
+    setConnectionStatus("offline", "You are offline. Press R to retry or Escape to leave.");
+  }
+});
+window.addEventListener("online", () => {
+  if (reconnectEnabled && appState === "game" && connectionStatus === "offline") retryConnectionNow();
+});
 
 function sendInput(inp: PlayerInput): void {
   if (isSpectatorMode() || !ws || ws.readyState !== WebSocket.OPEN || !localPlayerId) return;
   sendWsMessage({ type: "input", playerId: localPlayerId, inputSeq: inp.sequence, clientTime: Date.now(), input: inp }, "input");
 }
 
-function shouldPredictLocalMovement(): boolean {
-  return !isSpectatorMode() && localPlayer !== null && !skillCardModal.active && (selectedMode !== "online" || matchPhase === "playing");
+function currentMovementInputPolicy() {
+  return movementInputPolicy({
+    spectator: isSpectatorMode(),
+    hasLocalPlayer: localPlayer !== null,
+    mode: selectedMode,
+    modalActive: skillCardModal.active,
+    connected: connectionStatus === "online",
+    matchPlaying: matchPhase === "playing",
+  });
 }
 
 function maybePing(): void {
@@ -10953,7 +11652,8 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
     const e = predBuf[i]; if (!e) continue;
     const { player: next } = stepPlayer(localPlayer, e.input, tileMap, PHYSICS_STEP_SECONDS);
     if (shouldApplyClientWindZones()) {
-      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000);
+      const remaining = predBuf.length - i - 1;
+      applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, worldSimulationTimeSeconds() - remaining * PHYSICS_STEP_SECONDS);
     }
     localPlayer = next;
   }
@@ -11078,7 +11778,7 @@ function interpRemotes(dt: number): void {
       for (let i = 0; i < Math.min(steps, 8); i++) {
         extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
         if (shouldApplyClientWindZones()) {
-          applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, elapsedMs / 1000 + i * PHYSICS_STEP_SECONDS);
+          applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, last.t / 1000 + (i + 1) * PHYSICS_STEP_SECONDS);
         }
       }
       setRemoteRenderTarget(e, extState, dt);
@@ -11092,12 +11792,31 @@ function interpRemotes(dt: number): void {
     }
     const span = af.t - bf.t;
     const t = span > 0 ? Math.min(1, (rt - bf.t) / span) : 1;
-    const target = {
+    // The transition belongs to the after-frame timestamp. Holding discrete
+    // values from the before-frame avoids showing a landing, facing flip, or
+    // attack phase before the server says it occurred.
+    const discrete = t < 1 ? bf.state : af.state;
+    const sameKickPhase = bf.state.kickPhase === af.state.kickPhase;
+    const target: PlayerState = {
       ...af.state,
       position: {
         x: bf.state.position.x + (af.state.position.x - bf.state.position.x) * t,
         y: bf.state.position.y + (af.state.position.y - bf.state.position.y) * t,
       },
+      velocity: {
+        x: bf.state.velocity.x + (af.state.velocity.x - bf.state.velocity.x) * t,
+        y: bf.state.velocity.y + (af.state.velocity.y - bf.state.velocity.y) * t,
+      },
+      // Discrete contacts/actions switch at the temporal midpoint instead of
+      // leaking the future snapshot across the entire interpolation bracket.
+      grounded: discrete.grounded,
+      facing: discrete.facing,
+      kickPhase: discrete.kickPhase,
+      kickTimer: sameKickPhase
+        ? bf.state.kickTimer + (af.state.kickTimer - bf.state.kickTimer) * t
+        : discrete.kickTimer,
+      stunTimer: bf.state.stunTimer + (af.state.stunTimer - bf.state.stunTimer) * t,
+      invulnerable: bf.state.invulnerable + (af.state.invulnerable - bf.state.invulnerable) * t,
     };
     setRemoteRenderTarget(e, target, dt);
   }
@@ -11147,18 +11866,15 @@ function ensureRemoteRigCosmetics(e: RemoteEntry): void {
   const cosmetics = cosmeticsForPlayer(e.current, cosmeticsForColorIndex(e.colorIndex));
   const key = encodeCosmetics(cosmetics);
   if (key === e.appliedCosmeticsKey) return;
-  const parent = e.bodyRig.root.parent;
-  const index = parent?.getChildIndex(e.bodyRig.root) ?? -1;
-  e.bodyRig.root.destroy({ children: true });
-  e.bodyRig = createBodyRig(cosmeticsToPalette(cosmetics));
+  updateBodyRigAppearance(e.bodyRig, cosmeticsToPalette(cosmetics), cosmeticPartTextures(cosmetics));
+  void cosmeticRegistry.ensureLoadout(cosmetics);
   e.appliedCosmeticsKey = key;
-  if (parent && index >= 0) parent.addChildAt(e.bodyRig.root, Math.min(index, parent.children.length));
 }
 
 function drawActors(): void {
   interpRemotes(Math.min(pixi.ticker.deltaMS / 1000, 1 / 30));
   const crownAvailable = hasAsset("crown");
-  const blinkHidden = Math.floor(elapsedMs / 80) % 2 === 1;
+  const blinkHidden = !reduceMotionQuery.matches && Math.floor(elapsedMs / 80) % 2 === 1;
 
   // Find leader (highest world height = lowest y position)
   let leaderY = Infinity, leaderId: string | null = null;
@@ -11188,7 +11904,7 @@ function drawActors(): void {
     setRoundedPositionIfChanged(e.bodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
     e.bodyRig.root.scale.x = e.current.facing < 0 ? -1 : 1;
     const pose = bodyRigPoseForPlayer(e.current);
-    poseBodyRig(e.bodyRig, { ...pose, elapsedMs });
+    poseBodyRig(e.bodyRig, { ...pose, elapsedMs, reducedMotion: reduceMotionQuery.matches, groundContact: rigGroundContact(drawPosition, e.current.grounded) });
     drawPlayerInto(e.gfx, e.current, col, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(e.attackBar, e.current, drawPosition, elapsedMs);
     setRoundedPositionIfChanged(e.label, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y - 30);
@@ -11204,7 +11920,7 @@ function drawActors(): void {
     setRoundedPositionIfChanged(localBodyRig.root, drawPosition.x + PLAYER_WIDTH / 2, drawPosition.y + PLAYER_HEIGHT);
     localBodyRig.root.scale.x = localPlayer.facing < 0 ? -1 : 1;
     const pose = bodyRigPoseForPlayer(localPlayer);
-    poseBodyRig(localBodyRig, { ...pose, elapsedMs });
+    poseBodyRig(localBodyRig, { ...pose, elapsedMs, reducedMotion: reduceMotionQuery.matches, groundContact: rigGroundContact(drawPosition, localPlayer.grounded) });
     drawPlayerInto(localGfx, localPlayer, PLAYER_COLORS[0]!, elapsedMs, drawPosition, false);
     drawAttackRechargeBar(localAttackBar, localPlayer, drawPosition, elapsedMs);
     localCrownSprite.visible = crownAvailable && localPlayerId === leaderId;
@@ -11226,6 +11942,29 @@ function drawActors(): void {
 prewarmParticlePools();
 nicknameInput.value = nickname;
 pixi.canvas.addEventListener("pointerdown", handleMenuCanvasPointerDown);
+connectionRetryButton.addEventListener("click", retryConnectionNow);
+connectionLeaveButton.addEventListener("click", leaveDisconnectedGame);
+connectionRecovery.addEventListener("keydown", (event) => {
+  if (event.code === "KeyR") {
+    retryConnectionNow();
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  if (event.code === "Escape") {
+    leaveDisconnectedGame();
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  if (event.code === "Tab") {
+    const target = event.shiftKey ? connectionLeaveButton : connectionRetryButton;
+    if ((!event.shiftKey && document.activeElement === connectionLeaveButton) || (event.shiftKey && document.activeElement === connectionRetryButton)) {
+      target.focus({ preventScroll: true });
+      event.preventDefault();
+    }
+  }
+});
 nicknameInput.addEventListener("input", () => {
   nickname = nicknameInput.value;
   if (menuErrorText) {
@@ -11258,7 +11997,7 @@ chatInput.addEventListener("keydown", (e) => {
 chatInput.addEventListener("blur", () => {
   if (chatOpen) closeChat();
 });
-window.addEventListener("resize", () => {
+const handleViewportResize = () => {
   menuDirty = true;
   menuSplashBackground?.layout(pixi.screen.width, pixi.screen.height);
   lastHudLayoutKey = "";
@@ -11267,7 +12006,9 @@ window.addEventListener("resize", () => {
   lastViewportInterestKey = "";
   skillCardModal.layout(pixi.screen.width, pixi.screen.height);
   syncNicknameInput();
-});
+};
+window.addEventListener("resize", handleViewportResize);
+window.visualViewport?.addEventListener("resize", handleViewportResize);
 setAppState("mainMenu");
 if (initialSpectatorRequested) {
   void enterGameScene({
@@ -11322,8 +12063,10 @@ pixi.ticker.add((ticker) => {
     updateRelicAnims(tSec);
     updatePortals(tSec);
   }
-  spawnAmbientParticles(dt);
-  spawnFallStreaks(dt);
+  if (!reduceMotionQuery.matches) {
+    spawnAmbientParticles(dt);
+    spawnFallStreaks(dt);
+  }
   updateNotifications(dt);
   const particleUpdateMs = performance.now() - particleStart;
 
@@ -11338,8 +12081,9 @@ pixi.ticker.add((ticker) => {
   let renderPrepMs = performance.now() - renderPrepStart;
 
   const simulationStart = performance.now();
-  if (localPlayer && shouldPredictLocalMovement()) {
-    const frameInput = captureInput();
+  const movementPolicy = currentMovementInputPolicy();
+  if (localPlayer && movementPolicy !== "pause") {
+    const frameInput = movementPolicy === "neutral" ? idleFrameInput() : captureInput();
     queuedJumpPressed = queuedJumpPressed || frameInput.jumpPressed;
     queuedKickPressed = queuedKickPressed || frameInput.kick;
     predictionAccumulatorSeconds = Math.min(
@@ -11366,7 +12110,7 @@ pixi.ticker.add((ticker) => {
       const willDash = !!inp.dash && localPlayer.dashUnlocked && localPlayer.dashCooldownRemainingMs <= 0;
       const { player: next } = stepPlayer(localPlayer, inp, tileMap, PHYSICS_STEP_SECONDS);
       if (shouldApplyClientWindZones()) {
-        applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, tSec);
+        applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, worldSimulationTimeSeconds());
       }
       const hitJumpPad = applyLocalJumpPads(next);
 

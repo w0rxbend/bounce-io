@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s10",
+  "displayName": "Relic 11",
+  "tags": [
+    "built-in",
+    "earth"
+  ],
+  "fallbackColor": "#cd2daa"
+}

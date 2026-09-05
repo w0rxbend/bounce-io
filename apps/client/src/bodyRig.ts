@@ -5,22 +5,27 @@
 // of snapping straight to their target angle. Colors come from a
 // PlayerCosmetics selection (see cosmetics.ts) so each body-part slot
 // (head/torso/arms/legs) can be customized independently.
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { JUMP_SPEED, MAX_FALL_SPEED } from "@skybound/shared";
 
 export type BoneName =
   | "hip"
   | "torso"
+  | "chest"
+  | "neck"
   | "head"
   | "armUpperL" | "armLowerL"
   | "armUpperR" | "armLowerR"
+  | "handL" | "handR"
   | "legUpperL" | "legLowerL"
-  | "legUpperR" | "legLowerR";
+  | "legUpperR" | "legLowerR"
+  | "footL" | "footR";
 
 const ANIMATED_BONES: BoneName[] = [
-  "torso", "head",
+  "torso", "chest", "neck", "head",
   "armUpperL", "armLowerL", "armUpperR", "armLowerR",
   "legUpperL", "legLowerL", "legUpperR", "legLowerR",
+  "handL", "handR", "footL", "footR",
 ];
 
 export type BodyPoseState = "idle" | "run" | "jump_fall" | "hit";
@@ -52,6 +57,26 @@ export interface BodyRigPalette {
   boot: number;
 }
 
+export interface BodyRigPartTexture {
+  texture: Texture;
+  width: number;
+  height: number;
+  pivot: readonly [number, number];
+}
+
+type BodyRigTextureInput = Texture | BodyRigPartTexture;
+
+export interface BodyRigTextures {
+  head?: BodyRigTextureInput;
+  torso?: BodyRigTextureInput;
+  chest?: BodyRigTextureInput;
+  neck?: BodyRigTextureInput;
+  arm?: BodyRigTextureInput;
+  hand?: BodyRigTextureInput;
+  leg?: BodyRigTextureInput;
+  foot?: BodyRigTextureInput;
+}
+
 export const DEFAULT_BODY_RIG_PALETTE: BodyRigPalette = {
   skin: 0xffd090,
   hair: 0x281a10,
@@ -72,23 +97,42 @@ const BODY_BONE_DEFS: BoneDef[] = [
   { name: "hip",       parent: null,       x: 0,  y: -16, segX: 0, segY: 0,  width: 0, color: "torso" },
   { name: "legUpperL", parent: "hip",      x: -3, y: 0,   segX: 0, segY: 8,   width: 4, color: "limb" },
   { name: "legLowerL", parent: "legUpperL",x: 0,  y: 8,   segX: 0, segY: 8,   width: 4, color: "boot" },
+  { name: "footL",     parent: "legLowerL",x: 0,  y: 8,   segX: 5, segY: 0,   width: 3, color: "boot" },
   { name: "legUpperR", parent: "hip",      x: 3,  y: 0,   segX: 0, segY: 8,   width: 4, color: "limb" },
   { name: "legLowerR", parent: "legUpperR",x: 0,  y: 8,   segX: 0, segY: 8,   width: 4, color: "boot" },
-  { name: "torso",     parent: "hip",      x: 0,  y: 0,   segX: 0, segY: -11, width: 7, color: "torso" },
-  { name: "head",      parent: "torso",    x: 0,  y: -11, segX: 0, segY: -8,  width: 7, color: "skin" },
-  { name: "armUpperL", parent: "torso",    x: -4, y: -9,  segX: 0, segY: 8,   width: 3, color: "arms" },
+  { name: "footR",     parent: "legLowerR",x: 0,  y: 8,   segX: 5, segY: 0,   width: 3, color: "boot" },
+  { name: "torso",     parent: "hip",      x: 0,  y: 0,   segX: 0, segY: -4,  width: 7, color: "torso" },
+  { name: "chest",     parent: "torso",    x: 0,  y: -4,  segX: 0, segY: -5,  width: 8, color: "torsoShade" },
+  { name: "neck",      parent: "chest",    x: 0,  y: -5,  segX: 0, segY: -2,  width: 3, color: "skin" },
+  { name: "head",      parent: "neck",     x: 0,  y: -2,  segX: 0, segY: -8,  width: 7, color: "skin" },
+  { name: "armUpperL", parent: "chest",    x: -4, y: -5,  segX: 0, segY: 8,   width: 3, color: "arms" },
   { name: "armLowerL", parent: "armUpperL",x: 0,  y: 8,   segX: 0, segY: 8,   width: 3, color: "arms" },
-  { name: "armUpperR", parent: "torso",    x: 4,  y: -9,  segX: 0, segY: 8,   width: 3, color: "arms" },
+  { name: "handL",     parent: "armLowerL",x: 0,  y: 8,   segX: 0, segY: 3,   width: 3, color: "arms" },
+  { name: "armUpperR", parent: "chest",    x: 4,  y: -5,  segX: 0, segY: 8,   width: 3, color: "arms" },
   { name: "armLowerR", parent: "armUpperR",x: 0,  y: 8,   segX: 0, segY: 8,   width: 3, color: "arms" },
+  { name: "handR",     parent: "armLowerR",x: 0,  y: 8,   segX: 0, segY: 3,   width: 3, color: "arms" },
 ];
+
+export interface FootContactState {
+  planted: boolean;
+  wasStance: boolean;
+  anchorX: number;
+  anchorY: number;
+  weight: number;
+  plannedX: number;
+  plannedY: number;
+  hasPlan: boolean;
+}
 
 export interface BodyRig {
   root: Container;
   bones: Record<BoneName, Container>;
+  visuals: Partial<Record<BoneName, Container>>;
   // Spring-damper state, persisted frame to frame (see springTo()).
   angularVelocity: Record<BoneName, number>;
   hipY: number;
   hipVelocityY: number;
+  supportHipOffsetY: number;
   // Weight-transfer lunge (forward/back translation of the hip along the
   // strike axis) and a whole-body squash/stretch pulse, both spring-driven
   // like every other bone so a strike's impact carries the same organic
@@ -101,12 +145,78 @@ export interface BodyRig {
   squashVelY: number;
   lastElapsedMs: number | null;
   lastState: BodyPoseState | "kick" | null;
-  // Reseeded whenever a jump begins so each airborne arc looks different.
+  locomotionPhase: number;
+  locomotionWeight: number;
+  maxAirborneFallSpeed: number;
+  landingCompression: number;
+  lastHorizontalVelocity: number;
+  footContacts: Record<"left" | "right", FootContactState>;
+  animationSeed: number;
+  jumpOrdinal: number;
+  previousVerticalVelocity: number;
+  lastFacing: -1 | 1;
+  // Deterministically advanced whenever a jump begins.
   jumpSeed: number;
 }
 
-export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE): BodyRig {
+/** Stable player-identity hash used to synchronize procedural motion. */
+export function stableAnimationSeed(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function mixMotionSeed(base: number, ordinal: number): number {
+  let value = (base ^ Math.imul(ordinal, 0x9e3779b1)) >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
+function createBoneVisual(def: BoneDef, palette: BodyRigPalette, textures: BodyRigTextures): Container | undefined {
+  const texture = def.name === "head" ? textures.head
+    : def.name === "torso" ? textures.torso
+    : def.name === "chest" ? textures.chest
+    : def.name === "neck" ? textures.neck
+    : def.name.startsWith("arm") ? textures.arm
+    : def.name.startsWith("hand") ? textures.hand
+    : def.name.startsWith("leg") ? textures.leg
+    : def.name.startsWith("foot") ? textures.foot
+    : undefined;
+  const descriptor = texture && !(texture instanceof Texture) ? texture : undefined;
+  const pixiTexture = descriptor?.texture ?? (texture instanceof Texture ? texture : undefined);
+  if (pixiTexture && pixiTexture !== Texture.EMPTY) {
+    const sprite = new Sprite(pixiTexture);
+    sprite.texture.source.scaleMode = "nearest";
+    if (descriptor) {
+      sprite.anchor.set(descriptor.pivot[0] / descriptor.width, descriptor.pivot[1] / descriptor.height);
+    } else if (def.segX !== 0) {
+      sprite.anchor.set(def.segX < 0 ? 1 : 0, 0.5);
+    } else {
+      sprite.anchor.set(0.5, def.segY < 0 ? 1 : 0);
+    }
+    if (def.segX !== 0) sprite.width = Math.abs(def.segX);
+    else if (def.name === "head") sprite.height = Math.abs(def.segY) * 2.75;
+    else if (def.segY !== 0) sprite.height = Math.abs(def.segY);
+    return sprite;
+  }
+  if (def.name === "head") return new Graphics().ellipse(0, def.segY / 2, def.width / 2 + 5.5, Math.abs(def.segY) * 1.35).fill(palette[def.color]);
+  if (def.width > 0) {
+    const half = def.width / 2;
+    if (def.segX !== 0) return new Graphics().rect(Math.min(0, def.segX), -half, Math.abs(def.segX), def.width).fill(palette[def.color]);
+    return new Graphics().rect(-half, Math.min(0, def.segY), def.width, Math.abs(def.segY)).fill(palette[def.color]);
+  }
+  return undefined;
+}
+
+export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE, textures: BodyRigTextures = {}): BodyRig {
   const bones: Partial<Record<BoneName, Container>> = {};
+  const visuals: Partial<Record<BoneName, Container>> = {};
   const root = new Container();
 
   for (const def of BODY_BONE_DEFS) {
@@ -114,16 +224,8 @@ export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE
     bone.x = def.x;
     bone.y = def.y;
     bone.eventMode = "none";
-    if (def.name === "head") {
-      const gfx = new Graphics().circle(0, def.segY / 2, def.width / 2 + 1).fill(palette[def.color]);
-      bone.addChild(gfx);
-    } else if (def.width > 0) {
-      const half = def.width / 2;
-      const gfx = new Graphics()
-        .rect(-half, Math.min(0, def.segY), def.width, Math.abs(def.segY))
-        .fill(palette[def.color]);
-      bone.addChild(gfx);
-    }
+    const visual = createBoneVisual(def, palette, textures);
+    if (visual) { visuals[def.name] = visual; bone.addChild(visual); }
     bones[def.name] = bone;
     const parent = def.parent ? bones[def.parent] : root;
     (parent ?? root).addChild(bone);
@@ -135,9 +237,11 @@ export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE
   return {
     root,
     bones: bones as Record<BoneName, Container>,
+    visuals,
     angularVelocity,
     hipY: -16,
     hipVelocityY: 0,
+    supportHipOffsetY: 0,
     hipX: 0,
     hipVelocityX: 0,
     squashX: 1,
@@ -146,13 +250,40 @@ export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE
     squashVelY: 0,
     lastElapsedMs: null,
     lastState: null,
-    jumpSeed: Math.random() * 1000,
+    locomotionPhase: 0,
+    locomotionWeight: 0,
+    maxAirborneFallSpeed: 0,
+    landingCompression: 0,
+    lastHorizontalVelocity: 0,
+    footContacts: {
+      left: { planted: false, wasStance: false, anchorX: 0, anchorY: 0, weight: 0, plannedX: 0, plannedY: 0, hasPlan: false },
+      right: { planted: false, wasStance: false, anchorX: 0, anchorY: 0, weight: 0, plannedX: 0, plannedY: 0, hasPlan: false },
+    },
+    animationSeed: stableAnimationSeed("preview"),
+    jumpOrdinal: 0,
+    previousVerticalVelocity: 0,
+    lastFacing: 1,
+    jumpSeed: mixMotionSeed(stableAnimationSeed("preview"), 0),
   };
 }
 
-function walkCyclePhase(elapsedMs: number, speedFactor: number): number {
-  const cycleMs = 340 - speedFactor * 150; // faster cycle at higher speed
-  return (elapsedMs % cycleMs) / cycleMs * Math.PI * 2;
+export function updateBodyRigAppearance(rig: BodyRig, palette: BodyRigPalette, textures: BodyRigTextures = {}): void {
+  for (const def of BODY_BONE_DEFS) {
+    const previous = rig.visuals[def.name];
+    if (previous) {
+      rig.bones[def.name].removeChild(previous);
+      previous.destroy({ children: true });
+    }
+    const visual = createBoneVisual(def, palette, textures);
+    if (visual) {
+      rig.visuals[def.name] = visual;
+      // Keep the visual behind child joints so hands/feet remain layered by
+      // the hierarchy rather than accidentally hiding their parent segment.
+      rig.bones[def.name].addChildAt(visual, 0);
+    } else {
+      delete rig.visuals[def.name];
+    }
+  }
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -161,6 +292,252 @@ function lerp(a: number, b: number, t: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+export interface TwoBoneSolution {
+  upper: number;
+  lower: number;
+  reachedX: number;
+  reachedY: number;
+}
+
+export interface GroundContactContext {
+  rootWorldX: number;
+  rootWorldY: number;
+  grounded: boolean;
+  /** Returns the nearest walkable surface Y near the supplied reference. */
+  sampleGroundY(worldX: number, referenceY: number): number | null;
+}
+
+interface TerrainLegSolutions {
+  left?: TwoBoneSolution;
+  right?: TwoBoneSolution;
+  footLeft: number;
+  footRight: number;
+}
+
+/** Analytic two-link IK in the rig's angle convention (zero points down). */
+export function solveTwoBoneIK(targetX: number, targetY: number, upperLength: number, lowerLength: number, bendDirection: -1 | 1 = 1): TwoBoneSolution {
+  const minReach = Math.abs(upperLength - lowerLength) + 0.001;
+  const maxReach = upperLength + lowerLength - 0.001;
+  const rawDistance = Math.hypot(targetX, targetY);
+  const distance = clamp(rawDistance, minReach, maxReach);
+  const scale = rawDistance > 0.0001 ? distance / rawDistance : 0;
+  const x = rawDistance > 0.0001 ? targetX * scale : 0;
+  const y = rawDistance > 0.0001 ? targetY * scale : distance;
+  const cosLower = clamp((distance * distance - upperLength * upperLength - lowerLength * lowerLength) / (2 * upperLength * lowerLength), -1, 1);
+  const lower = Math.acos(cosLower) * bendDirection;
+  const standardUpper = Math.atan2(y, x) - Math.atan2(lowerLength * Math.sin(lower), upperLength + lowerLength * Math.cos(lower));
+  const upper = standardUpper - Math.PI / 2;
+  return {
+    upper,
+    lower,
+    reachedX: -Math.sin(upper) * upperLength - Math.sin(upper + lower) * lowerLength,
+    reachedY: Math.cos(upper) * upperLength + Math.cos(upper + lower) * lowerLength,
+  };
+}
+
+function gaitLegIK(phase: number, speedFactor: number): TwoBoneSolution {
+  const cycle = ((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const intensity = Math.max(0.42, speedFactor);
+  if (cycle < Math.PI) {
+    // Stance: keep the sole at ground height while the pelvis travels over
+    // it. Distance-driven phase makes this foot nearly stationary in world
+    // space instead of skating backward through the floor.
+    const t = cycle / Math.PI;
+    return solveTwoBoneIK(lerp(5.2, -5.2, t) * intensity, 15.4, 8, 8, 1);
+  }
+  // Swing: toe clears the ground in an asymmetric arc, rising quickly and
+  // reaching forward more gently for readable anticipation before contact.
+  const t = (cycle - Math.PI) / Math.PI;
+  const eased = t * t * (3 - 2 * t);
+  return solveTwoBoneIK(lerp(-5.2, 5.2, eased) * intensity, 15.4 - Math.sin(t * Math.PI) * 5.4 * intensity, 8, 8, 1);
+}
+
+function wrapPhase(value: number): number {
+  return ((value % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+}
+
+function updateTerrainLegs(
+  rig: BodyRig,
+  state: BodyPoseState,
+  speedFactor: number,
+  facing: -1 | 1,
+  context: GroundContactContext | undefined,
+  targets: Targets,
+  dt: number,
+  kick: PoseParams["kick"],
+  locomotionWeight: number,
+  horizontalVelocity: number,
+): TerrainLegSolutions {
+  const result: TerrainLegSolutions = { footLeft: 0, footRight: 0 };
+  const enabled = !!context && context.grounded && !kick && (state === "run" || state === "idle");
+  if (!enabled || !context) {
+    for (const contact of Object.values(rig.footContacts)) {
+      contact.planted = false;
+      contact.wasStance = false;
+      contact.hasPlan = false;
+      contact.weight *= Math.exp(-dt * 24);
+    }
+    rig.supportHipOffsetY *= Math.exp(-dt * 10);
+    const airborneToe = state === "jump_fall" ? clamp(-0.18 - verticalVelocityToToe(rig), -0.45, 0.25) : 0;
+    result.footLeft = airborneToe;
+    result.footRight = airborneToe;
+    return result;
+  }
+
+  const moving = locomotionWeight > 0.035;
+  const intensity = clamp(Math.max(speedFactor, locomotionWeight * 0.22), 0.15, 1);
+  const specs = [
+    { side: "left" as const, phase: moving ? rig.locomotionPhase : 0, socketX: -3 },
+    { side: "right" as const, phase: moving ? rig.locomotionPhase + Math.PI : 0, socketX: 3 },
+  ];
+
+  if (facing !== rig.lastFacing) {
+    for (const contact of Object.values(rig.footContacts)) {
+      contact.planted = false;
+      contact.wasStance = false;
+      contact.hasPlan = false;
+      contact.weight = 0;
+    }
+  }
+  rig.lastFacing = facing;
+
+  // First acquire/release contacts. Anchors are immutable during stance;
+  // this is the key property that prevents the classic procedural foot skate.
+  for (const spec of specs) {
+    const cycle = wrapPhase(spec.phase);
+    const stance = !moving || cycle < Math.PI;
+    const contact = rig.footContacts[spec.side];
+    if (stance && contact.planted) {
+      const sampledY = context.sampleGroundY(contact.anchorX, contact.anchorY);
+      const sx = Math.max(0.2, rig.squashX);
+      const sy = Math.max(0.2, rig.squashY);
+      const targetX = (contact.anchorX - context.rootWorldX) * facing / sx - rig.hipX - spec.socketX;
+      const targetY = (contact.anchorY - context.rootWorldY) / sy - rig.hipY;
+      const surfaceDelta = sampledY === null ? Infinity : Math.abs(sampledY - contact.anchorY);
+      if (sampledY === null || surfaceDelta > 3 || Math.hypot(targetX, targetY) > 16.35) {
+        contact.planted = false;
+      } else if (surfaceDelta <= 1.5) {
+        contact.anchorY = sampledY;
+      }
+    }
+    if (stance && !contact.wasStance) {
+      const nominalX = moving ? 5.2 * intensity : 0;
+      const worldX = contact.hasPlan
+        ? contact.plannedX
+        : context.rootWorldX + (rig.hipX + spec.socketX + nominalX) * facing * rig.squashX;
+      const groundY = context.sampleGroundY(worldX, contact.hasPlan ? contact.plannedY : context.rootWorldY);
+      if (groundY !== null) {
+        contact.anchorX = worldX;
+        contact.anchorY = groundY;
+        contact.planted = true;
+      }
+      contact.hasPlan = false;
+    } else if (!stance) {
+      contact.planted = false;
+    }
+    contact.wasStance = stance;
+    const targetWeight = stance && contact.planted ? 1 : 0;
+    contact.weight += (targetWeight - contact.weight) * (1 - Math.exp(-dt * (targetWeight ? 30 : 24)));
+  }
+
+  // Solve feasible support heights from the feet's actual horizontal reach.
+  // Squared weights keep a newly acquired toe from moving the pelvis as much
+  // as the established stance foot, and smoothing avoids threshold pops.
+  const supports = specs.filter((spec) => rig.footContacts[spec.side].weight > 0.05 && rig.footContacts[spec.side].planted);
+  if (supports.length > 0) {
+    let weightedOffset = 0;
+    let totalWeight = 0;
+    for (const spec of supports) {
+      const contact = rig.footContacts[spec.side];
+      const footLocalX = (contact.anchorX - context.rootWorldX) * facing / Math.max(0.2, rig.squashX);
+      const dx = clamp(footLocalX - targets.hipX - spec.socketX, -7.25, 7.25);
+      const verticalReach = Math.sqrt(Math.max(13 * 13, 15.4 * 15.4 - dx * dx));
+      const candidateHipY = (contact.anchorY - context.rootWorldY) / Math.max(0.2, rig.squashY) - verticalReach;
+      const weight = contact.weight * contact.weight;
+      weightedOffset += clamp(candidateHipY - targets.hipY, -2.5, 2.5) * weight;
+      totalWeight += weight;
+    }
+    const desiredOffset = totalWeight > 0 ? weightedOffset / totalWeight : 0;
+    rig.supportHipOffsetY += (desiredOffset - rig.supportHipOffsetY) * (1 - Math.exp(-dt * 18));
+  } else {
+    rig.supportHipOffsetY *= Math.exp(-dt * 10);
+  }
+  targets.hipY += rig.supportHipOffsetY;
+
+  for (const spec of specs) {
+    const cycle = wrapPhase(spec.phase);
+    const contact = rig.footContacts[spec.side];
+    let fallback = moving ? gaitLegIK(spec.phase, intensity) : solveTwoBoneIK(0, 15.4, 8, 8, 1);
+    if (moving && cycle >= Math.PI) {
+      const swingT = (cycle - Math.PI) / Math.PI;
+      const eased = swingT * swingT * (3 - 2 * swingT);
+      const travelX = lerp(-5.2, 5.2, eased) * intensity;
+      const touchdownLocalX = 5.2 * intensity;
+      const halfCycleSeconds = clamp(13 / Math.max(28, Math.abs(horizontalVelocity)), 0.04, 0.24);
+      const remainingSeconds = (1 - swingT) * halfCycleSeconds;
+      const touchdownX = context.rootWorldX + horizontalVelocity * remainingSeconds +
+        (rig.hipX + spec.socketX + touchdownLocalX) * facing * rig.squashX;
+      const touchdownY = context.sampleGroundY(touchdownX, context.rootWorldY);
+      if (touchdownY !== null && Math.abs(touchdownY - context.rootWorldY) <= 8) {
+        const currentWorldX = context.rootWorldX + (rig.hipX + spec.socketX + fallback.reachedX) * facing * rig.squashX;
+        let highestSurfaceY = Math.min(context.rootWorldY, touchdownY);
+        for (let sample = 0; sample <= 4; sample++) {
+          const progress = sample / 4;
+          const surfaceY = context.sampleGroundY(
+            lerp(currentWorldX, touchdownX, progress),
+            lerp(context.rootWorldY, touchdownY, progress),
+          );
+          if (surfaceY !== null) highestSurfaceY = Math.min(highestSurfaceY, surfaceY);
+        }
+        const obstacleRise = Math.max(0, touchdownY - highestSurfaceY);
+        const clearance = 5.4 * intensity + clamp(obstacleRise + 1.25, 0, 7.5) * Math.pow(Math.sin(swingT * Math.PI), 0.75);
+        const desiredWorldY = lerp(context.rootWorldY, touchdownY, eased) - clearance;
+        const desiredLocalY = (desiredWorldY - context.rootWorldY) / Math.max(0.2, rig.squashY) - targets.hipY;
+        fallback = solveTwoBoneIK(travelX, desiredLocalY, 8, 8, 1);
+        contact.plannedX = touchdownX;
+        contact.plannedY = touchdownY;
+        contact.hasPlan = true;
+      } else {
+        contact.hasPlan = false;
+      }
+    }
+    let solution = fallback;
+    if (contact.planted && contact.weight > 0.001) {
+      const sx = Math.max(0.2, rig.squashX);
+      const sy = Math.max(0.2, rig.squashY);
+      const targetX = (contact.anchorX - context.rootWorldX) * facing / sx - targets.hipX - spec.socketX;
+      const targetY = (contact.anchorY - context.rootWorldY) / sy - targets.hipY;
+      const planted = solveTwoBoneIK(targetX, targetY, 8, 8, 1);
+      solution = {
+        upper: lerp(fallback.upper, planted.upper, contact.weight),
+        lower: lerp(fallback.lower, planted.lower, contact.weight),
+        reachedX: lerp(fallback.reachedX, planted.reachedX, contact.weight),
+        reachedY: lerp(fallback.reachedY, planted.reachedY, contact.weight),
+      };
+    }
+    const sampleOffset = 2.5;
+    const centerY = context.sampleGroundY(contact.anchorX, contact.anchorY) ?? contact.anchorY;
+    const leftY = context.sampleGroundY(contact.anchorX - sampleOffset, centerY) ?? centerY;
+    const rightY = context.sampleGroundY(contact.anchorX + sampleOffset, centerY) ?? centerY;
+    const groundAngle = Math.atan2(rightY - leftY, sampleOffset * 2) * facing;
+    const footAngle = contact.planted
+      ? groundAngle - solution.upper - solution.lower
+      : -0.18 * Math.sin(Math.max(0, cycle - Math.PI));
+    if (spec.side === "left") {
+      result.left = solution;
+      result.footLeft = footAngle;
+    } else {
+      result.right = solution;
+      result.footRight = footAngle;
+    }
+  }
+  return result;
+}
+
+function verticalVelocityToToe(rig: BodyRig): number {
+  return clamp(rig.maxAirborneFallSpeed / Math.max(1, MAX_FALL_SPEED), 0, 1) * -0.12;
 }
 
 // Deterministic pseudo-random in [-1, 1] from a seed, stable across a frame
@@ -180,7 +557,18 @@ function springTo(rig: BodyRig, name: BoneName, target: number, stiffness: numbe
   const accel = (target - bone.rotation) * stiffness - vel * damping;
   const nextVel = vel + accel * dt;
   bone.rotation += nextVel * dt;
-  rig.angularVelocity[name] = nextVel;
+  const limits: Partial<Record<BoneName, readonly [number, number]>> = {
+    torso: [-0.38, 0.38], chest: [-0.48, 0.48], neck: [-0.28, 0.28], head: [-0.55, 0.55],
+  };
+  const limit = limits[name];
+  let limitedVelocity = nextVel;
+  if (limit) {
+    bone.rotation = clamp(bone.rotation, limit[0], limit[1]);
+    if ((bone.rotation === limit[0] && limitedVelocity < 0) || (bone.rotation === limit[1] && limitedVelocity > 0)) {
+      limitedVelocity = 0;
+    }
+  }
+  rig.angularVelocity[name] = limitedVelocity;
 }
 
 // Note: rig.root's own x/y is the world/screen anchor set by the caller
@@ -260,17 +648,10 @@ function idleTargets(elapsedMs: number): Targets {
   };
 }
 
-function runTargets(elapsedMs: number, speedFactor: number): Targets {
-  const phase = walkCyclePhase(elapsedMs, speedFactor);
+function runTargets(phase: number, speedFactor: number): Targets {
   const intensity = Math.max(0.4, speedFactor);
-  const thighSwing = 0.95 * intensity;
-
-  const thighL = Math.sin(phase);
-  const thighR = Math.sin(phase + Math.PI);
-  const kneeCurve = (thighPhaseCos: number) => {
-    const swingingForward = clamp(thighPhaseCos, 0, 1);
-    return 0.12 + swingingForward * swingingForward * 1.35 * intensity;
-  };
+  const legL = gaitLegIK(phase, intensity);
+  const legR = gaitLegIK(phase + Math.PI, intensity);
 
   // Naruto run: arms held together behind the back, trailing opposite the
   // direction of travel — angled down-and-back at roughly hip height
@@ -286,8 +667,8 @@ function runTargets(elapsedMs: number, speedFactor: number): Targets {
   const forearmTrail = -0.6 - trailSway * 0.3;
 
   return {
-    legUpperL: thighL * thighSwing, legLowerL: kneeCurve(Math.cos(phase)),
-    legUpperR: thighR * thighSwing, legLowerR: kneeCurve(Math.cos(phase + Math.PI)),
+    legUpperL: legL.upper, legLowerL: legL.lower,
+    legUpperR: legR.upper, legLowerR: legR.lower,
     armUpperL: armTrail, armLowerL: forearmTrail,
     armUpperR: armTrail, armLowerR: forearmTrail,
     torso: 0.32 * intensity, head: -0.06 * intensity,
@@ -458,6 +839,11 @@ export interface PoseParams {
   elapsedMs: number;
   speedFactor: number;
   verticalVelocity: number;
+  horizontalVelocity?: number;
+  facing?: -1 | 1;
+  groundContact?: GroundContactContext;
+  animationSeed?: number;
+  reducedMotion?: boolean;
   kick?: { phase: KickPhaseName; progress: number };
 }
 
@@ -468,23 +854,97 @@ export interface PoseParams {
  * and settle) instead of snapping straight to the target.
  */
 export function poseBodyRig(rig: BodyRig, params: PoseParams): void {
-  const { state, elapsedMs, speedFactor, verticalVelocity, kick } = params;
+  const { state, elapsedMs, speedFactor, verticalVelocity, horizontalVelocity = 0, facing = 1, groundContact, animationSeed, reducedMotion = false, kick } = params;
 
   const dt = rig.lastElapsedMs === null ? 1 / 60 : clamp((elapsedMs - rig.lastElapsedMs) / 1000, 0, 1 / 20);
   rig.lastElapsedMs = elapsedMs;
 
-  const effectiveState: BodyPoseState | "kick" = kick ? "kick" : state;
-  if (rig.lastState !== "jump_fall" && effectiveState === "jump_fall") {
-    rig.jumpSeed = Math.random() * 1000;
+  // `kick` is an additive action overlay. Airborne/landing memory follows the
+  // base locomotion state so attacking in mid-air cannot erase impact speed.
+  const effectiveState: BodyPoseState | "kick" = state;
+  if (animationSeed !== undefined && rig.animationSeed !== (animationSeed >>> 0)) {
+    rig.animationSeed = animationSeed >>> 0;
+    rig.jumpOrdinal = 0;
+    rig.jumpSeed = mixMotionSeed(rig.animationSeed, 0);
+  }
+  const enteredAir = rig.lastState !== "jump_fall" && state === "jump_fall";
+  const restartedUpward = rig.lastState === "jump_fall" &&
+    rig.previousVerticalVelocity > -JUMP_SPEED * 0.25 && verticalVelocity < -JUMP_SPEED * 0.65;
+  if (enteredAir || restartedUpward) {
+    rig.jumpOrdinal += 1;
+    rig.jumpSeed = mixMotionSeed(rig.animationSeed, rig.jumpOrdinal);
+  }
+  rig.previousVerticalVelocity = verticalVelocity;
+  if (state === "jump_fall") {
+    rig.maxAirborneFallSpeed = Math.max(rig.maxAirborneFallSpeed, Math.max(0, verticalVelocity));
+  } else if (rig.lastState === "jump_fall") {
+    // Ignore tiny curb/ledge transitions; only meaningful downward momentum
+    // should produce a visible compression pulse.
+    rig.landingCompression = clamp((rig.maxAirborneFallSpeed - 35) / Math.max(1, MAX_FALL_SPEED - 35), 0, 1);
+    rig.maxAirborneFallSpeed = 0;
   }
   rig.lastState = effectiveState;
 
-  const targets = kick
+  const groundedLocomotion = !kick && (state === "idle" || state === "run");
+  const startThreshold = 34;
+  const stopThreshold = 18;
+  const locomotionGoal = groundedLocomotion && Math.abs(horizontalVelocity) >= (rig.locomotionWeight > 0.1 ? stopThreshold : startThreshold) ? 1 : 0;
+  const locomotionRate = locomotionGoal > rig.locomotionWeight ? 10 : 6;
+  rig.locomotionWeight += (locomotionGoal - rig.locomotionWeight) * (1 - Math.exp(-dt * locomotionRate));
+
+  if (groundedLocomotion && rig.locomotionWeight > 0.02) {
+    // Drive the gait from distance travelled instead of wall time. A full
+    // cycle spans roughly two 13px steps, keeping foot rhythm coupled to
+    // actual motion through acceleration, slowdown, and network smoothing.
+    const gaitSpeed = Math.max(Math.abs(horizontalVelocity), 28 * rig.locomotionWeight);
+    rig.locomotionPhase = (rig.locomotionPhase + gaitSpeed * dt / 26 * Math.PI * 2) % (Math.PI * 2);
+  }
+
+  let targets = kick
     ? kickTargets(kick.phase, kick.progress)
-    : state === "idle" ? idleTargets(elapsedMs)
-    : state === "run" ? runTargets(elapsedMs, speedFactor)
+    : groundedLocomotion ? blendTargets(idleTargets(reducedMotion ? 0 : elapsedMs), runTargets(rig.locomotionPhase, Math.max(speedFactor, 0.4)), rig.locomotionWeight * rig.locomotionWeight * (3 - 2 * rig.locomotionWeight))
     : state === "jump_fall" ? jumpFallTargets(verticalVelocity, rig.jumpSeed)
     : hitTargets();
+
+  let localAcceleration = 0;
+  if (!kick && state !== "jump_fall") {
+    localAcceleration = clamp((horizontalVelocity - rig.lastHorizontalVelocity) / Math.max(dt, 1 / 120) * facing / 900, -1, 1);
+    targets = {
+      ...targets,
+      torso: targets.torso + localAcceleration * 0.16,
+      head: targets.head - localAcceleration * 0.05,
+      hipX: targets.hipX - localAcceleration * 0.7,
+      armUpperL: targets.armUpperL - localAcceleration * 0.08,
+      armUpperR: targets.armUpperR - localAcceleration * 0.08,
+    };
+  }
+  rig.lastHorizontalVelocity = horizontalVelocity;
+
+  if (reducedMotion) rig.landingCompression = 0;
+  if (!reducedMotion && !kick && state !== "jump_fall" && rig.landingCompression > 0.002) {
+    const impact = rig.landingCompression;
+    targets = {
+      ...targets,
+      hipY: targets.hipY + impact * 2.8,
+      squashX: targets.squashX + impact * 0.16,
+      squashY: targets.squashY - impact * 0.2,
+      legUpperL: targets.legUpperL - impact * 0.18,
+      legUpperR: targets.legUpperR + impact * 0.18,
+      legLowerL: targets.legLowerL + impact * 0.38,
+      legLowerR: targets.legLowerR + impact * 0.38,
+    };
+    rig.landingCompression *= Math.exp(-dt * 9);
+  }
+
+  const terrainLegs = updateTerrainLegs(rig, state, speedFactor, facing, groundContact, targets, dt, kick, rig.locomotionWeight, horizontalVelocity);
+  if (terrainLegs.left) {
+    targets.legUpperL = terrainLegs.left.upper;
+    targets.legLowerL = terrainLegs.left.lower;
+  }
+  if (terrainLegs.right) {
+    targets.legUpperR = terrainLegs.right.upper;
+    targets.legLowerR = terrainLegs.right.lower;
+  }
 
   // A strike needs snappier limb springs than idle/run/jump — otherwise
   // the fast phase-driven target changes (guard->anticipate->chamber->
@@ -492,18 +952,84 @@ export function poseBodyRig(rig: BodyRig, params: PoseParams): void {
   // slow drift instead of reading as a fast, forceful motion.
   const limbStiff = kick ? STIFF_STRIKE_LIMB : STIFF_ARM;
   const torsoStiff = kick ? STIFF_STRIKE_TORSO : STIFF_FIRM;
+  const aggregateTorso = targets.torso;
+  const chestCounterbend = !reducedMotion && !kick && state === "run"
+    ? Math.sin(rig.locomotionPhase) * 0.055 * rig.locomotionWeight * clamp(speedFactor, 0, 1)
+    : 0;
+  const torsoTarget = aggregateTorso * 0.38 - chestCounterbend * 0.25;
+  const chestTarget = aggregateTorso * 0.62 + chestCounterbend * 1.25;
+  const secondaryNeck = reducedMotion ? 0 : state === "idle"
+    ? Math.sin(elapsedMs / 1000 * 2) * 0.008
+    : state === "run" ? localAcceleration * 0.035
+    : state === "jump_fall" ? clamp(verticalVelocity / MAX_FALL_SPEED, -1, 1) * 0.035
+    : 0;
+  const neckTarget = clamp(-aggregateTorso * 0.16 + secondaryNeck, -0.22, 0.22);
+  const desiredHeadWorldAngle = clamp(targets.head, -0.3, 0.3);
 
-  springTo(rig, "torso", targets.torso, torsoStiff.k, torsoStiff.d, dt);
-  springTo(rig, "head", targets.head, torsoStiff.k, torsoStiff.d, dt);
-  springTo(rig, "legUpperL", targets.legUpperL, kick ? limbStiff.k : STIFF_LEG.k, kick ? limbStiff.d : STIFF_LEG.d, dt);
-  springTo(rig, "legUpperR", targets.legUpperR, kick ? limbStiff.k : STIFF_LEG.k, kick ? limbStiff.d : STIFF_LEG.d, dt);
-  springTo(rig, "legLowerL", targets.legLowerL, kick ? limbStiff.k : STIFF_SHIN.k, kick ? limbStiff.d : STIFF_SHIN.d, dt);
-  springTo(rig, "legLowerR", targets.legLowerR, kick ? limbStiff.k : STIFF_SHIN.k, kick ? limbStiff.d : STIFF_SHIN.d, dt);
-  springTo(rig, "armUpperL", targets.armUpperL, limbStiff.k, limbStiff.d, dt);
-  springTo(rig, "armUpperR", targets.armUpperR, limbStiff.k, limbStiff.d, dt);
-  springTo(rig, "armLowerL", targets.armLowerL, kick ? limbStiff.k : STIFF_FOREARM.k, kick ? limbStiff.d : STIFF_FOREARM.d, dt);
-  springTo(rig, "armLowerR", targets.armLowerR, kick ? limbStiff.k : STIFF_FOREARM.k, kick ? limbStiff.d : STIFF_FOREARM.d, dt);
-  springHipY(rig, targets.hipY, STIFF_HIP_Y.k, STIFF_HIP_Y.d, dt);
-  springHipX(rig, targets.hipX, STIFF_HIP_X.k, STIFF_HIP_X.d, dt);
-  springSquash(rig, targets.squashX, targets.squashY, STIFF_SQUASH.k, STIFF_SQUASH.d, dt);
+  const steps = Math.max(1, Math.ceil(dt / (1 / 120)));
+  const subDt = dt / steps;
+  for (let step = 0; step < steps; step++) {
+    springTo(rig, "torso", torsoTarget, torsoStiff.k, torsoStiff.d, subDt);
+    springTo(rig, "chest", chestTarget, torsoStiff.k * 0.9, torsoStiff.d, subDt);
+    springTo(rig, "neck", neckTarget, 115, 14, subDt);
+    const headWorldAngle = rig.bones.torso.rotation + rig.bones.chest.rotation + rig.bones.neck.rotation + rig.bones.head.rotation;
+    const headWorldVelocity = rig.angularVelocity.torso + rig.angularVelocity.chest + rig.angularVelocity.neck + rig.angularVelocity.head;
+    const headAccel = (desiredHeadWorldAngle - headWorldAngle) * torsoStiff.k - headWorldVelocity * torsoStiff.d;
+    let headVelocity = rig.angularVelocity.head + headAccel * subDt;
+    rig.bones.head.rotation += headVelocity * subDt;
+    rig.bones.head.rotation = clamp(rig.bones.head.rotation, -0.55, 0.55);
+    if ((rig.bones.head.rotation === -0.55 && headVelocity < 0) || (rig.bones.head.rotation === 0.55 && headVelocity > 0)) headVelocity = 0;
+    rig.angularVelocity.head = headVelocity;
+    springTo(rig, "legUpperL", targets.legUpperL, kick ? limbStiff.k : STIFF_LEG.k, kick ? limbStiff.d : STIFF_LEG.d, subDt);
+    springTo(rig, "legUpperR", targets.legUpperR, kick ? limbStiff.k : STIFF_LEG.k, kick ? limbStiff.d : STIFF_LEG.d, subDt);
+    springTo(rig, "legLowerL", targets.legLowerL, kick ? limbStiff.k : STIFF_SHIN.k, kick ? limbStiff.d : STIFF_SHIN.d, subDt);
+    springTo(rig, "legLowerR", targets.legLowerR, kick ? limbStiff.k : STIFF_SHIN.k, kick ? limbStiff.d : STIFF_SHIN.d, subDt);
+    springTo(rig, "armUpperL", targets.armUpperL, limbStiff.k, limbStiff.d, subDt);
+    springTo(rig, "armUpperR", targets.armUpperR, limbStiff.k, limbStiff.d, subDt);
+    springTo(rig, "armLowerL", targets.armLowerL, kick ? limbStiff.k : STIFF_FOREARM.k, kick ? limbStiff.d : STIFF_FOREARM.d, subDt);
+    springTo(rig, "armLowerR", targets.armLowerR, kick ? limbStiff.k : STIFF_FOREARM.k, kick ? limbStiff.d : STIFF_FOREARM.d, subDt);
+    springTo(rig, "footL", terrainLegs.footLeft, 180, 20, subDt);
+    springTo(rig, "footR", terrainLegs.footRight, 180, 20, subDt);
+    // Wrists counter a little of the forearm motion, keeping silhouettes
+    // readable while retaining loose secondary follow-through.
+    springTo(rig, "handL", clamp(-targets.armLowerL * 0.16, -0.5, 0.5), 75, 10, subDt);
+    springTo(rig, "handR", clamp(-targets.armLowerR * 0.16, -0.5, 0.5), 75, 10, subDt);
+    springHipY(rig, targets.hipY, STIFF_HIP_Y.k, STIFF_HIP_Y.d, subDt);
+    springHipX(rig, targets.hipX, STIFF_HIP_X.k, STIFF_HIP_X.d, subDt);
+    springSquash(rig, targets.squashX, targets.squashY, STIFF_SQUASH.k, STIFF_SQUASH.d, subDt);
+  }
+
+  for (const [side, solution, upperName, lowerName] of [
+    ["left", terrainLegs.left, "legUpperL", "legLowerL"],
+    ["right", terrainLegs.right, "legUpperR", "legLowerR"],
+  ] as const) {
+    const contact = rig.footContacts[side];
+    if (!solution || !contact.planted || contact.weight <= 0) continue;
+    const projection = (1 - Math.exp(-dt * 38)) * contact.weight;
+    rig.bones[upperName].rotation = lerp(rig.bones[upperName].rotation, solution.upper, projection);
+    rig.bones[lowerName].rotation = lerp(rig.bones[lowerName].rotation, solution.lower, projection);
+    rig.angularVelocity[upperName] *= Math.exp(-dt * 18 * contact.weight);
+    rig.angularVelocity[lowerName] *= Math.exp(-dt * 18 * contact.weight);
+  }
+
+  // Anatomical limits are intentionally broad enough for stylized attacks,
+  // but prevent unstable springs or hitches from inverting a joint.
+  const limits: Partial<Record<BoneName, [number, number]>> = {
+    torso: [-0.75, 0.75], head: [-0.55, 0.55],
+    armUpperL: [-3.05, 2.2], armUpperR: [-3.05, 2.2],
+    armLowerL: [-2.25, 2.25], armLowerR: [-2.25, 2.25],
+    legUpperL: [-2.1, 2.1], legUpperR: [-2.1, 2.1],
+    legLowerL: [-0.55, 2.25], legLowerR: [-0.55, 2.25],
+    footL: [-1.2, 1.2], footR: [-1.2, 1.2],
+    handL: [-0.9, 0.9], handR: [-0.9, 0.9],
+  };
+  for (const [name, range] of Object.entries(limits) as Array<[BoneName, [number, number]]>) {
+    const bone = rig.bones[name];
+    const bounded = clamp(bone.rotation, range[0], range[1]);
+    if (!Number.isFinite(bone.rotation) || !Number.isFinite(rig.angularVelocity[name])) {
+      bone.rotation = 0; rig.angularVelocity[name] = 0;
+    } else if (bounded !== bone.rotation) {
+      bone.rotation = bounded; rig.angularVelocity[name] *= -0.12;
+    }
+  }
 }

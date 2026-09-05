@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s41",
+  "displayName": "Relic 42",
+  "tags": [
+    "built-in",
+    "frost"
+  ],
+  "fallbackColor": "#7150ce"
+}

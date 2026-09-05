@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "s12",
+  "displayName": "Relic 13",
+  "tags": [
+    "built-in",
+    "arcane"
+  ],
+  "fallbackColor": "#384c9f"
+}

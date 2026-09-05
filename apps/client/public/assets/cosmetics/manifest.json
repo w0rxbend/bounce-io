@@ -1,0 +1,4162 @@
+{
+  "schemaVersion": 2,
+  "skinCount": 50,
+  "slots": [
+    "head",
+    "torso",
+    "arms",
+    "legs"
+  ],
+  "skins": [
+    {
+      "id": "amber",
+      "displayName": "Amber",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#ffd090",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/amber/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/amber/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/amber/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/amber/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/amber/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/amber/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/amber/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/amber/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "coal",
+      "displayName": "Coal",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#1c1f2a",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/coal/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/coal/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/coal/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/coal/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/coal/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/coal/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/coal/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/coal/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "crimson",
+      "displayName": "Crimson",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#b83020",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/crimson/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/crimson/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/crimson/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/crimson/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/crimson/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/crimson/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/crimson/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/crimson/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "forest",
+      "displayName": "Forest",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#4f6f3f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/forest/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/forest/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/forest/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/forest/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/forest/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/forest/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/forest/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/forest/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "ivory",
+      "displayName": "Ivory",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#f4e8c8",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/ivory/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/ivory/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/ivory/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/ivory/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/ivory/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/ivory/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/ivory/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/ivory/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s08",
+      "displayName": "Relic 09",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#c59d59",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s08/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s08/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s08/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s08/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s08/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s08/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s08/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s08/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s09",
+      "displayName": "Relic 10",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#2fa79e",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s09/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s09/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s09/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s09/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s09/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s09/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s09/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s09/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s10",
+      "displayName": "Relic 11",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#cd2daa",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s10/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s10/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s10/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s10/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s10/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s10/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s10/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s10/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s11",
+      "displayName": "Relic 12",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#8de03e",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s11/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s11/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s11/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s11/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s11/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s11/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s11/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s11/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s12",
+      "displayName": "Relic 13",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#384c9f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s12/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s12/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s12/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s12/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s12/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s12/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s12/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s12/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s13",
+      "displayName": "Relic 14",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#c34437",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s13/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s13/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s13/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s13/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s13/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s13/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s13/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s13/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s14",
+      "displayName": "Relic 15",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#47d77e",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s14/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s14/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s14/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s14/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s14/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s14/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s14/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s14/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s15",
+      "displayName": "Relic 16",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#861eb8",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s15/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s15/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s15/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s15/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s15/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s15/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s15/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s15/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s16",
+      "displayName": "Relic 17",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#b9b541",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s16/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s16/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s16/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s16/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s16/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s16/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s16/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s16/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s17",
+      "displayName": "Relic 18",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#50adce",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s17/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s17/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s17/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s17/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s17/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s17/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s17/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s17/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s18",
+      "displayName": "Relic 19",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#b02764",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s18/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s18/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s18/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s18/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s18/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s18/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s18/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s18/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s19",
+      "displayName": "Relic 20",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#3fd723",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s19/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s19/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s19/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s19/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s19/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s19/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s19/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s19/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s20",
+      "displayName": "Relic 21",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#6859c5",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s20/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s20/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s20/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s20/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s20/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s20/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s20/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s20/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s21",
+      "displayName": "Relic 22",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#a7622f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s21/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s21/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s21/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s21/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s21/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s21/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s21/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s21/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s22",
+      "displayName": "Relic 23",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#2dcda0",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s22/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s22/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s22/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s22/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s22/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s22/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s22/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s22/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s23",
+      "displayName": "Relic 24",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#e03ede",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s23/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s23/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s23/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s23/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s23/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s23/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s23/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s23/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s24",
+      "displayName": "Relic 25",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#7f9f38",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s24/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s24/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s24/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s24/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s24/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s24/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s24/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s24/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s25",
+      "displayName": "Relic 26",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#3770c3",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s25/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s25/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s25/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s25/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s25/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s25/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s25/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s25/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s26",
+      "displayName": "Relic 27",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#d74757",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s26/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s26/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s26/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s26/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s26/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s26/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s26/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s26/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s27",
+      "displayName": "Relic 28",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#1eb83a",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s27/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s27/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s27/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s27/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s27/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s27/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s27/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s27/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s28",
+      "displayName": "Relic 29",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#7941b9",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s28/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s28/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s28/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s28/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s28/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s28/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s28/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s28/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s29",
+      "displayName": "Relic 30",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#ceb050",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s29/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s29/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s29/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s29/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s29/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s29/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s29/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s29/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s30",
+      "displayName": "Relic 31",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#27a8b0",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s30/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s30/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s30/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s30/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s30/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s30/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s30/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s30/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s31",
+      "displayName": "Relic 32",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#d72399",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s31/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s31/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s31/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s31/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s31/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s31/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s31/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s31/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s32",
+      "displayName": "Relic 33",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#80c559",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s32/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s32/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s32/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s32/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s32/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s32/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s32/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s32/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s33",
+      "displayName": "Relic 34",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#2f38a7",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s33/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s33/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s33/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s33/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s33/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s33/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s33/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s33/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s34",
+      "displayName": "Relic 35",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#cd502d",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s34/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s34/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s34/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s34/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s34/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s34/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s34/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s34/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s35",
+      "displayName": "Relic 36",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#3ee091",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s35/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s35/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s35/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s35/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s35/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s35/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s35/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s35/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s36",
+      "displayName": "Relic 37",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#8a389f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s36/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s36/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s36/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s36/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s36/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s36/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s36/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s36/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s37",
+      "displayName": "Relic 38",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#b5c337",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s37/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s37/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s37/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s37/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s37/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s37/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s37/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s37/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s38",
+      "displayName": "Relic 39",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#479fd7",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s38/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s38/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s38/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s38/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s38/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s38/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s38/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s38/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s39",
+      "displayName": "Relic 40",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#b81e4f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s39/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s39/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s39/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s39/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s39/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s39/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s39/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s39/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s40",
+      "displayName": "Relic 41",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#44b941",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s40/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s40/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s40/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s40/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s40/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s40/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s40/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s40/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s41",
+      "displayName": "Relic 42",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#7150ce",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s41/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s41/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s41/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s41/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s41/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s41/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s41/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s41/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s42",
+      "displayName": "Relic 43",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#b07327",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s42/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s42/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s42/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s42/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s42/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s42/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s42/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s42/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s43",
+      "displayName": "Relic 44",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#23d7bb",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s43/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s43/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s43/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s43/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s43/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s43/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s43/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s43/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s44",
+      "displayName": "Relic 45",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#c559b6",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s44/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s44/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s44/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s44/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s44/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s44/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s44/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s44/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s45",
+      "displayName": "Relic 46",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#73a72f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s45/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s45/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s45/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s45/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s45/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s45/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s45/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s45/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s46",
+      "displayName": "Relic 47",
+      "tags": [
+        "built-in",
+        "frost"
+      ],
+      "fallbackColor": "#2d59cd",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s46/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s46/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s46/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s46/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s46/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s46/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s46/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s46/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s47",
+      "displayName": "Relic 48",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#e0403e",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s47/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s47/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s47/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s47/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s47/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s47/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s47/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s47/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s48",
+      "displayName": "Relic 49",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#389f57",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s48/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s48/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s48/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s48/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s48/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s48/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s48/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s48/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "s49",
+      "displayName": "Relic 50",
+      "tags": [
+        "built-in",
+        "storm"
+      ],
+      "fallbackColor": "#8b37c3",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/s49/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/s49/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/s49/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/s49/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/s49/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/s49/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/s49/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/s49/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "slate",
+      "displayName": "Slate",
+      "tags": [
+        "built-in",
+        "earth"
+      ],
+      "fallbackColor": "#36475f",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/slate/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/slate/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/slate/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/slate/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/slate/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/slate/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/slate/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/slate/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "teal",
+      "displayName": "Teal",
+      "tags": [
+        "built-in",
+        "arcane"
+      ],
+      "fallbackColor": "#30c8c0",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/teal/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/teal/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/teal/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/teal/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/teal/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/teal/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/teal/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/teal/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    },
+    {
+      "id": "violet",
+      "displayName": "Violet",
+      "tags": [
+        "built-in",
+        "ember"
+      ],
+      "fallbackColor": "#9b6dff",
+      "parts": {
+        "head": {
+          "png": "/assets/cosmetics/skins/violet/head.png",
+          "width": 28,
+          "height": 32,
+          "pivot": [
+            14.0,
+            32
+          ]
+        },
+        "torso": {
+          "png": "/assets/cosmetics/skins/violet/torso.png",
+          "width": 10,
+          "height": 14,
+          "pivot": [
+            5.0,
+            14
+          ]
+        },
+        "chest": {
+          "png": "/assets/cosmetics/skins/violet/chest.png",
+          "width": 10,
+          "height": 8,
+          "pivot": [
+            5.0,
+            8
+          ]
+        },
+        "neck": {
+          "png": "/assets/cosmetics/skins/violet/neck.png",
+          "width": 6,
+          "height": 4,
+          "pivot": [
+            3.0,
+            4
+          ]
+        },
+        "arm": {
+          "png": "/assets/cosmetics/skins/violet/arm.png",
+          "width": 6,
+          "height": 10,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "hand": {
+          "png": "/assets/cosmetics/skins/violet/hand.png",
+          "width": 6,
+          "height": 5,
+          "pivot": [
+            3.0,
+            0
+          ]
+        },
+        "leg": {
+          "png": "/assets/cosmetics/skins/violet/leg.png",
+          "width": 8,
+          "height": 10,
+          "pivot": [
+            4.0,
+            0
+          ]
+        },
+        "foot": {
+          "png": "/assets/cosmetics/skins/violet/foot.png",
+          "width": 8,
+          "height": 5,
+          "pivot": [
+            0,
+            2.5
+          ]
+        }
+      }
+    }
+  ]
+}

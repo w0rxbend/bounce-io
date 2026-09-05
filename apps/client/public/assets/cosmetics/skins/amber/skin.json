@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "amber",
+  "displayName": "Amber",
+  "tags": [
+    "built-in",
+    "earth"
+  ],
+  "fallbackColor": "#ffd090"
+}
