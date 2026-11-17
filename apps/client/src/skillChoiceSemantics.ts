@@ -14,6 +14,10 @@ export function skillChoiceDenial(card: SkillCard, coins: number): string {
   return `Need ${card.coinCost} coins for ${card.name}; you have ${coins}.`;
 }
 
+export function shouldMarkSkillOfferSubmitted(cause: "send" | "skill_applied"): boolean {
+  return cause === "skill_applied";
+}
+
 export function nextSkillChoiceIndex(current: number, count: number, key: "previous" | "next" | "first" | "last"): number {
   if (count <= 0) return -1;
   if (key === "first") return 0;

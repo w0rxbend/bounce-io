@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SkillCard } from "@skybound/shared";
-import { nextSkillChoiceIndex, skillChoiceDenial, skillChoiceLabel } from "../../apps/client/src/skillChoiceSemantics.js";
+import { nextSkillChoiceIndex, shouldMarkSkillOfferSubmitted, skillChoiceDenial, skillChoiceLabel } from "../../apps/client/src/skillChoiceSemantics.js";
 
 const card: SkillCard = {
   id: "air_control", name: "Aerial Control", description: "Steer more precisely while airborne.", icon: "AIR",
@@ -12,6 +12,11 @@ test("semantic skill labels expose full card state and affordability", () => {
   assert.equal(skillChoiceLabel(card, 3, 1), "2. Aerial Control. rare mobility. Steer more precisely while airborne. Stack 1 to 2 of 4. Costs 7 coins. Not enough coins.");
   assert.match(skillChoiceLabel(card, 7, 0), /Available\.$/);
   assert.equal(skillChoiceDenial(card, 3), "Need 7 coins for Aerial Control; you have 3.");
+});
+
+test("a skill choice is submitted only after skill_applied", () => {
+  assert.equal(shouldMarkSkillOfferSubmitted("send"), false);
+  assert.equal(shouldMarkSkillOfferSubmitted("skill_applied"), true);
 });
 
 test("semantic skill focus navigation wraps and supports boundaries", () => {

@@ -9,6 +9,10 @@ export interface MovementInputPolicyState {
   matchPlaying: boolean;
 }
 
+export function isMovementModalActive(skillModalActive: boolean, chatOpen: boolean): boolean {
+  return skillModalActive || chatOpen;
+}
+
 /** Online simulation must not stop at a choice modal: neutral sequenced input
  * releases the authoritative server's last held controls and keeps prediction
  * aligned. Local play may genuinely pause because it owns the simulation. */

@@ -23,6 +23,14 @@ test("active, queued, and submitted offer resends are ignored", () => {
   assert.equal(queue.receive({ offerId: "a", value: 8 }, null).kind, "ignored");
 });
 
+test("a resume replay of an unsent offer stays visible until skill_applied", () => {
+  const queue = new SkillOfferQueue<Offer>();
+  assert.equal(queue.receive({ offerId: "offer-1", value: 1 }, null).kind, "ready");
+  assert.equal(queue.receive({ offerId: "offer-1", value: 1 }, null).kind, "ready");
+  queue.markSubmitted("offer-1");
+  assert.equal(queue.receive({ offerId: "offer-1", value: 1 }, null).kind, "ignored");
+});
+
 test("an idle coordinator returns an offer immediately and reset starts a new session", () => {
   const queue = new SkillOfferQueue<Offer>();
   assert.deepEqual(queue.receive({ offerId: "a", value: 1 }, null), {

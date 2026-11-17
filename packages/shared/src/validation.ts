@@ -1,7 +1,7 @@
-import { GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
+import { CHUNK_HEIGHT_TILES, CHUNK_WIDTH_TILES, GAME_VERSION, PROTOCOL_VERSION } from "./constants.js";
 import type { SkillCard, SkillCardOffer } from "./skills.js";
 import type { ClientMessage, NetworkMessage, ServerMessage } from "./protocol.js";
-import type { CollectibleState, EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
+import type { ChestSpawn, CollectibleState, EnemySpawn, EnemyState, GeneratedChunk, JumpPadSpawn, KickPhase, MatchEvent, PlatformSpan, PlayerInput, PlayerState, RelicSpawn, TileKind, WindZoneSpawn } from "./types.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -55,6 +55,13 @@ function isPlatformSpan(value: unknown): value is PlatformSpan {
 }
 
 function isRelicSpawn(value: unknown): value is RelicSpawn {
+  return isRecord(value) &&
+    isString(value.id) &&
+    isInteger(value.x) &&
+    isInteger(value.y);
+}
+
+function isChestSpawn(value: unknown): value is ChestSpawn {
   return isRecord(value) &&
     isString(value.id) &&
     isInteger(value.x) &&
@@ -286,19 +293,19 @@ function isSkillCardOffer(value: unknown): value is SkillCardOffer {
     (value.cards as unknown[]).every(isSkillCard);
 }
 
+export const MAX_CHESTS_PER_CHUNK = 8;
+
 export function isGeneratedChunk(value: unknown): value is GeneratedChunk {
   if (!isRecord(value)) return false;
   const width = value.width;
   const height = value.height;
-  return isInteger(value.seed) &&
-    isInteger(value.chunkY) &&
-    isInteger(width) &&
-    isInteger(height) &&
-    isInteger(value.worldTileY) &&
-    Array.isArray(value.tiles) &&
-    (value.tiles as unknown[]).length === (width as number) * (height as number) &&
-    (value.tiles as unknown[]).every(isTileKind) &&
-    Array.isArray(value.platforms) &&
+  const chests = value.chests;
+  if (!isInteger(value.seed) || !isInteger(value.chunkY) || !isInteger(width) || !isInteger(height) || !isInteger(value.worldTileY)) return false;
+  if (width !== CHUNK_WIDTH_TILES || height !== CHUNK_HEIGHT_TILES) return false;
+  if (!Array.isArray(chests) || chests.length > MAX_CHESTS_PER_CHUNK || !chests.every(isChestSpawn)) return false;
+  const tiles = value.tiles;
+  if (!Array.isArray(tiles) || tiles.length !== width * height || !tiles.every(isTileKind)) return false;
+  return Array.isArray(value.platforms) &&
     (value.platforms as unknown[]).every(isPlatformSpan) &&
     isPlatformSpan(value.entry) &&
     isPlatformSpan(value.exit) &&

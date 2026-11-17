@@ -55,6 +55,22 @@ test("head stabilization cancels procedural spine lean across frame rates", () =
   }
 });
 
+test("preview scale stays on the rig through squash", () => {
+  const rig = createBodyRig();
+  rig.root.scale.set(1.9);
+  poseBodyRig(rig, { state: "idle", elapsedMs: 0, speedFactor: 0, verticalVelocity: 0, facing: 1 });
+  poseBodyRig(rig, { state: "idle", elapsedMs: 16.7, speedFactor: 0, verticalVelocity: 0, facing: 1 });
+  assert.ok(Math.abs(rig.root.scale.x) > 1.7, `scale.x collapsed to ${rig.root.scale.x}`);
+  assert.ok(rig.root.scale.y > 1.7, `scale.y collapsed to ${rig.root.scale.y}`);
+  rig.root.scale.set(-1.6, 1.6);
+  rig.baseScaleX = null;
+  rig.baseScaleY = null;
+  poseBodyRig(rig, { state: "idle", elapsedMs: 33.4, speedFactor: 0, verticalVelocity: 0, facing: -1 });
+  assert.ok(Math.abs(rig.root.scale.x + 1.6) < 0.15, `facing scale.x was ${rig.root.scale.x}`);
+  assert.ok(Math.abs(rig.root.scale.y - 1.6) < 0.15, `facing scale.y was ${rig.root.scale.y}`);
+  rig.root.destroy({ children: true });
+});
+
 test("landing response remembers airborne impact and decays into compression", () => {
   const rig = createBodyRig();
   poseBodyRig(rig, { state: "jump_fall", elapsedMs: 0, speedFactor: 0, horizontalVelocity: 0, verticalVelocity: MAX_FALL_SPEED });

@@ -143,6 +143,8 @@ export interface BodyRig {
   squashY: number;
   squashVelX: number;
   squashVelY: number;
+  baseScaleX: number | null;
+  baseScaleY: number | null;
   lastElapsedMs: number | null;
   lastState: BodyPoseState | "kick" | null;
   locomotionPhase: number;
@@ -248,6 +250,8 @@ export function createBodyRig(palette: BodyRigPalette = DEFAULT_BODY_RIG_PALETTE
     squashY: 1,
     squashVelX: 0,
     squashVelY: 0,
+    baseScaleX: null,
+    baseScaleY: null,
     lastElapsedMs: null,
     lastState: null,
     locomotionPhase: 0,
@@ -602,9 +606,13 @@ function springSquash(rig: BodyRig, targetX: number, targetY: number, stiffness:
   const accelY = (targetY - rig.squashY) * stiffness - rig.squashVelY * damping;
   rig.squashVelY += accelY * dt;
   rig.squashY += rig.squashVelY * dt;
+  if (rig.baseScaleX === null || rig.baseScaleY === null) {
+    rig.baseScaleX = Math.abs(rig.root.scale.x) || 1;
+    rig.baseScaleY = Math.abs(rig.root.scale.y) || 1;
+  }
   const facingSign = rig.root.scale.x < 0 ? -1 : 1;
-  rig.root.scale.x = facingSign * rig.squashX;
-  rig.root.scale.y = rig.squashY;
+  rig.root.scale.x = facingSign * rig.baseScaleX * rig.squashX;
+  rig.root.scale.y = rig.baseScaleY * rig.squashY;
 }
 
 const STIFF_FIRM = { k: 260, d: 24 };   // torso, head — stays readable

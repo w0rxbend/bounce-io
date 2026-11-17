@@ -3,6 +3,15 @@ export type ConnectionStatus = "local" | "connecting" | "online" | "reconnecting
 export const MAX_AUTOMATIC_RECONNECT_ATTEMPTS = 6;
 export const BASE_RECONNECT_DELAY_MS = 1_000;
 export const MAX_RECONNECT_DELAY_MS = 30_000;
+export const SOCKET_READ_DEADLINE_MS = 10_000;
+
+export function socketReadDeadlineExceeded(nowMs: number, lastInboundAtMs: number): boolean {
+  return lastInboundAtMs > 0 && nowMs - lastInboundAtMs > SOCKET_READ_DEADLINE_MS;
+}
+
+export function roomIdForReconnectTimer(liveRoomId: string, scheduledRoomId: string): string {
+  return liveRoomId || scheduledRoomId;
+}
 
 export function reconnectDelayMs(attempt: number): number {
   const safeAttempt = Math.max(1, Math.floor(attempt));

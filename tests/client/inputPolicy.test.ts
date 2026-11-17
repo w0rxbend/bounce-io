@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { movementInputPolicy } from "../../apps/client/src/inputPolicy.js";
+import { isMovementModalActive, movementInputPolicy } from "../../apps/client/src/inputPolicy.js";
 
 const online = { spectator: false, hasLocalPlayer: true, mode: "online" as const, connected: true, matchPlaying: true };
 
@@ -12,6 +12,13 @@ test("online skill choices continue simulation with neutral controls", () => {
 test("local choices pause their owned simulation", () => {
   assert.equal(movementInputPolicy({ ...online, mode: "local", modalActive: true }), "pause");
   assert.equal(movementInputPolicy({ ...online, mode: "local", modalActive: false }), "live");
+});
+
+test("chat is a movement modal", () => {
+  assert.equal(isMovementModalActive(false, true), true);
+  assert.equal(isMovementModalActive(false, false), false);
+  assert.equal(movementInputPolicy({ ...online, modalActive: isMovementModalActive(false, true) }), "neutral");
+  assert.equal(movementInputPolicy({ ...online, mode: "local", modalActive: isMovementModalActive(false, true) }), "pause");
 });
 
 test("spectator, disconnected, and non-playing online states pause prediction", () => {

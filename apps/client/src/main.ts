@@ -48,7 +48,7 @@ import {
   skillStacks,
   SKILL_BY_ID,
 } from "@skybound/shared";
-import { isServerMessage } from "@skybound/shared";
+import { isGeneratedChunk, isServerMessage } from "@skybound/shared";
 import type { CollectibleKind, CollectibleState, EmoteId, EnemyKind, EnemyState, GeneratedChunk, JumpPadSpawn, MatchEvent, PlayerEntityFrame, PlayerInput, PlayerState, ServerMessage, SkillCard, SkillCardOffer, SnapshotEntity, TileKind, WindZoneSpawn } from "@skybound/shared";
 import { BackgroundLifeSystem, type BackgroundLifeConfig } from "./backgroundLife";
 import { createBodyRig, poseBodyRig, stableAnimationSeed, updateBodyRigAppearance, type BodyPoseState, type BodyRig, type BodyRigTextures, type PoseParams } from "./bodyRig";
@@ -70,12 +70,16 @@ import {
 } from "./cosmetics";
 import { MenuSplashBackground } from "./MenuSplashBackground";
 import { CosmeticAssetRegistry } from "./cosmeticAssetRegistry";
-import { MAX_AUTOMATIC_RECONNECT_ATTEMPTS, nextReconnect, type ConnectionStatus } from "./connectionLifecycle";
+import { MAX_AUTOMATIC_RECONNECT_ATTEMPTS, nextReconnect, roomIdForReconnectTimer, socketReadDeadlineExceeded, type ConnectionStatus } from "./connectionLifecycle";
 import { layoutHud, type HudDensity, type HudRect } from "./hudLayout";
-import { nextSkillChoiceIndex, skillChoiceDenial, skillChoiceLabel } from "./skillChoiceSemantics";
+import { nextSkillChoiceIndex, shouldMarkSkillOfferSubmitted, skillChoiceDenial, skillChoiceLabel } from "./skillChoiceSemantics";
 import { CombatSemanticTracker, combatSemanticSummary, type CombatSemanticState } from "./hudSemantics";
 import { SkillOfferQueue } from "./skillOfferQueue";
-import { movementInputPolicy } from "./inputPolicy";
+import { isMovementModalActive, movementInputPolicy } from "./inputPolicy";
+import { binaryEnemyChunkY, chunkYForWorldY } from "./chunkIndex";
+import { neutralRemoteInput, remoteRenderState } from "./remoteMotion";
+import { withReplayedState } from "./predictionReplay";
+import { acceptedSnapshotRemovals, collectBinaryRemovalIds, stageSnapshotRemovals } from "./snapshotCommit";
 import "./styles.css";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
@@ -2747,9 +2751,7 @@ let chatOpen = false;
 function openChat(): void {
   if (chatOpen || appState !== "game" || isSpectatorMode()) return;
   chatOpen = true;
-  held["KeyA"] = false;
-  held["KeyD"] = false;
-  held["Space"] = false;
+  clearHeldInput(false);
   chatInput.value = "";
   chatInput.style.display = "block";
   chatInput.focus();
@@ -2792,6 +2794,7 @@ const PREDICTION_STEP_EPSILON = 0.000_001;
 let ws: WebSocket | null = null;
 let pingMs        = 0;
 let lastPingTime  = 0;
+let lastSocketInboundAtMs = 0;
 let serverTimeOffsetMs = 0;
 let hasServerClock = false;
 const pingSamples: number[] = [];
@@ -3650,10 +3653,6 @@ function shouldApplyClientWindZones(): boolean {
 
 function worldSimulationTimeSeconds(): number {
   return selectedMode === "online" && hasServerClock ? estimatedServerTime() / 1000 : elapsedMs / 1000;
-}
-
-function chunkYForWorldY(y: number): number {
-  return Math.max(0, -Math.floor(Math.floor(y / TILE_SIZE) / CHUNK_HEIGHT_TILES));
 }
 
 function chunkTopWorldY(chunkY: number): number {
@@ -7586,13 +7585,30 @@ function openNextLocalSkillOffer(): void {
 }
 
 const onlineSkillOffers = new SkillOfferQueue<SkillCardOffer>();
+let awaitingSkillOfferId: string | null = null;
 
 function showOnlineSkillOffer(offer: SkillCardOffer): void {
   skillCardModal.open(offer, localPlayer?.coins ?? 0, (selectedOffer, card) => {
     const sent = sendWsMessage({ type: "select_skill_card", offerId: selectedOffer.offerId, cardId: card.id }, "critical");
-    if (sent) onlineSkillOffers.markSubmitted(selectedOffer.offerId);
-    return sent;
+    if (!sent) return false;
+    if (shouldMarkSkillOfferSubmitted("send")) {
+      onlineSkillOffers.markSubmitted(selectedOffer.offerId);
+      return true;
+    }
+    awaitingSkillOfferId = selectedOffer.offerId;
+    return true;
   });
+}
+
+function commitLocalSkillOffer(playerId: string): void {
+  if (playerId !== localPlayerId || awaitingSkillOfferId === null) return;
+  if (!shouldMarkSkillOfferSubmitted("skill_applied")) return;
+  const offerId = awaitingSkillOfferId;
+  awaitingSkillOfferId = null;
+  onlineSkillOffers.markSubmitted(offerId);
+  if (skillCardModal.currentOfferId !== offerId) return;
+  skillCardModal.close();
+  openNextOnlineSkillOffer();
 }
 
 function openNextOnlineSkillOffer(): void {
@@ -10819,7 +10835,7 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
         facing: (flags & BINARY_FLAG_FACING) !== 0 ? 1 : -1,
         health: health || existing?.health || maxHealth || 1,
         maxHealth: maxHealth || existing?.maxHealth || Math.max(1, health),
-        chunkY: existing?.chunkY ?? Math.max(0, Math.floor(-y / (CHUNK_HEIGHT_TILES * TILE_SIZE))),
+        chunkY: binaryEnemyChunkY(y),
         patrolMinX: existing?.patrolMinX ?? x,
         patrolMaxX: existing?.patrolMaxX ?? x,
         platformY: existing?.platformY ?? y + 24,
@@ -10846,23 +10862,14 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
 
   const removedCount = readU16();
   if (removedCount === null) return null;
-  for (let i = 0; i < removedCount; i += 1) {
-    const hash = readU32();
-    if (hash === null) return null;
-    const id = binaryEntityIds.get(hash);
-    if (!id || presentHashes.has(hash)) continue;
-    const enemy = enemyEntries.get(id);
-    if (enemy) {
-      enemy.sprite.destroy();
-      enemy.hp.destroy();
-      enemyEntries.delete(id);
-    }
-    dynamicCollectibles.delete(id);
-  }
+  const removalHashes: Array<number | null> = [];
+  for (let i = 0; i < removedCount; i += 1) removalHashes.push(readU32());
+  const removalIds = collectBinaryRemovalIds(removalHashes, presentHashes, (hash) => binaryEntityIds.get(hash));
+  if (removalIds === null) return null;
 
   const lastProcessedSeq: Record<string, number> = {};
   if (localPlayerId) lastProcessedSeq[localPlayerId] = ackInputSeq;
-  return {
+  const snapshot: SnapshotServerMessage = {
     type: "snapshot",
     tick: serverTickValue,
     serverTick: serverTickValue,
@@ -10881,6 +10888,8 @@ function decodeBinarySnapshot(data: ArrayBuffer): SnapshotServerMessage | null {
     events: [],
     lastProcessedSeq,
   };
+  stageSnapshotRemovals(snapshot, removalIds);
+  return snapshot;
 }
 
 type OutboundPriority = "critical" | "input" | "heartbeat" | "bulk";
@@ -11061,6 +11070,7 @@ function handleMatchEvents(events: MatchEvent[]): void {
         : remotePlayers.get(ev2.playerId)?.current ?? null;
       if (target && ev2.newStats) applyAuthoritativeSkillStats(target, ev2.newStats as Partial<PlayerState>);
       if (ev2.playerId === localPlayerId) pushNotification("SKILL APPLIED", PAL.coinGold);
+      commitLocalSkillOffer(ev2.playerId);
     } else if (ev2.type === "JUMP_PAD_TRIGGERED") {
       if (ev2.playerId !== localPlayerId || elapsedMs - lastLocalJumpPadFxMs > 250) {
         jumpPadFeedback(ev2.x, ev2.y, ev2.multiplier);
@@ -11126,6 +11136,18 @@ function processQueuedSnapshots(): { networkApplyMs: number; entityApplyMs: numb
   return { networkApplyMs: performance.now() - start, entityApplyMs };
 }
 
+function applyAcceptedSnapshotRemovals(snapshot: SnapshotServerMessage): void {
+  for (const id of acceptedSnapshotRemovals(snapshot, snapshot.snapshotSeq, snapshot.tick, lastSnapshotSeq, serverTick)) {
+    const enemy = enemyEntries.get(id);
+    if (enemy) {
+      enemy.sprite.destroy();
+      enemy.hp.destroy();
+      enemyEntries.delete(id);
+    }
+    dynamicCollectibles.delete(id);
+  }
+}
+
 function ackForPlayer(snapshot: SnapshotServerMessage, playerId: string): number {
   return snapshot.lastProcessedSeq[playerId] ?? snapshot.ackInputSeq ?? -1;
 }
@@ -11137,6 +11159,7 @@ function processSnapshotMessage(parsed: SnapshotServerMessage): number {
     return 0;
   }
   const entityStart = performance.now();
+  applyAcceptedSnapshotRemovals(parsed);
   lastSnapshotSeq = parsed.snapshotSeq;
   netMetrics.lastSnapshotPlayers = (parsed.players?.length ?? 0) + (parsed.entities?.filter((entity) => entity.type === "player").length ?? 0) + (parsed.playerEntities?.length ?? 0);
   netMetrics.lastSnapshotEnemies = parsed.enemies?.length ?? 0;
@@ -11258,6 +11281,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
 
   socket.addEventListener("open", () => {
     if (ws !== socket) return;
+    lastSocketInboundAtMs = Date.now();
     setConnectionStatus(preserveSession ? "reconnecting" : "connecting", preserveSession ? "Restoring multiplayer session." : "Joining multiplayer session.", false);
     sendWsMessage({
       type: "hello",
@@ -11276,6 +11300,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
   socket.addEventListener("message", (ev) => {
     if (ws !== socket) return;
     if (ev.data instanceof ArrayBuffer) {
+      lastSocketInboundAtMs = Date.now();
       recordIncomingNetworkBytes(ev.data.byteLength);
       recordSnapshotSize(ev.data.byteLength);
       const parseStart = performance.now();
@@ -11348,6 +11373,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         resolveConnect();
         break;
       case "snapshot":
+        lastSocketInboundAtMs = Date.now();
         recordSnapshotSize(byteLength(ev.data));
         enqueueSnapshotMessage(parsed);
         break;
@@ -11359,6 +11385,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
         syncChestLists(parsed.revealedChests, parsed.openedChests);
         break;
       case "chunk": {
+        if (!isGeneratedChunk(parsed.chunk)) break;
         const chunkY = parsed.chunk.chunkY;
         for (const enemy of parsed.chunk.enemies) registerBinaryEntityId(enemy.id);
         for (const relic of parsed.chunk.relics) registerBinaryEntityId(relic.id);
@@ -11406,12 +11433,14 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
           : remotePlayers.get(parsed.playerId)?.current ?? null;
         if (target) applyAuthoritativeSkillStats(target, parsed.newStats);
         if (parsed.playerId === localPlayerId) pushNotification("SKILL APPLIED", PAL.coinGold);
+        commitLocalSkillOffer(parsed.playerId);
         break;
       }
       case "player_stats":
         if (parsed.playerId === localPlayerId && localPlayer) applyAuthoritativeSkillStats(localPlayer, parsed.stats);
         break;
       case "pong": {
+        lastSocketInboundAtMs = Date.now();
         const rtt = Date.now() - parsed.clientTime;
         pingMs = rtt;
         addPingSample(rtt);
@@ -11441,7 +11470,7 @@ function connectRoom(name: string, skinId: string, preserveSession = false, room
     }
     rejectConnect("Connection lost.");
     if (reconnectEnabled) {
-      schedReconn(name, skinId, roomId, spectator);
+      schedReconn(name, skinId, currentRoomId, spectator);
     }
   });
   socket.addEventListener("error", () => {
@@ -11468,7 +11497,7 @@ function schedReconn(name: string, skinId: string, roomId: string, spectator: bo
   reconnTimeout = setTimeout(() => {
     reconnTimeout = null;
     reconnectAtMs = null;
-    void connectRoom(name, skinId, true, roomId, spectator).catch((error: unknown) => {
+    void connectRoom(name, skinId, true, roomIdForReconnectTimer(currentRoomId, roomId), spectator).catch((error: unknown) => {
       console.warn("[BounceIO] Reconnect attempt failed", error);
     });
   }, next.delayMs);
@@ -11521,7 +11550,7 @@ function currentMovementInputPolicy() {
     spectator: isSpectatorMode(),
     hasLocalPlayer: localPlayer !== null,
     mode: selectedMode,
-    modalActive: skillCardModal.active,
+    modalActive: isMovementModalActive(skillCardModal.active, chatOpen),
     connected: connectionStatus === "online",
     matchPlaying: matchPhase === "playing",
   });
@@ -11529,6 +11558,10 @@ function currentMovementInputPolicy() {
 
 function maybePing(): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (socketReadDeadlineExceeded(Date.now(), lastSocketInboundAtMs)) {
+    ws.close();
+    return;
+  }
   if (Date.now() - lastPingTime > 1000) {
     const pingTime = Date.now();
     if (sendWsMessage({ type: "ping", clientTime: pingTime }, "heartbeat")) lastPingTime = pingTime;
@@ -11656,6 +11689,7 @@ function reconcileLocalPlayer(ss: PlayerState, lastSeq: number): void {
       applyWindZones(next, loadedChunks.values(), PHYSICS_STEP_SECONDS, worldSimulationTimeSeconds() - remaining * PHYSICS_STEP_SECONDS);
     }
     localPlayer = next;
+    predBuf[i] = withReplayedState(e, next);
   }
   if (snapVisual) {
     netMetrics.hardSnapCount++;
@@ -11766,22 +11800,14 @@ function interpRemotes(dt: number): void {
       netMetrics.remoteExtrapolationMs += (extrapolateMs - netMetrics.remoteExtrapolationMs) * 0.12;
       const steps = Math.round((extrapolateMs / 1000) / PHYSICS_STEP_SECONDS);
       let extState = clonePlayerState(last.state);
-      const dri: PlayerInput = {
-        left:         last.state.velocity.x < -10,
-        right:        last.state.velocity.x >  10,
-        jumpPressed:  false,
-        jumpHeld:     last.state.velocity.y < 0,
-        drop:         false,
-        kick:         false,
-        sequence:     0,
-      };
+      const coast = neutralRemoteInput();
       for (let i = 0; i < Math.min(steps, 8); i++) {
-        extState = stepPlayer(extState, dri, tileMap, PHYSICS_STEP_SECONDS).player;
+        extState = stepPlayer(extState, coast, tileMap, PHYSICS_STEP_SECONDS).player;
         if (shouldApplyClientWindZones()) {
           applyWindZones(extState, loadedChunks.values(), PHYSICS_STEP_SECONDS, last.t / 1000 + (i + 1) * PHYSICS_STEP_SECONDS);
         }
       }
-      setRemoteRenderTarget(e, extState, dt);
+      setRemoteRenderTarget(e, remoteRenderState(last.state, extState), dt);
       continue;
     }
 
